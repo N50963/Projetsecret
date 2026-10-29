@@ -1,0 +1,19 @@
+{
+  "name": "projetsecret-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Application de planification des repas : modules métier (synchronisation Lidl Plus, recettes).",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.117.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}
