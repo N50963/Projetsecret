@@ -1,2 +1,7 @@
 __pycache__/
 *.pyc
+# Données personnelles : ne jamais commiter
+lidl_data/
+**/refresh_token
+**/import_secret
+*.xlsx
