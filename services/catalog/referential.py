@@ -151,6 +151,7 @@ INGREDIENTS = [
     ("lardons", "Lardons / allumettes", "charcuterie", "g", False),
     ("chorizo", "Chorizo", "charcuterie", "g", False),
     ("charcuterie_tranchee", "Charcuterie en tranches (coppa, rosette...)", "charcuterie", "g", False),
+    ("canard_magret_fume", "Magret de canard fumé (tranches)", "charcuterie", "g", False),
     ("saucisson", "Saucisson sec", "charcuterie", "g", False),
     ("rillettes_pate", "Rillettes, pâté, terrine", "charcuterie", "g", False),
     ("corned_beef", "Corned beef", "charcuterie", "g", False),
@@ -391,6 +392,7 @@ rule(r" surimi ", "ingredient", "surimi")
 rule(r" anchois ", "ingredient", "anchois")
 
 # --- Volaille et viandes ---
+rule(r" magrets? (de )?(canard )?fumes? ", "ingredient", "canard_magret_fume")
 rule(r" (magret) ", "ingredient", "canard_magret")
 rule(r" aiguillettes canard ", "ingredient", "canard_aiguillette")
 rule(r" (fleury michon blanc de dinde|blanc de poulet .*tranches|fm blanc poulet|blanc de poulet fume|blanc de poulet csn) ", "ingredient", "blanc_volaille_tranche")
