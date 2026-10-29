@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { adaptRecipe, createRecipe, currentSeason, RecipeValidationError, slugify, toPayload } from "../src/modules/recipes/repository";
+import { DEFAULT_PREFERENCES, getHouseholdPreferences, maxSpicinessFor, saveHouseholdPreferences, toPreferencesRow } from "../src/modules/recipes/preferences";
 import { scaleIngredient, scaleIngredients } from "../src/modules/recipes/scale";
 import type { Recipe, RecipeIngredient, RecipeInput } from "../src/modules/recipes/types";
 import { validateRecipe } from "../src/modules/recipes/validate";
@@ -76,7 +77,7 @@ describe("enregistrement", () => {
   });
 
   it("crée une variante dans le foyer pour adapter une recette commune, une nouvelle version pour une recette du foyer", async () => {
-    const commune = { ...fromSeed(seed[0]), id: "r-commune", householdId: null, versionId: "v1", versionNo: 1, totalMin: 40, allergens: [], source: "seed" } as Recipe;
+    const commune = { ...fromSeed(seed[0]), id: "r-commune", householdId: null, versionId: "v1", versionNo: 1, totalMin: 40, allergens: [], spiciness: 1, source: "seed" } as Recipe;
     await adaptRecipe(supabase, "foyer", commune, { servings: 2 }, "Pour deux");
     expect(calls.at(-1)).toMatchObject({ fn: "create_recipe", args: { p_household: "foyer", p: { parent_recipe_id: "r-commune", servings: 2, source: "manual" } } });
     const duFoyer = { ...commune, id: "r-foyer", householdId: "foyer" };
@@ -94,5 +95,36 @@ describe("enregistrement", () => {
   it("détermine la saison courante", () => {
     expect(currentSeason(new Date("2026-10-29"))).toBe("automne");
     expect(currentSeason(new Date("2026-01-15"))).toBe("hiver");
+  });
+});
+
+describe("préférences du foyer", () => {
+  it("le jeu initial ne contient aucun plat piquant : le piment est facultatif, curry et chorizo sont doux", () => {
+    expect(seed.filter((r) => r.spiciness === 2)).toEqual([]);
+    expect(seed.find((r) => r.slug === "chili-con-carne").spiciness).toBe(0);
+    expect(seed.find((r) => r.slug === "poulet-curry-coco").spiciness).toBe(1);
+  });
+
+  it("traduit le niveau d'épice accepté comme la base", () => {
+    expect([maxSpicinessFor("aucun"), maxSpicinessFor("doux"), maxSpicinessFor("tout")]).toEqual([0, 1, 2]);
+  });
+
+  it("renvoie les valeurs par défaut tant que le foyer n'a rien renseigné", async () => {
+    const chain: any = { select: () => chain, eq: () => chain, maybeSingle: async () => ({ data: null, error: null }) };
+    const prefs = await getHouseholdPreferences({ from: () => chain } as any, "foyer");
+    expect(prefs).toEqual(DEFAULT_PREFERENCES);
+  });
+
+  it("enregistre au format de la base et refuse un minimum de dîners sans viande au-dessus du maximum", async () => {
+    const upserts: any[] = [];
+    const supabase = { from: () => ({ upsert: async (row: any) => (upserts.push(row), { error: null }) }) } as any;
+    const foyer = { ...DEFAULT_PREFERENCES, teens: 1, children: 1, excludedFoodGroups: ["abats", "coquillages"] as const, spiceLevel: "doux" as const,
+      meatlessDinnersMin: 1, meatlessDinnersMax: 2 };
+    await saveHouseholdPreferences(supabase, "foyer", { ...foyer, excludedFoodGroups: [...foyer.excludedFoodGroups] });
+    expect(upserts[0]).toMatchObject({ household_id: "foyer", teens: 1, spice_level: "doux", excluded_food_groups: ["abats", "coquillages"],
+      meatless_dinners_min: 1, meatless_dinners_max: 2 });
+    await expect(saveHouseholdPreferences(supabase, "foyer", { ...DEFAULT_PREFERENCES, meatlessDinnersMin: 3, meatlessDinnersMax: 2 })).rejects.toThrow();
+    expect(upserts).toHaveLength(1);
+    expect(Object.keys(toPreferencesRow("foyer", DEFAULT_PREFERENCES))).toContain("pantry_confirmed_at");
   });
 });

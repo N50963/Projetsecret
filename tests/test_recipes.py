@@ -32,3 +32,12 @@ def test_vegetarian_tag_is_derived_from_ingredients():
     assert "vegetarien" not in by_slug["spaghetti-bolognaise"].derived_tags()
     assert "pescetarien" in by_slug["saumon-creme-epinards"].derived_tags()
     assert "gluten" in by_slug["spaghetti-bolognaise"].allergens()
+
+
+def test_spiciness_ignores_optional_ingredients():
+    # Le foyer accepte le curry et le chorizo doux, rien de piquant : le piment reste facultatif (assiette des adultes).
+    by_slug = {r.slug: r for r in seed.RECIPES}
+    assert by_slug["poulet-curry-coco"].spiciness() == 1
+    assert by_slug["chili-con-carne"].spiciness() == 0
+    assert by_slug["spaghetti-bolognaise"].spiciness() == 0
+    assert all(r.spiciness() < 2 for r in seed.RECIPES)

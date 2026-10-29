@@ -6,7 +6,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { MainProtein, MealType, Rating, Recipe, RecipeCandidate, RecipeIngredient, RecipeInput, Season } from "./types";
+import type { MainProtein, MealType, Rating, Recipe, RecipeCandidate, RecipeIngredient, RecipeInput, Season, Spiciness } from "./types";
 import { validateRecipe } from "./validate";
 
 export class RecipeValidationError extends Error {
@@ -21,6 +21,7 @@ export interface RecipeFilters {
   season?: Season;
   mainProtein?: MainProtein;
   maxTotalMin?: number;
+  maxSpiciness?: Spiciness;
   excludedAllergens?: string[];
   search?: string;
   limit?: number;
@@ -38,6 +39,7 @@ export interface RecipeSummary {
   seasons: Season[];
   tags: string[];
   allergens: string[];
+  spiciness: Spiciness;
   source: Recipe["source"];
 }
 
@@ -81,7 +83,7 @@ export function slugify(name: string): string {
 function toSummary(r: Row): RecipeSummary {
   return {
     id: r.id, householdId: r.household_id, name: r.name, description: r.description, servings: r.servings, totalMin: r.total_min,
-    mainProtein: r.main_protein, mealTypes: r.meal_types, seasons: r.seasons, tags: r.tags, allergens: r.allergens, source: r.source,
+    mainProtein: r.main_protein, mealTypes: r.meal_types, seasons: r.seasons, tags: r.tags, allergens: r.allergens, spiciness: r.spiciness, source: r.source,
   };
 }
 
@@ -92,6 +94,7 @@ export async function listRecipes(supabase: SupabaseClient, filters: RecipeFilte
   if (filters.season) q = q.contains("seasons", [filters.season]);
   if (filters.mainProtein) q = q.eq("main_protein", filters.mainProtein);
   if (filters.maxTotalMin !== undefined) q = q.lte("total_min", filters.maxTotalMin);
+  if (filters.maxSpiciness !== undefined) q = q.lte("spiciness", filters.maxSpiciness);
   if (filters.excludedAllergens?.length) q = q.not("allergens", "ov", `{${filters.excludedAllergens.join(",")}}`);
   if (filters.search) q = q.ilike("name", `%${filters.search}%`);
   const { data, error } = await q.order("name").limit(filters.limit ?? 200);
@@ -119,7 +122,7 @@ export async function getRecipe(supabase: SupabaseClient, recipeId: string): Pro
     id: row.id, householdId: row.household_id, versionId: row.version_id, versionNo: row.version_no, slug: row.slug, name: row.name,
     description: row.description, servings: row.servings, prepMin: row.prep_min, cookMin: row.cook_min, restMin: row.rest_min,
     totalMin: row.total_min, difficulty: row.difficulty, mealTypes: row.meal_types, mainProtein: row.main_protein, cuisine: row.cuisine,
-    seasons: row.seasons, tags: row.tags, allergens: row.allergens, source: row.source, parentRecipeId: row.parent_recipe_id,
+    seasons: row.seasons, tags: row.tags, allergens: row.allergens, spiciness: row.spiciness, source: row.source, parentRecipeId: row.parent_recipe_id,
     ingredients, steps: (version as Row).steps,
   };
 }
@@ -144,7 +147,7 @@ export async function addRecipeVersion(supabase: SupabaseClient, recipeId: strin
 
 /** Adapter une recette : variante dans le foyer pour une recette commune, nouvelle version pour une recette du foyer. */
 export async function adaptRecipe(supabase: SupabaseClient, householdId: string, original: Recipe, changes: Partial<RecipeInput>, changeNote: string): Promise<string> {
-  const { id: _id, versionId: _v, versionNo: _n, totalMin: _t, allergens: _a, householdId: owner, ...base } = original;
+  const { id: _id, versionId: _v, versionNo: _n, totalMin: _t, allergens: _a, spiciness: _s, householdId: owner, ...base } = original;
   const input: RecipeInput = { ...base, ...changes };
   if (owner === householdId) return addRecipeVersion(supabase, original.id, input, changeNote);
   return createRecipe(supabase, householdId, { ...input, slug: `${original.slug ?? slugify(original.name)}-variante`, parentRecipeId: original.id, source: "manual" });
@@ -172,7 +175,10 @@ export interface CandidateOptions {
   excludedAllergens?: string[];
 }
 
-/** Recettes réalisables avec les achats récents (au plus maxMissing ingrédients à acheter), les plus faciles d'abord. */
+/**
+ * Recettes réalisables avec les achats récents (au plus maxMissing ingrédients à acheter), les plus faciles d'abord.
+ * La base applique aussi les préférences du foyer (allergènes exclus, niveau d'épice accepté).
+ */
 export async function getRecipeCandidates(supabase: SupabaseClient, householdId: string, options: CandidateOptions = {}): Promise<RecipeCandidate[]> {
   const { data, error } = await supabase.rpc("recipe_candidates", {
     p_household: householdId, p_days: options.days ?? 7, p_max_missing: options.maxMissing ?? 2, p_meal_type: options.mealType ?? "diner",

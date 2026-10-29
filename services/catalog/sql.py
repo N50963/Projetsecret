@@ -16,11 +16,12 @@ def arr(values):
 
 def seed_sql():
     lines = ["-- Généré par services/catalog/sql.py à partir de services/catalog/referential.py : ne pas modifier à la main.",
-             "insert into public.ingredients (slug, name, category, default_unit, is_pantry_staple, allergens) values"]
-    lines.append(",\n".join(f"  ({q(s)}, {q(n)}, {q(c)}, {q(u)}, {'true' if st else 'false'}, {arr(R.ALLERGENS.get(s, []))})"
+             "insert into public.ingredients (slug, name, category, default_unit, is_pantry_staple, allergens, spiciness) values"]
+    lines.append(",\n".join(f"  ({q(s)}, {q(n)}, {q(c)}, {q(u)}, {'true' if st else 'false'}, {arr(R.ALLERGENS.get(s, []))}, {R.SPICINESS.get(s, 0)})"
                              for s, n, c, u, st in R.INGREDIENTS))
     lines[-1] += "\non conflict (slug) do update set name = excluded.name, category = excluded.category,"
-    lines.append("  default_unit = excluded.default_unit, is_pantry_staple = excluded.is_pantry_staple, allergens = excluded.allergens;")
+    lines.append("  default_unit = excluded.default_unit, is_pantry_staple = excluded.is_pantry_staple, allergens = excluded.allergens,"
+                 " spiciness = excluded.spiciness;")
     lines.append("")
     lines.append("delete from private.ingredient_rules where true;")
     lines.append("insert into private.ingredient_rules (priority, pattern, role, ingredient_slugs) values")

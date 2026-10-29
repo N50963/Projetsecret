@@ -272,6 +272,10 @@ ALLERGEN_NAMES = {
     "gluten": "Gluten", "lait": "Lait", "oeuf": "Œuf", "poisson": "Poisson", "crustaces": "Crustacés",
     "fruits_a_coque": "Fruits à coque", "soja": "Soja", "moutarde": "Moutarde", "celeri": "Céleri", "sesame": "Sésame",
 }
+# Niveau d'épice : 1 = épicé mais doux (curry, chorizo doux), 2 = piquant. Absent = 0.
+# Les préférences du foyer (spice_level) excluent les recettes au-dessus du niveau accepté.
+SPICINESS = {"curry": 1, "chorizo": 1, "piment": 2}
+
 _ALLERGENS_BY_GROUP = {
     "gluten": ["pates", "pates_fraiches", "pates_farcies", "lasagne", "gnocchi", "couscous", "cereale_cuisson", "nouilles",
                "farine", "flocons_avoine", "tortilla_wrap", "galette_sarrasin", "chapelure", "pain", "pain_de_mie",

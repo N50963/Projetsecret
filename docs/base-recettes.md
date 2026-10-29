@@ -50,10 +50,21 @@ la base s'enrichit de recettes importées ou générées par Mistral (cible ≈ 
 Allergènes : liste UE, marquage prudent par ingrédient (`services/catalog/referential.py`), indicatif : la composition
 exacte se lit sur l'emballage.
 
+## Préférences du foyer et épices
+
+- `household_preferences` : composition (2 adultes, 1 ado, 1 enfant), allergènes exclus (aucun), groupes exclus (abats,
+  coquillages ; les crevettes restent permises), niveau d'épice, 1 à 2 dîners sans viande par semaine, courses hebdomadaires.
+- Niveau d'épice des ingrédients (`ingredients.spiciness`, `SPICINESS` dans le référentiel) : 1 = épicé mais doux (curry,
+  chorizo), 2 = piquant (piment). Celui d'une recette est le plus élevé de ses ingrédients **obligatoires** (`recipe_catalog.spiciness`).
+- Le foyer accepte les plats type curry et le chorizo doux, rien de piquant (`spice_level = 'doux'`). Huit recettes communes
+  ont une version 2 « Version douce : rien de piquant » : piment facultatif « dans l'assiette des adultes » (chili con carne,
+  poulet basquaise avec paprika doux), curry doux, chorizo doux. Le jeu initial ne contient plus aucun plat piquant.
+- `recipe_candidates` applique d'elle-même les allergènes et le niveau d'épice du foyer, en plus des paramètres reçus.
+
 ## Module de l'application
 
 ```ts
-import { listRecipes, getRecipe, scaleIngredients, getRecipeCandidates, adaptRecipe, rateRecipe, currentSeason } from "./modules/recipes";
+import { listRecipes, getRecipe, scaleIngredients, getRecipeCandidates, adaptRecipe, rateRecipe, currentSeason, getHouseholdPreferences } from "./modules/recipes";
 
 const propositions = await getRecipeCandidates(supabase, householdId, { season: currentSeason(), maxTotalMin: 40, excludedAllergens: ["fruits_a_coque"] });
 const recette = await getRecipe(supabase, propositions[0].recipeId);

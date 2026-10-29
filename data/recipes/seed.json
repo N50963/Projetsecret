@@ -21,6 +21,7 @@
   ],
   "tags": [],
   "allergens": [],
+  "spiciness": 1,
   "ingredients": [
    {
     "slug": "poulet_filet",
@@ -64,7 +65,7 @@
    },
    {
     "slug": "curry",
-    "label": "curry en poudre",
+    "label": "curry doux",
     "quantity": 2,
     "unit": "cs",
     "optional": false,
@@ -163,6 +164,7 @@
   ],
   "tags": [],
   "allergens": [],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "poulet_filet",
@@ -277,6 +279,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "poulet_filet",
@@ -422,6 +425,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "poulet_filet",
@@ -541,6 +545,7 @@
   ],
   "tags": [],
   "allergens": [],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "poulet_filet",
@@ -603,8 +608,8 @@
     "base_unit": "g"
    },
    {
-    "slug": "piment",
-    "label": "piment d'Espelette ou paprika",
+    "slug": "paprika",
+    "label": "paprika doux",
     "quantity": 1,
     "unit": "cc",
     "optional": false,
@@ -641,12 +646,22 @@
     "scale": "sublinear",
     "base_quantity": null,
     "base_unit": null
+   },
+   {
+    "slug": "piment",
+    "label": "piment d'Espelette, dans l'assiette des adultes",
+    "quantity": 1,
+    "unit": "pincee",
+    "optional": true,
+    "scale": "sublinear",
+    "base_quantity": null,
+    "base_unit": null
    }
   ],
   "steps": [
    "Couper le poulet en morceaux, les poivrons en lanières, émincer l'oignon et l'ail.",
    "Faire dorer le poulet dans l'huile d'olive, le réserver.",
-   "Faire fondre oignon et poivrons 10 minutes, ajouter l'ail, les tomates, le thym et le piment.",
+   "Faire fondre oignon et poivrons 10 minutes, ajouter l'ail, les tomates, le thym et le paprika.",
    "Remettre le poulet, couvrir et laisser mijoter 25 minutes. Servir avec le riz cuit à part."
   ]
  },
@@ -675,6 +690,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "poulet_filet",
@@ -811,6 +827,7 @@
    "lait",
    "moutarde"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "poulet_filet",
@@ -946,6 +963,7 @@
    "gluten",
    "soja"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "poulet_filet",
@@ -1067,6 +1085,7 @@
   "allergens": [
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "poulet_filet",
@@ -1186,6 +1205,7 @@
   ],
   "tags": [],
   "allergens": [],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "poulet_filet",
@@ -1302,6 +1322,7 @@
    "gluten",
    "soja"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "nouilles",
@@ -1428,6 +1449,7 @@
    "lait",
    "moutarde"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "dinde",
@@ -1539,6 +1561,7 @@
   "allergens": [
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "dinde",
@@ -1658,6 +1681,7 @@
   ],
   "tags": [],
   "allergens": [],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "canard_magret",
@@ -1761,6 +1785,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "poulet_filet",
@@ -1908,6 +1933,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "tortilla_wrap",
@@ -2021,6 +2047,7 @@
   "allergens": [
    "gluten"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "boeuf_hache",
@@ -2143,7 +2170,7 @@
  {
   "slug": "chili-con-carne",
   "name": "Chili con carne",
-  "description": "Bœuf haché, haricots rouges et tomates épicés au cumin, servi avec du riz.",
+  "description": "Bœuf haché, haricots rouges et tomates parfumés au cumin et au paprika, servi avec du riz.",
   "servings": 4,
   "prep_min": 15,
   "cook_min": 45,
@@ -2160,6 +2187,7 @@
   ],
   "tags": [],
   "allergens": [],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "boeuf_hache",
@@ -2233,7 +2261,7 @@
    },
    {
     "slug": "paprika",
-    "label": "paprika",
+    "label": "paprika doux",
     "quantity": 1,
     "unit": "cc",
     "optional": false,
@@ -2243,10 +2271,10 @@
    },
    {
     "slug": "piment",
-    "label": "piment (poudre, flocons)",
+    "label": "piment, dans l'assiette des adultes",
     "quantity": 1,
     "unit": "pincee",
-    "optional": false,
+    "optional": true,
     "scale": "sublinear",
     "base_quantity": null,
     "base_unit": null
@@ -2301,6 +2329,7 @@
   "allergens": [
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "boeuf_hache",
@@ -2433,6 +2462,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "boeuf_hache",
@@ -2556,6 +2586,7 @@
    "celeri",
    "gluten"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "boeuf_a_mijoter",
@@ -2713,6 +2744,7 @@
    "lait",
    "oeuf"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "lasagne",
@@ -2858,6 +2890,7 @@
    "lait",
    "oeuf"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "boeuf_hache",
@@ -2988,6 +3021,7 @@
   "allergens": [
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "courgette",
@@ -3115,6 +3149,7 @@
    "oeuf",
    "soja"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "riz",
@@ -3229,6 +3264,7 @@
    "lait",
    "moutarde"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "porc_filet",
@@ -3355,6 +3391,7 @@
    "lait",
    "oeuf"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pate_brisee",
@@ -3482,6 +3519,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pain_de_mie",
@@ -3609,6 +3647,7 @@
    "lait",
    "oeuf"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pates",
@@ -3689,6 +3728,7 @@
   "allergens": [
    "celeri"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "saucisse",
@@ -3799,6 +3839,7 @@
   "allergens": [
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pomme_de_terre",
@@ -3907,6 +3948,7 @@
    "lait",
    "oeuf"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "galette_sarrasin",
@@ -3997,6 +4039,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "endive",
@@ -4111,6 +4154,7 @@
    "gluten",
    "soja"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "porc_tranche",
@@ -4213,7 +4257,7 @@
  {
   "slug": "pates-chorizo-poivrons",
   "name": "Pâtes au chorizo et aux poivrons",
-  "description": "Sauce tomate relevée au chorizo et aux poivrons fondants.",
+  "description": "Sauce tomate au chorizo doux et aux poivrons fondants.",
   "servings": 4,
   "prep_min": 10,
   "cook_min": 20,
@@ -4234,6 +4278,7 @@
   "allergens": [
    "gluten"
   ],
+  "spiciness": 1,
   "ingredients": [
    {
     "slug": "pates",
@@ -4247,7 +4292,7 @@
    },
    {
     "slug": "chorizo",
-    "label": "chorizo",
+    "label": "chorizo doux",
     "quantity": 120,
     "unit": "g",
     "optional": false,
@@ -4337,6 +4382,7 @@
   "allergens": [
    "poisson"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "saumon",
@@ -4453,6 +4499,7 @@
    "lait",
    "poisson"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "saumon",
@@ -4581,6 +4628,7 @@
    "lait",
    "poisson"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "truite",
@@ -4684,6 +4732,7 @@
   "allergens": [
    "poisson"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "poisson_blanc",
@@ -4821,6 +4870,7 @@
    "oeuf",
    "poisson"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "poisson_blanc",
@@ -4945,6 +4995,7 @@
    "lait",
    "poisson"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "poisson_blanc",
@@ -5062,6 +5113,7 @@
    "gluten",
    "poisson"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pates",
@@ -5177,6 +5229,7 @@
    "oeuf",
    "poisson"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "thon_conserve",
@@ -5315,6 +5368,7 @@
    "lait",
    "poisson"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "tortilla_wrap",
@@ -5421,6 +5475,7 @@
    "oeuf",
    "poisson"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pate_brisee",
@@ -5546,6 +5601,7 @@
   "allergens": [
    "poisson"
   ],
+  "spiciness": 1,
   "ingredients": [
    {
     "slug": "poisson_blanc",
@@ -5599,7 +5655,7 @@
    },
    {
     "slug": "curry",
-    "label": "curry en poudre",
+    "label": "curry doux",
     "quantity": 2,
     "unit": "cc",
     "optional": false,
@@ -5693,6 +5749,7 @@
    "gluten",
    "poisson"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pates",
@@ -5806,6 +5863,7 @@
   "allergens": [
    "poisson"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "poisson_blanc",
@@ -5922,6 +5980,7 @@
    "crustaces",
    "gluten"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pates",
@@ -6037,6 +6096,7 @@
   "allergens": [
    "crustaces"
   ],
+  "spiciness": 1,
   "ingredients": [
    {
     "slug": "crevette",
@@ -6080,7 +6140,7 @@
    },
    {
     "slug": "curry",
-    "label": "curry en poudre",
+    "label": "curry doux",
     "quantity": 2,
     "unit": "cc",
     "optional": false,
@@ -6177,6 +6237,7 @@
    "oeuf",
    "soja"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "riz",
@@ -6293,6 +6354,7 @@
   "allergens": [
    "crustaces"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "crevette",
@@ -6398,6 +6460,7 @@
   "allergens": [
    "oeuf"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "oeuf",
@@ -6493,6 +6556,7 @@
    "gluten",
    "oeuf"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "oeuf",
@@ -6631,6 +6695,7 @@
    "lait",
    "oeuf"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "oeuf",
@@ -6745,6 +6810,7 @@
    "lait",
    "oeuf"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "oeuf",
@@ -6860,6 +6926,7 @@
    "lait",
    "oeuf"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pate_brisee",
@@ -6978,6 +7045,7 @@
    "lait",
    "oeuf"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "oeuf",
@@ -7095,6 +7163,7 @@
    "lait",
    "oeuf"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "oeuf",
@@ -7207,6 +7276,7 @@
    "vegetarien"
   ],
   "allergens": [],
+  "spiciness": 1,
   "ingredients": [
    {
     "slug": "lentilles",
@@ -7270,7 +7340,7 @@
    },
    {
     "slug": "curry",
-    "label": "curry en poudre",
+    "label": "curry doux",
     "quantity": 2,
     "unit": "cc",
     "optional": false,
@@ -7328,7 +7398,7 @@
  {
   "slug": "curry-pois-chiches-epinards",
   "name": "Curry de pois chiches aux épinards",
-  "description": "Pois chiches et épinards mijotés dans une sauce tomate épicée.",
+  "description": "Pois chiches et épinards mijotés dans une sauce tomate au curry doux.",
   "servings": 4,
   "prep_min": 10,
   "cook_min": 20,
@@ -7350,6 +7420,7 @@
    "vegetarien"
   ],
   "allergens": [],
+  "spiciness": 1,
   "ingredients": [
    {
     "slug": "pois_chiches",
@@ -7413,7 +7484,7 @@
    },
    {
     "slug": "curry",
-    "label": "curry en poudre",
+    "label": "curry doux",
     "quantity": 2,
     "unit": "cc",
     "optional": false,
@@ -7481,6 +7552,7 @@
    "vegetarien"
   ],
   "allergens": [],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "haricots_secs",
@@ -7615,6 +7687,7 @@
    "lait",
    "moutarde"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "lentilles",
@@ -7733,6 +7806,7 @@
    "lait",
    "sesame"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "falafel",
@@ -7856,6 +7930,7 @@
    "celeri",
    "gluten"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "lentilles",
@@ -7970,6 +8045,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pois_chiches",
@@ -8095,6 +8171,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pates",
@@ -8222,6 +8299,7 @@
    "gluten",
    "soja"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "proteine_vegetale",
@@ -8345,6 +8423,7 @@
   "allergens": [
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pois_chiches",
@@ -8471,6 +8550,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "gnocchi",
@@ -8567,6 +8647,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pates",
@@ -8670,6 +8751,7 @@
    "celeri",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "riz",
@@ -8784,6 +8866,7 @@
    "lait",
    "oeuf"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "courgette",
@@ -8898,6 +8981,7 @@
    "lait",
    "moutarde"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pate_feuilletee",
@@ -9001,6 +9085,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "halloumi",
@@ -9127,6 +9212,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pate_pizza",
@@ -9249,6 +9335,7 @@
   "allergens": [
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pomme_de_terre",
@@ -9364,6 +9451,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "courge_butternut",
@@ -9481,6 +9569,7 @@
    "lait",
    "oeuf"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "lasagne",
@@ -9609,6 +9698,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "chevre",
@@ -9720,6 +9810,7 @@
   "allergens": [
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "aubergine",
@@ -9833,6 +9924,7 @@
    "gluten",
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "potimarron",
@@ -9945,6 +10037,7 @@
   "allergens": [
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "patate_douce",
@@ -10046,6 +10139,7 @@
   "allergens": [
    "lait"
   ],
+  "spiciness": 0,
   "ingredients": [
    {
     "slug": "pomme_de_terre",

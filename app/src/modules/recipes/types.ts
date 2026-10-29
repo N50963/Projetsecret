@@ -8,6 +8,8 @@ export type BaseUnit = "g" | "ml" | "piece";
 export type ScaleMode = "linear" | "sublinear" | "fixed";
 export type RecipeSource = "seed" | "manual" | "import_text" | "import_url" | "import_photo" | "mistral";
 export type Rating = "like" | "neutral" | "dislike";
+/** Niveau d'épice : 0 aucun, 1 épicé mais doux (curry, chorizo doux), 2 piquant (piment). */
+export type Spiciness = 0 | 1 | 2;
 
 export const MEAL_TYPES: readonly MealType[] = ["diner", "dejeuner"];
 export const SEASONS: readonly Season[] = ["printemps", "ete", "automne", "hiver"];
@@ -58,6 +60,8 @@ export interface Recipe extends RecipeInput {
   versionNo: number;
   totalMin: number;
   allergens: string[];
+  /** Calculé par la base : le plus élevé des ingrédients obligatoires (un piment facultatif ne compte pas). */
+  spiciness: Spiciness;
   source: RecipeSource;
 }
 

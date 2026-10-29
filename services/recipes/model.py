@@ -85,12 +85,15 @@ class Recipe:
                 out.update(REF.ALLERGENS.get(i.slug, []))
         return sorted(out)
 
+    def spiciness(self):
+        return max((REF.SPICINESS.get(i.slug, 0) for i in self.ingredients if i.slug and not i.optional), default=0)
+
     def to_dict(self):
         return {
             "slug": self.slug, "name": self.name, "description": self.description, "servings": self.servings,
             "prep_min": self.prep_min, "cook_min": self.cook_min, "rest_min": self.rest_min, "difficulty": self.difficulty,
             "meal_types": list(self.meals), "main_protein": self.protein, "cuisine": self.cuisine,
-            "seasons": list(self.seasons), "tags": self.derived_tags(), "allergens": self.allergens(),
+            "seasons": list(self.seasons), "tags": self.derived_tags(), "allergens": self.allergens(), "spiciness": self.spiciness(),
             "ingredients": [i.to_dict() for i in self.ingredients], "steps": list(self.steps),
         }
 
