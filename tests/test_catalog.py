@@ -45,7 +45,8 @@ def test_parse_quantity(text, expected):
     ("Pâte à pizza", "ingredient", ["pate_pizza"]),
     ("Orange à Jus 2 kg", "ingredient", ["orange"]),
     ("Coca Cola sans sucres", "beverage", []),
-    ("Pain de mie grandes tranches", "bread", []),
+    ("Pain de mie grandes tranches", "bread", ["pain_de_mie"]),
+    ("Lait de coco", "ingredient", ["lait_coco"]),
     ("Signal complet", "non_food", []),
 ])
 def test_classify(name, role, slugs):

@@ -115,6 +115,18 @@ INGREDIENTS = [
     ("poivre", "Poivre", "herbe_epice", "g", True),
     ("paprika", "Paprika", "herbe_epice", "g", True),
     ("epices", "Épices", "herbe_epice", "g", True),
+    ("thym", "Thym", "herbe_epice", "g", True),
+    ("romarin", "Romarin", "herbe_epice", "g", True),
+    ("herbes_provence", "Herbes de Provence", "herbe_epice", "g", True),
+    ("origan", "Origan", "herbe_epice", "g", True),
+    ("cumin", "Cumin", "herbe_epice", "g", True),
+    ("curry", "Curry en poudre", "herbe_epice", "g", True),
+    ("curcuma", "Curcuma", "herbe_epice", "g", True),
+    ("cannelle", "Cannelle", "herbe_epice", "g", True),
+    ("muscade", "Noix de muscade", "herbe_epice", "g", True),
+    ("piment", "Piment (poudre, flocons)", "herbe_epice", "g", True),
+    ("persil", "Persil", "herbe_epice", "g", False),
+    ("basilic", "Basilic frais", "herbe_epice", "g", False),
     # Volaille
     ("poulet_filet", "Poulet (filet, blanc, escalope)", "volaille", "g", False),
     ("poulet_entier", "Poulet entier", "volaille", "g", False),
@@ -202,6 +214,9 @@ INGREDIENTS = [
     ("galette_sarrasin", "Galette de blé noir", "feculent", "piece", False),
     ("feuille_riz", "Feuille de riz", "feculent", "piece", False),
     ("chapelure", "Chapelure / croûtons", "feculent", "g", False),
+    ("pain", "Pain", "feculent", "g", False),
+    ("pain_de_mie", "Pain de mie", "feculent", "piece", False),
+    ("pain_burger_pita", "Pain burger / hot-dog / pita", "feculent", "piece", False),
     ("frites_surgelees", "Pommes de terre surgelées (frites, rissolées)", "feculent", "g", False),
     # Légumineuses
     ("lentilles", "Lentilles", "legumineuse", "g", False),
@@ -216,6 +231,7 @@ INGREDIENTS = [
     ("feuille_brick", "Feuille de brick", "pate_a_cuire", "piece", False),
     # Conserves et sauces
     ("tomate_conserve", "Tomates en conserve (morceaux, pelées)", "conserve", "g", False),
+    ("lait_coco", "Lait de coco", "conserve", "ml", False),
     ("tomate_coulis", "Purée / coulis de tomate", "conserve", "g", False),
     ("concentre_tomate", "Concentré de tomate", "conserve", "g", False),
     ("sauce_tomate", "Sauce tomate cuisinée", "conserve", "g", False),
@@ -249,6 +265,36 @@ INGREDIENTS = [
 
 INGREDIENT_SLUGS = {i[0] for i in INGREDIENTS}
 
+# Allergènes réglementaires (UE) par ingrédient, avec une approche prudente : un produit qui en contient souvent
+# est marqué. Indicatif uniquement : la composition exacte se lit sur l'emballage.
+ALLERGEN_NAMES = {
+    "gluten": "Gluten", "lait": "Lait", "oeuf": "Œuf", "poisson": "Poisson", "crustaces": "Crustacés",
+    "fruits_a_coque": "Fruits à coque", "soja": "Soja", "moutarde": "Moutarde", "celeri": "Céleri", "sesame": "Sésame",
+}
+_ALLERGENS_BY_GROUP = {
+    "gluten": ["pates", "pates_fraiches", "pates_farcies", "lasagne", "gnocchi", "couscous", "cereale_cuisson", "nouilles",
+               "farine", "flocons_avoine", "tortilla_wrap", "galette_sarrasin", "chapelure", "pain", "pain_de_mie",
+               "pain_burger_pita", "pate_feuilletee", "pate_brisee", "pate_pizza", "feuille_brick", "sauce_soja",
+               "poisson_blanc_pane", "proteine_vegetale", "falafel"],
+    "lait": ["lait", "creme_epaisse", "creme_liquide", "beurre", "yaourt_nature", "yaourt_grec", "fromage_blanc", "ricotta",
+             "mascarpone", "mozzarella", "burrata", "feta", "halloumi", "emmental", "emmental_rape", "comte", "parmesan",
+             "gouda_cheddar", "tomme", "raclette", "chevre", "brebis", "fromage_frais", "fromage_bleu", "fromage_croute",
+             "fromage_portion", "pate_feuilletee", "pate_brisee", "poisson_blanc_pane", "sauce_pesto", "gnocchi"],
+    "oeuf": ["oeuf", "pates_fraiches", "pates_farcies", "lasagne", "mayonnaise", "surimi", "poisson_blanc_pane"],
+    "poisson": ["saumon", "truite", "truite_fumee", "poisson_blanc", "poisson_blanc_pane", "thon_conserve", "thon_frais",
+                "thon_fume", "sardine_conserve", "surimi", "anchois"],
+    "crustaces": ["crevette"],
+    "fruits_a_coque": ["noix", "poudre_amande", "huile_noix", "sauce_pesto"],
+    "soja": ["sauce_soja", "miso", "proteine_vegetale"],
+    "moutarde": ["moutarde", "mayonnaise"],
+    "celeri": ["celeri_branche", "celeri_rave", "bouillon"],
+    "sesame": ["graines", "falafel"],
+}
+ALLERGENS = {}
+for _allergen, _slugs in _ALLERGENS_BY_GROUP.items():
+    for _slug in _slugs:
+        ALLERGENS.setdefault(_slug, []).append(_allergen)
+
 # Règles : (motif sur le nom normalisé, rôle, [ingrédients], part de chaque ingrédient)
 # Une part différente de 1 sert aux produits composés de plusieurs ingrédients (petits pois/carottes).
 R = []
@@ -265,6 +311,7 @@ def rule(pattern, role, *slugs):
 rule(r" (signal|dentifrice|narta|ultra doux|aussie|vitalhair|h s classic|h s sh|lpm monoi|lpm cerisier|masque|creme de jour|dissolvant|gel wc|chlore|liquide de rincage|papier cuisson|sacs? poub|sac cabas|sac poignee|sac isotherme|sachets glacon|charbon de bois|bouquet|tulipes|rhododendron|pivoine|deco fleur|bloc papier|capsules marseille|gourmet gold|purina|crayon) ", "non_food")
 # --- Exceptions : produits dont le nom contient un mot trompeur ---
 rule(r" (lpm lait|creme lavante) ", "non_food")
+rule(r" (lait de coco|creme de coco) ", "ingredient", "lait_coco")
 rule(r" (fromage rape pizza) ", "ingredient", "emmental_rape")
 rule(r" (pate a pizza) ", "ingredient", "pate_pizza")
 rule(r" (sauce pizza|ferrero sauce couscous) ", "ingredient", "sauce_tomate")
@@ -301,7 +348,9 @@ rule(r" (yaourt|yaourts|yop|danette|creme dessert|cremes dessert|mousse au choco
 rule(r" (nestle couscous) ", "breakfast")
 rule(r" (muesli|musli|granola|kellogg|cornflakes|nesquik|cookie crisp|mix cereales|boules de cereales|confiture|pate a tartiner|pates a tartiner|nutella|beurre de cacahuete|brioche|briochettes|briochette|bjorg p tit fondant|bjorg croust|croissant|pain au chocolat|pains au lait|pain tout chocolat|pain au lait|viennoiserie|creme de pistache|recharge amande) ", "breakfast", )
 rule(r" (coca|cola|schweppes|oasis|lipton|ice tea|fuze tea|feeltea|maytea|jus|pur jus|fruit blast|nectar|boisson|smoothie|eau|evian|vittel|badoit|cristaline|biere|bier|vin|rose u golfu|blanc brut|prosecco|whisky|scotch|blended|abrachan|bordeaux|cotes de provence|coteaux|costieres|bandol|alpilles|ile de beaute|patrimonio|pays d oc|terres du midi|var rose|vallee du paradis|cuvee|zinfandel|saumur|sauvignon|viognier|melusine|britt|saint cyp|saint agaune|st agaune|the|english breakfast|infusion|senseo|dosette|cafe|lpm lait|co 02) ", "beverage")
-rule(r" (pain|baguette|ciabatta|focaccia|pita|gache|pave rustique|ficeli|tartines au seigle|petits pains|petit pain|puccia|pains hamburger|pains pita|pain durum) ", "bread")
+rule(r" (pain de mie|pain mie|gache) ", "bread", "pain_de_mie")
+rule(r" (pains hamburger|petits pains hot dog|pains pita|pain pita|pain durum) ", "bread", "pain_burger_pita")
+rule(r" (pain|baguette|ciabatta|focaccia|pita|pave rustique|ficeli|tartines au seigle|petits pains|petit pain|puccia) ", "bread", "pain")
 
 # --- Ingrédients composés ---
 rule(r" petits? pois.*carottes? ", "ingredient", "petit_pois", "carotte")
@@ -514,6 +563,18 @@ rule(r" coriandre ", "ingredient", "coriandre")
 rule(r" ciboulette ", "ingredient", "ciboulette")
 rule(r" herbes aromatiques ", "ingredient", "herbes_fraiches")
 rule(r" laurier ", "ingredient", "laurier")
+rule(r" thym ", "ingredient", "thym")
+rule(r" romarin ", "ingredient", "romarin")
+rule(r" herbes de provence ", "ingredient", "herbes_provence")
+rule(r" origan ", "ingredient", "origan")
+rule(r" persil ", "ingredient", "persil")
+rule(r" basilic ", "ingredient", "basilic")
+rule(r" cumin ", "ingredient", "cumin")
+rule(r" curry ", "ingredient", "curry")
+rule(r" curcuma ", "ingredient", "curcuma")
+rule(r" cannelle ", "ingredient", "cannelle")
+rule(r" muscade ", "ingredient", "muscade")
+rule(r" piment ", "ingredient", "piment")
 # --- Fruits ---
 rule(r" citron vert ", "ingredient", "citron_vert")
 rule(r" citron ", "ingredient", "citron")
@@ -563,6 +624,7 @@ def classify(name):
 
 
 def _check():
+    assert set(ALLERGENS) <= INGREDIENT_SLUGS, set(ALLERGENS) - INGREDIENT_SLUGS
     unknown = {s for _, _, slugs in RULES for s in slugs} - INGREDIENT_SLUGS
     assert not unknown, f"ingrédients inconnus dans les règles : {unknown}"
     assert all(c in CATEGORIES for _, _, c, _, _ in INGREDIENTS)
