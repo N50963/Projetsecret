@@ -16,5 +16,5 @@
 ## À traiter ensuite
 - 8 noms de produits encore « à confirmer » (vue `products_to_confirm`).
 - Migration `20261029000003` : la seconde passe de suppression par mots-clés a été appliquée directement, voir le commentaire du fichier.
-- Formats de produits à confirmer (31 % des achats d'ingrédients, `products.pack_formats`).
+- Formats de produits : 41 confirmés par le foyer (15 % des achats d'ingrédients) ; restent 7 % de formats incertains (124 produits peu achetés) et 15 % sans contenance connue (surtout le pain, les gnocchis).
 - Créer le projet Expo et brancher les modules `lidl-sync` et `recipes`.

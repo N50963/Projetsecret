@@ -370,7 +370,6 @@ rule(r" (lasagne) ", "ingredient", "lasagne")
 rule(r" (pates aux oeufs) ", "ingredient", "pates")
 rule(r" haricots? beurre ", "ingredient", "haricot_beurre")
 rule(r" pate brisee ", "ingredient", "pate_brisee")
-rule(r" huile d olive ", "ingredient", "huile_olive")
 rule(r" (lardons|allumettes|poitrine fumee) ", "ingredient", "lardons")
 rule(r" (saucisson|specialite saucisson) ", "ingredient", "saucisson")
 rule(r" (emmental bio au lait cru) ", "ingredient", "emmental")
@@ -390,6 +389,8 @@ rule(r" (sardine|maquereaux|maquereau|pn ptit maquereau) ", "ingredient", "sardi
 rule(r" (crevette|gambas) ", "ingredient", "crevette")
 rule(r" surimi ", "ingredient", "surimi")
 rule(r" anchois ", "ingredient", "anchois")
+# Après les poissons (« thon fumé avec huile d'olive ») et avant « olive ».
+rule(r" huile d olive ", "ingredient", "huile_olive")
 
 # --- Volaille et viandes ---
 rule(r" magrets? (de )?(canard )?fumes? ", "ingredient", "canard_magret_fume")
