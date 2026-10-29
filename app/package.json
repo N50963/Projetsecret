@@ -2,18 +2,41 @@
   "name": "projetsecret-app",
   "version": "0.1.0",
   "private": true,
-  "description": "Application de planification des repas : modules métier (synchronisation Lidl Plus, recettes).",
-  "type": "module",
+  "description": "Application de planification des repas du foyer (Expo) : tickets Lidl Plus, recettes, menus de la semaine.",
+  "main": "expo-router/entry",
   "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@supabase/supabase-js": "2.117.0"
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@supabase/supabase-js": "2.117.0",
+    "expo": "~58.0.21",
+    "expo-constants": "~58.0.14",
+    "expo-crypto": "~58.0.7",
+    "expo-image": "~58.0.18",
+    "expo-image-picker": "~58.0.10",
+    "expo-linking": "~58.0.15",
+    "expo-router": "~58.0.28",
+    "expo-secure-store": "~58.0.2",
+    "expo-status-bar": "~58.0.4",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-native": "0.88.1",
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-screens": "~4.30.0",
+    "react-native-url-polyfill": "^4.0.0",
+    "react-native-web": "^0.21.4",
+    "react-native-webview": "14.0.1"
   },
   "devDependencies": {
     "@types/node": "22.10.2",
-    "typescript": "5.9.3",
+    "@types/react": "~19.3.0",
+    "typescript": "~6.0.3",
     "vitest": "3.2.7"
   }
 }

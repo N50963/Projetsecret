@@ -1,1 +1,10 @@
 node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+*.tsbuildinfo
+.env*.local
+/ios
+/android

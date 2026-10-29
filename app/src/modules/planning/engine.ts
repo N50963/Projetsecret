@@ -271,6 +271,17 @@ export function planMeals(ctx: PlannerContext, slots: MealSlot[], options: PlanO
   return plans;
 }
 
+/** Ingrédients à acheter pour cuisiner une recette donnée à ce repas (recette ajoutée ou proposée par Mistral). */
+export function missingForSlot(ctx: PlannerContext, recipe: PlannerRecipe, slot: MealSlot): MissingIngredient[] {
+  const byId = new Map([...ctx.recipes, recipe].map((r) => [r.id, r]));
+  const stock = Stock.fromPurchases(ctx.purchases, { freezes: ctx.prefs.freezesFreshMeatFish });
+  for (const m of [...ctx.history, ...ctx.accepted].sort((a, b) => a.date.localeCompare(b.date))) {
+    const r = byId.get(m.recipeId);
+    if (r && m.slotId !== slot.id) consumeRecipe(stock, r, m);
+  }
+  return evaluate(recipe, slot, stock).missing;
+}
+
 /** Les jours d'une semaine de planification, à partir d'une date. */
 export function weekDates(start: IsoDate, days = 7): IsoDate[] {
   return Array.from({ length: days }, (_, i) => addDays(start, i));

@@ -124,6 +124,13 @@ export async function savePlan(supabase: SupabaseClient, householdId: string, st
   })), { onConflict: "household_id,meal_date,meal_type" }).select("*");
   check(e2, "Repas non enregistrés");
   const keep = new Set(((slots ?? []) as Row[]).map((s) => s.id));
+  // Un repas passé auparavant puis de nouveau demandé redevient à pourvoir.
+  const reopened = ((slots ?? []) as Row[]).filter((s) => s.status === "skipped").map((s) => s.id);
+  if (reopened.length) {
+    const { error: e5 } = await supabase.from("meal_slots").update({ status: "open" }).in("id", reopened);
+    check(e5, "Repas non rouverts");
+    for (const s of (slots ?? []) as Row[]) if (reopened.includes(s.id)) s.status = "open";
+  }
   const { data: existing, error: e3 } = await supabase.from("meal_slots").select("id, status").eq("plan_id", planId);
   check(e3, "Repas illisibles");
   const stale = ((existing ?? []) as Row[]).filter((s) => !keep.has(s.id) && s.status !== "accepted").map((s) => s.id);
@@ -193,4 +200,31 @@ export async function getShoppingList(supabase: SupabaseClient, householdId: str
 export async function setShoppingItemChecked(supabase: SupabaseClient, itemId: string, checked: boolean) {
   const { error } = await supabase.from("shopping_list_items").update({ checked_at: checked ? new Date().toISOString() : null }).eq("id", itemId);
   check(error, "Article non mis à jour");
+}
+
+/** Repas pour lequel aucun menu n'est retenu (« passer »). */
+export async function skipSlot(supabase: SupabaseClient, slotId: string) {
+  const { error } = await supabase.from("meal_slots").update({ status: "skipped" }).eq("id", slotId);
+  check(error, "Repas non mis à jour");
+}
+
+export interface UpcomingMeal {
+  slotId: string;
+  date: IsoDate;
+  mealType: MealType;
+  recipeId: string;
+  name: string;
+}
+
+/** Repas choisis à partir d'une date (accueil). */
+export async function getUpcomingMeals(supabase: SupabaseClient, householdId: string, from: IsoDate, limit = 7): Promise<UpcomingMeal[]> {
+  const { data, error } = await supabase.from("meal_slots").select("id, meal_date, meal_type, recipe_id").eq("household_id", householdId)
+    .eq("status", "accepted").gte("meal_date", from).order("meal_date").order("meal_type", { ascending: false }).limit(limit);
+  check(error, "Menus illisibles");
+  const rows = (data ?? []) as Row[];
+  const ids = [...new Set(rows.map((r) => r.recipe_id))];
+  const { data: names, error: e2 } = ids.length ? await supabase.from("recipe_catalog").select("id, name").in("id", ids) : { data: [], error: null };
+  check(e2, "Recettes illisibles");
+  const nameOf = new Map(((names ?? []) as Row[]).map((n) => [n.id, n.name]));
+  return rows.map((r) => ({ slotId: r.id, date: r.meal_date, mealType: r.meal_type, recipeId: r.recipe_id, name: nameOf.get(r.recipe_id) ?? "Recette" }));
 }

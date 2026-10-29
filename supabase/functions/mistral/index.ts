@@ -12,7 +12,7 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.117.0";
 
 const MISTRAL = "https://api.mistral.ai/v1";
-const TEXT_MODELS = (Deno.env.get("MISTRAL_TEXT_MODELS") ?? "mistral-small-latest,ministral-8b-latest").split(",").map((m) => m.trim());
+const TEXT_MODELS = (Deno.env.get("MISTRAL_TEXT_MODELS") ?? "mistral-small-latest,ministral-14b-latest,ministral-8b-latest").split(",").map((m) => m.trim());
 const IMAGE_MODEL = Deno.env.get("MISTRAL_IMAGE_MODEL") ?? "mistral-medium-latest";
 /** Appels par foyer et par heure, pour ménager le quota gratuit. */
 const HOURLY_LIMIT = Number(Deno.env.get("MISTRAL_HOURLY_LIMIT") ?? "40");
@@ -97,7 +97,8 @@ const RECIPE_FORMAT = `Format JSON d'une recette :
 Règles : plat principal uniquement (pas d'entrée, de dessert, de fromage ni de petit-déjeuner) ; meal_types parmi "diner" et "dejeuner" ;
 difficulty de 1 à 3 ; quantités pour le nombre de portions ; base_quantity = quantité en g, ml ou pièces quand la conversion est sûre
 (sinon null) ; cuillères (cs, cc) et pincées : base_quantity null sauf liquides (1 cs = 15 ml, 1 cc = 5 ml) ; épices et herbes en "sublinear" ;
-au moins 3 ingrédients et 2 étapes ; étapes courtes, à l'impératif.`;
+au moins 3 ingrédients et 2 étapes ; étapes courtes, à l'impératif. Portions généreuses par personne : 120 à 150 g de viande ou de poisson,
+150 à 250 g de légumes, 70 à 80 g de féculent cru (pâtes, riz, semoule) ou 250 g de pommes de terre.`;
 
 function referentialText(refs: Ref[]) {
   return refs.map((r) => `${r.slug} (${r.name}, ${r.default_unit})`).join("; ");
@@ -106,6 +107,7 @@ function referentialText(refs: Ref[]) {
 /** Remet en forme un brouillon de recette et liste ce qui reste à corriger. */
 function normalizeRecipe(raw: any, refs: Ref[]): { recipe: any; issues: string[] } {
   const known = new Set(refs.map((r) => r.slug));
+  const unitOf = new Map(refs.map((r) => [r.slug, r.default_unit]));
   const issues: string[] = [];
   const int = (v: unknown, d: number, min: number, max: number) => {
     const n = Math.round(Number(v));
@@ -144,7 +146,12 @@ function normalizeRecipe(raw: any, refs: Ref[]): { recipe: any; issues: string[]
       base_quantity: Number.isFinite(bq) && bq > 0 ? bq : null, base_unit: BASE_UNITS.includes(i?.base_unit) ? i.base_unit : null,
       optional: Boolean(i?.optional), scale: pick(i?.scale, ["linear", "sublinear", "fixed"], "linear"),
     });
-    if (r.ingredients.at(-1).base_quantity === null) r.ingredients.at(-1).base_unit = null;
+    const last = r.ingredients.at(-1);
+    // La quantité de référence n'est utile que dans l'unité du référentiel (celle des achats) : sinon, présence seulement.
+    if (last.base_quantity === null || (last.slug && last.base_unit !== unitOf.get(last.slug))) {
+      last.base_quantity = null;
+      last.base_unit = null;
+    }
   }
   if (!r.name) issues.push("nom manquant");
   if (r.ingredients.length < 3) issues.push("moins de 3 ingrédients");
@@ -199,6 +206,32 @@ async function imageAgent(db: SupabaseClient): Promise<string> {
   return agent.id;
 }
 
+/** Lien de l'image produite par l'outil (la réponse de l'outil contient {"url": ...}). */
+function findImageUrl(conv: any): string | null {
+  for (const o of conv.outputs ?? []) {
+    if (o.type !== "tool.execution") continue;
+    const result = o.info?.result;
+    try {
+      const url = (typeof result === "string" ? JSON.parse(result) : result)?.url;
+      if (typeof url === "string" && url.startsWith("https://")) return url;
+    } catch { /* résultat non JSON : recherche du lien ci-dessous */ }
+    const match = JSON.stringify(o.info ?? {}).match(/https:\/\/[^"\\\s]+/);
+    if (match) return match[0];
+  }
+  return null;
+}
+
+/** Premier fichier produit par un outil (l'image), où qu'il soit dans la réponse. */
+function findToolFile(node: any): { file_id: string } | null {
+  if (!node || typeof node !== "object") return null;
+  if (node.type === "tool_file" && node.file_id) return node;
+  for (const value of Array.isArray(node) ? node : Object.values(node)) {
+    const found = findToolFile(value);
+    if (found) return found;
+  }
+  return null;
+}
+
 async function illustrate(user: SupabaseClient, householdId: string, recipeId: string) {
   const { data: recipe, error } = await user.from("recipe_catalog").select("id, household_id, name, description").eq("id", recipeId).maybeSingle();
   if (error || !recipe) throw new HttpError(404, "Recette introuvable.");
@@ -206,19 +239,29 @@ async function illustrate(user: SupabaseClient, householdId: string, recipeId: s
     (await user.from("recipe_catalog").select("version_id").eq("id", recipeId).single()).data?.version_id).order("position");
   const db = admin();
   const agentId = await imageAgent(db);
-  const prompt = `Photographie culinaire réaliste, vue de trois-quarts, lumière naturelle, assiette familiale simple : « ${recipe.name} ». `
+  const prompt = `Génère une image avec l'outil de génération d'images. Photographie culinaire réaliste, vue de trois-quarts, lumière naturelle, assiette familiale simple : « ${recipe.name} ». `
     + `${recipe.description ?? ""} Ingrédients : ${(ings ?? []).filter((i: any) => !i.optional).map((i: any) => i.label).join(", ")}. Pas de texte.`;
   const r = await mistralFetch("/conversations", { method: "POST", body: JSON.stringify({ agent_id: agentId, inputs: prompt }) });
   if (!r.ok) throw new HttpError(unavailable(r) ? 429 : 502, `Création d'images indisponible avec cette clé (${r.status}).`);
   const conv = await r.json();
-  const chunk = (conv.outputs ?? []).flatMap((o: any) => (Array.isArray(o.content) ? o.content : [])).find((c: any) => c.type === "tool_file");
-  if (!chunk?.file_id) throw new HttpError(502, "Mistral n'a pas renvoyé d'image.");
-  const file = await mistralFetch(`/files/${chunk.file_id}/content`, { headers: { Accept: "*/*" } });
+  const chunk = findToolFile(conv);
+  const url = chunk?.file_id ? null : findImageUrl(conv);
+  if (!chunk?.file_id && !url) {
+    const shape = (conv.outputs ?? []).map((o: any) => o.type === "tool.execution"
+      ? `outil ${o.name ?? ""} ${JSON.stringify(o.info ?? o.arguments ?? {}).slice(0, 120)}`
+      : `${o.type} ${typeof o.content === "string" ? o.content.slice(0, 160) : JSON.stringify(o.content).slice(0, 160)}`);
+    throw new HttpError(502, `Mistral n'a pas renvoyé d'image (${shape.join(" | ").slice(0, 280)}).`);
+  }
+  const file = chunk?.file_id ? await mistralFetch(`/files/${chunk.file_id}/content`, { headers: { Accept: "*/*" } }) : await fetch(url!);
   if (!file.ok) throw new HttpError(502, `Image non téléchargée (${file.status}).`);
   const bytes = new Uint8Array(await file.arrayBuffer());
+  if (bytes.length > 5_000_000) throw new HttpError(502, "Image trop lourde.");
+  // Format réel d'après les premiers octets (l'en-tête HTTP du lien n'est pas fiable).
+  const contentType = bytes[0] === 0xff && bytes[1] === 0xd8 ? "image/jpeg"
+    : bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[8] === 0x57 && bytes[9] === 0x45 ? "image/webp" : "image/png";
   const owner = recipe.household_id ?? null;
-  const path = `${owner ?? "common"}/${recipe.id}.png`;
-  const up = await db.storage.from("recipe-images").upload(path, bytes, { contentType: "image/png", upsert: true });
+  const path = `${owner ?? "common"}/${recipe.id}.${contentType === "image/jpeg" ? "jpg" : contentType.slice(6)}`;
+  const up = await db.storage.from("recipe-images").upload(path, bytes, { contentType, upsert: true });
   if (up.error) throw new HttpError(500, `Image non enregistrée : ${up.error.message}`);
   const ins = await db.from("recipe_images").upsert({ recipe_id: recipe.id, household_id: owner, storage_path: path, source: "mistral" },
     { onConflict: "recipe_id,household_id" });
@@ -294,9 +337,19 @@ Deno.serve(async (req) => {
         ].filter(Boolean).join(" ");
         const { data, model } = await chatJson([system, { role: "user", content:
           `${context}\n${constraints}\nObjectifs d'équilibre à respecter : ${String(body.brief ?? "repas variés, légumes à chaque repas").slice(0, 600)}\n`
-          + `Propose ${count} recettes différentes, simples et familiales, pour ${body.servings ?? 4} personnes, en privilégiant les achats récents `
-          + `et le style des plats aimés, en évitant ce qui ressemble aux plats pas aimés. Réponds {"recipes": [...]}.` }], 0.8);
-        const recipes = (Array.isArray(data.recipes) ? data.recipes : []).slice(0, count).map((r: any) => normalizeRecipe(r, refs));
+          + `Propose ${count} recettes différentes, simples et familiales, pour ${body.servings ?? 4} personnes. Les objectifs d'équilibre et `
+          + `la protéine demandée sont prioritaires ; ensuite, privilégie les achats récents et le style des plats aimés, et évite ce qui ressemble `
+          + `aux plats pas aimés. Chaque ingrédient cité dans les étapes figure dans la liste avec sa quantité. Réponds {"recipes": [...]}.` }], 0.5);
+        let recipes = (Array.isArray(data.recipes) ? data.recipes : []).slice(0, count).map((r: any) => normalizeRecipe(r, refs));
+        const matching = (list: any[]) => list.filter((r: any) => r.recipe.main_protein === c.main_protein);
+        if (c.main_protein && !matching(recipes).length) {
+          // Les petits modèles oublient parfois la protéine demandée : une seconde demande plus directive.
+          const retry = await chatJson([system, { role: "user", content:
+            `${context}\n${constraints}\nPropose ${count} recettes familiales pour ${body.servings ?? 4} personnes dont l'ingrédient principal est `
+            + `${c.main_protein === "poisson" ? "un poisson" : c.main_protein} : chaque recette a "main_protein": "${c.main_protein}". Réponds {"recipes": [...]}.` }], 0.3);
+          recipes = (Array.isArray(retry.data.recipes) ? retry.data.recipes : []).slice(0, count).map((r: any) => normalizeRecipe(r, refs));
+        }
+        if (c.main_protein && matching(recipes).length) recipes = matching(recipes);
         await log(true, model);
         return json({ recipes, model });
       }
