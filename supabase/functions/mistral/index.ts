@@ -16,6 +16,13 @@ const TEXT_MODELS = (Deno.env.get("MISTRAL_TEXT_MODELS") ?? "mistral-small-lates
 const IMAGE_MODEL = Deno.env.get("MISTRAL_IMAGE_MODEL") ?? "mistral-medium-latest";
 /** Appels par foyer et par heure, pour ménager le quota gratuit. */
 const HOURLY_LIMIT = Number(Deno.env.get("MISTRAL_HOURLY_LIMIT") ?? "40");
+/** Plan gratuit Supabase : une fonction dispose de 150 s ; chaque appel extérieur est borné pour répondre avant. */
+const MISTRAL_TIMEOUT_MS = 100_000;
+const DOWNLOAD_TIMEOUT_MS = 30_000;
+/** Journal des appels conservé 90 jours (taille de la base). */
+const LOG_RETENTION_DAYS = 90;
+/** Après un refus de Mistral (quota d'images de l'offre gratuite), plus aucune demande d'image pendant ce délai. */
+const IMAGE_PAUSE_MS = 6 * 3600 * 1000;
 
 const UNITS = ["g", "ml", "piece", "cs", "cc", "pincee"];
 const BASE_UNITS = ["g", "ml", "piece"];
@@ -53,7 +60,15 @@ let workingModel: string | null = null;
 async function mistralFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const key = Deno.env.get("MISTRAL_API_KEY");
   if (!key) throw new HttpError(503, "Clé Mistral absente : ajoutez le secret MISTRAL_API_KEY dans Supabase (Edge Functions > Secrets).");
-  return await fetch(`${MISTRAL}${path}`, { ...init, headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...init.headers } });
+  try {
+    return await fetch(`${MISTRAL}${path}`, {
+      ...init, signal: AbortSignal.timeout(MISTRAL_TIMEOUT_MS),
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...init.headers },
+    });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "TimeoutError") throw new HttpError(504, "Mistral met trop de temps à répondre : réessayez.");
+    throw e;
+  }
 }
 
 /** Modèle bloqué par l'offre (limite à 0) ou momentanément saturé : on passe au suivant. */
@@ -233,16 +248,26 @@ function findToolFile(node: any): { file_id: string } | null {
 }
 
 async function illustrate(user: SupabaseClient, householdId: string, recipeId: string) {
+  const db = admin();
+  const pause = (await db.from("app_settings").select("value").eq("key", "mistral_image_pause_until").maybeSingle()).data?.value;
+  if (pause && Date.parse(pause) > Date.now()) {
+    throw new HttpError(429, `Création d'images en pause jusqu'à ${new Date(pause).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })} (quota gratuit Mistral).`);
+  }
   const { data: recipe, error } = await user.from("recipe_catalog").select("id, household_id, name, description").eq("id", recipeId).maybeSingle();
   if (error || !recipe) throw new HttpError(404, "Recette introuvable.");
   const { data: ings } = await user.from("recipe_ingredients").select("label, optional").eq("version_id",
     (await user.from("recipe_catalog").select("version_id").eq("id", recipeId).single()).data?.version_id).order("position");
-  const db = admin();
   const agentId = await imageAgent(db);
   const prompt = `Génère une image avec l'outil de génération d'images. Photographie culinaire réaliste, vue de trois-quarts, lumière naturelle, assiette familiale simple : « ${recipe.name} ». `
     + `${recipe.description ?? ""} Ingrédients : ${(ings ?? []).filter((i: any) => !i.optional).map((i: any) => i.label).join(", ")}. Pas de texte.`;
   const r = await mistralFetch("/conversations", { method: "POST", body: JSON.stringify({ agent_id: agentId, inputs: prompt }) });
-  if (!r.ok) throw new HttpError(unavailable(r) ? 429 : 502, `Création d'images indisponible avec cette clé (${r.status}).`);
+  if (!r.ok) {
+    if (unavailable(r)) {
+      await db.from("app_settings").upsert({ key: "mistral_image_pause_until", value: new Date(Date.now() + IMAGE_PAUSE_MS).toISOString(),
+        updated_at: new Date().toISOString() });
+    }
+    throw new HttpError(unavailable(r) ? 429 : 502, `Création d'images indisponible avec cette clé (${r.status}).`);
+  }
   const conv = await r.json();
   const chunk = findToolFile(conv);
   const url = chunk?.file_id ? null : findImageUrl(conv);
@@ -252,7 +277,8 @@ async function illustrate(user: SupabaseClient, householdId: string, recipeId: s
       : `${o.type} ${typeof o.content === "string" ? o.content.slice(0, 160) : JSON.stringify(o.content).slice(0, 160)}`);
     throw new HttpError(502, `Mistral n'a pas renvoyé d'image (${shape.join(" | ").slice(0, 280)}).`);
   }
-  const file = chunk?.file_id ? await mistralFetch(`/files/${chunk.file_id}/content`, { headers: { Accept: "*/*" } }) : await fetch(url!);
+  const file = chunk?.file_id ? await mistralFetch(`/files/${chunk.file_id}/content`, { headers: { Accept: "*/*" } })
+    : await fetch(url!, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
   if (!file.ok) throw new HttpError(502, `Image non téléchargée (${file.status}).`);
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (bytes.length > 5_000_000) throw new HttpError(502, "Image trop lourde.");
@@ -263,8 +289,9 @@ async function illustrate(user: SupabaseClient, householdId: string, recipeId: s
   const path = `${owner ?? "common"}/${recipe.id}.${contentType === "image/jpeg" ? "jpg" : contentType.slice(6)}`;
   const up = await db.storage.from("recipe-images").upload(path, bytes, { contentType, upsert: true });
   if (up.error) throw new HttpError(500, `Image non enregistrée : ${up.error.message}`);
-  const ins = await db.from("recipe_images").upsert({ recipe_id: recipe.id, household_id: owner, storage_path: path, source: "mistral" },
-    { onConflict: "recipe_id,household_id" });
+  // La date sert de version pour le cache des téléphones.
+  const ins = await db.from("recipe_images").upsert({ recipe_id: recipe.id, household_id: owner, storage_path: path, source: "mistral",
+    created_at: new Date().toISOString() }, { onConflict: "recipe_id,household_id" });
   if (ins.error) throw new HttpError(500, `Image non référencée : ${ins.error.message}`);
   return { path };
 }
@@ -302,6 +329,9 @@ Deno.serve(async (req) => {
     const { count } = await db.from("ai_calls").select("id", { count: "exact", head: true }).eq("household_id", householdId)
       .gte("created_at", new Date(Date.now() - 3_600_000).toISOString());
     if ((count ?? 0) >= HOURLY_LIMIT) throw new HttpError(429, "Trop de demandes à Mistral cette heure-ci : réessayez plus tard.");
+    if (Math.random() < 0.05) {
+      await db.from("ai_calls").delete().lt("created_at", new Date(Date.now() - LOG_RETENTION_DAYS * 86_400_000).toISOString());
+    }
     const log = (ok: boolean, model: string | null, detail?: string) =>
       db.from("ai_calls").insert({ household_id: householdId, user_id: userId, action: String(body.action), model, ok, detail: detail?.slice(0, 300) });
 

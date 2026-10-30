@@ -37,10 +37,12 @@ légumes 7…) ; un repas choisi réserve ses ingrédients. Les recettes aimées
 
 - Texte : Mistral Small et Medium sont bloqués par l'offre gratuite de la clé ; la fonction utilise Ministral 14B
   (repli sur Ministral 8B). Les recettes renvoyées sont des brouillons, vérifiés (`validateRecipe`) avant enregistrement.
-- Images : génération d'images Mistral (agent avec l'outil `image_generation`), disponible avec la clé gratuite ;
-  ≈ 15 s par image, enregistrée dans le stockage Supabase (`recipe-images`). Sans image, un dessin d'après les
+- Images : génération d'images Mistral (agent avec l'outil `image_generation`), ≈ 15 s par image, enregistrée dans le
+  stockage Supabase (`recipe-images`). L'offre gratuite n'en a accepté que 7 avant de refuser : la fonction se met alors
+  en pause 6 heures et l'application crée les images manquantes au fil de l'usage. Sans image, un dessin d'après les
   ingrédients s'affiche ; une photo prise par le foyer remplace l'image.
 - Limite : 40 appels par heure et par foyer (journal `ai_calls`).
+- Plan gratuit Supabase : voir `docs/plan-gratuit-supabase.md`.
 
 ## Lancer l'application sur les téléphones
 

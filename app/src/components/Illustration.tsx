@@ -3,6 +3,8 @@
 import { Image } from "expo-image";
 import { StyleSheet, Text, View } from "react-native";
 
+import type { Picture } from "../lib/images";
+
 const PROTEIN: Record<string, [string, string]> = {
   volaille: ["🍗", "#F6E3C8"], boeuf: ["🥩", "#F3D6D2"], porc: ["🥓", "#F5DCD6"], poisson: ["🐟", "#D6E8F2"],
   fruits_de_mer: ["🦐", "#F8DDD2"], oeuf: ["🍳", "#F8EFC6"], legumineuse: ["🫘", "#E9E1D2"], vegetarien: ["🥗", "#DCEFD9"],
@@ -16,12 +18,13 @@ const INGREDIENT: Record<string, string> = {
   petit_pois: "🫛", pomme: "🍎", poire: "🍐", gnocchi: "🥟", tortilla_wrap: "🌯", lentilles: "🫘", pois_chiches: "🫘",
 };
 
-export function Illustration({ uri, mainProtein, slugs, height = 180, rounded = 16 }: {
-  uri: string | null | undefined; mainProtein: string; slugs: Array<string | null>; height?: number; rounded?: number;
+export function Illustration({ picture, mainProtein, slugs, height = 180, rounded = 16 }: {
+  picture: Picture | null | undefined; mainProtein: string; slugs: Array<string | null>; height?: number; rounded?: number;
 }) {
-  if (uri) {
-    return <Image source={{ uri }} style={{ height, borderRadius: rounded, width: "100%" }} contentFit="cover" transition={200}
-      accessibilityLabel="Photo du plat" />;
+  if (picture) {
+    // Clé de cache stable : l'image est gardée sur le téléphone même quand le lien d'accès change.
+    return <Image source={{ uri: picture.uri, cacheKey: picture.cacheKey }} cachePolicy="disk" style={{ height, borderRadius: rounded, width: "100%" }}
+      contentFit="cover" transition={200} accessibilityLabel="Photo du plat" />;
   }
   const [main, background] = PROTEIN[mainProtein] ?? ["🍽️", "#E8E6DE"];
   const extras = [...new Set(slugs.map((s) => (s ? INGREDIENT[s] : undefined)).filter((e): e is string => Boolean(e) && e !== main))].slice(0, 5);

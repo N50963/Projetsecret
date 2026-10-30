@@ -6,7 +6,7 @@ import { Illustration } from "../components/Illustration";
 import { SwipeCard, type SwipeDirection } from "../components/SwipeCard";
 import { Body, Button, Card, ErrorText, H1, H2, Loading, Muted, Row, Screen } from "../components/ui";
 import { dayLabel, mealLabel, minutes, PROTEIN_LABEL } from "../lib/format";
-import { illustrationUrls } from "../lib/images";
+import { forgetIllustration, illustrationUrls, type Picture } from "../lib/images";
 import { draftToInput, generateRecipes, illustrateRecipe, type Draft } from "../lib/mistral";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
@@ -47,11 +47,14 @@ export default function Propositions() {
   const [deck, setDeck] = useState<Proposal[]>([]);
   const [exhausted, setExhausted] = useState(false);
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
-  const [images, setImages] = useState<Record<string, string | null>>({});
+  const [images, setImages] = useState<Record<string, Picture | null>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [shopping, setShopping] = useState<ShoppingItem[]>([]);
   const swipe = useRef<((d: SwipeDirection) => void) | null>(null);
+  // Une seule illustration demandée à la fois ; plus aucune pendant la session si Mistral refuse (quota gratuit).
+  const illustrating = useRef(false);
+  const imagesPaused = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -83,6 +86,24 @@ export default function Propositions() {
     // Le paquet ne dépend que du repas, du tour et des choix acceptés (pas des refus en cours).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, round, ctx?.accepted.length, ctx?.recipes.length]);
+
+  const shown = deck[0]?.recipeId;
+  useEffect(() => {
+    if (!shown || images[shown] !== null || illustrating.current || imagesPaused.current) return;
+    illustrating.current = true;
+    illustrateRecipe(household.id, shown)
+      .then(async () => {
+        forgetIllustration(shown);
+        const urls = await illustrationUrls([shown]);
+        setImages((prev) => ({ ...prev, ...urls }));
+      })
+      .catch(() => {
+        imagesPaused.current = true;
+      })
+      .finally(() => {
+        illustrating.current = false;
+      });
+  }, [shown, images, household.id]);
 
   useEffect(() => {
     if (slots && !current) getShoppingList(supabase, household.id).then(setShopping).catch(() => undefined);
@@ -221,7 +242,7 @@ export default function Propositions() {
         <>
           <SwipeCard key={`${current.id}-${top.recipeId}`} swipeRef={swipe} onSwipe={(d) => onSwipe(top, d)} onPress={() => router.push(`/recette/${top.recipeId}`)}>
             <Card style={{ padding: 0, overflow: "hidden" }}>
-              <Illustration uri={images[top.recipeId]} mainProtein={top.mainProtein}
+              <Illustration picture={images[top.recipeId]} mainProtein={top.mainProtein}
                 slugs={ctx.recipes.find((r) => r.id === top.recipeId)?.ingredients.map((i) => i.slug) ?? []} height={210} rounded={0} />
               <View style={{ padding: 16, gap: 6 }}>
                 <H2>{top.name}</H2>
@@ -244,7 +265,7 @@ export default function Propositions() {
         <>
           <SwipeCard key={`draft-${draft.recipe.name}`} swipeRef={swipe} onSwipe={(d) => onDraftSwipe(draft, d)}>
             <Card style={{ padding: 0, overflow: "hidden" }}>
-              <Illustration uri={null} mainProtein={draft.recipe.main_protein} slugs={draft.recipe.ingredients.map((i) => i.slug)} height={180} rounded={0} />
+              <Illustration picture={null} mainProtein={draft.recipe.main_protein} slugs={draft.recipe.ingredients.map((i) => i.slug)} height={180} rounded={0} />
               <View style={{ padding: 16, gap: 6 }}>
                 <H2>{draft.recipe.name}</H2>
                 <Muted>⏱ {minutes(draft.recipe.prep_min + draft.recipe.cook_min)} · {PROTEIN_LABEL[draft.recipe.main_protein]}</Muted>

@@ -6,7 +6,7 @@ import { StyleSheet, TextInput, View } from "react-native";
 import { Illustration } from "../../components/Illustration";
 import { Body, Button, Card, Chip, ErrorText, H1, H2, Loading, Muted, Row, Screen } from "../../components/ui";
 import { minutes, PROTEIN_LABEL, quantity } from "../../lib/format";
-import { forgetIllustration, illustrationUrls, uploadRecipePhoto } from "../../lib/images";
+import { forgetIllustration, illustrationUrls, uploadRecipePhoto, type Picture } from "../../lib/images";
 import { adaptRecipeDraft, draftToInput, illustrateRecipe, type Draft } from "../../lib/mistral";
 import { useHousehold } from "../../lib/session";
 import { supabase } from "../../lib/supabase";
@@ -25,7 +25,7 @@ export default function FicheRecette() {
   const household = useHousehold();
   const c = useColors();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
-  const [image, setImage] = useState<string | null>(null);
+  const [image, setImage] = useState<Picture | null>(null);
   const [servings, setServings] = useState(household.defaultServings);
   const [rated, setRated] = useState<Rating | null>(null);
   const [feedback, setFeedback] = useState("");
@@ -76,7 +76,7 @@ export default function FicheRecette() {
     const result = camera ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
     const asset = result.canceled ? null : result.assets[0];
     if (!asset) return;
-    await uploadRecipePhoto(household.id, recipe.id, asset.uri, asset.mimeType ?? "image/jpeg");
+    await uploadRecipePhoto(household.id, recipe.id, asset.uri, asset.width);
     setImage((await illustrationUrls([recipe.id]))[recipe.id] ?? null);
   });
   const createImage = () => act("image", async () => {
@@ -98,7 +98,7 @@ export default function FicheRecette() {
 
   return (
     <Screen title={recipe.name}>
-      <Illustration uri={image} mainProtein={recipe.mainProtein} slugs={recipe.ingredients.map((i) => i.slug)} height={220} />
+      <Illustration picture={image} mainProtein={recipe.mainProtein} slugs={recipe.ingredients.map((i) => i.slug)} height={220} />
       <H1>{recipe.name}</H1>
       {recipe.description ? <Body>{recipe.description}</Body> : null}
       <Muted>
