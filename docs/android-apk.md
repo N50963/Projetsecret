@@ -84,7 +84,7 @@ pas à une publication sur le Play Store.
 | `NDK ... did not have a source.properties file` ou `CMake 3.22.1 not found` | **Tools › SDK Manager › SDK Tools**, cocher « Show Package Details », installer NDK 27.1.12297006 et CMake 3.22.1. |
 | `Filename longer than 260 characters` (Windows) | Recloner le dépôt dans un dossier court, par exemple `C:\dev`. |
 | `Java heap space` / `OutOfMemoryError` | Dans `app/android/gradle.properties`, passer `-Xmx2048m` à `-Xmx4096m`. |
-| L'application s'ouvre puis se ferme | Vérifier que `app/.env` est présent (adresse et clé publique Supabase) puis recompiler. |
+| L'application s'ouvre puis se ferme | Un écran affiche le message d'erreur (bouton « Copier le message ») : l'envoyer pour correction. Vérifier aussi que `app/.env` est présent (adresse et clé publique Supabase) puis recompiler. |
 
 ## Notes pour la maintenance
 
