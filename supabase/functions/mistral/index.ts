@@ -5,9 +5,9 @@
  *  - import_recipe     : met en forme une recette collée en texte (ingrédients rattachés au référentiel) ;
  *  - generate_recipes  : propose de nouvelles recettes selon les notes du foyer, l'équilibre demandé et les achats récents ;
  *  - adapt_recipe      : adapte une recette d'après un avis (« trop sec », « sans champignons »...) ;
- *  - illustrate        : crée l'illustration d'une recette (Gemini « Nano Banana » si la clé est présente, sinon Mistral) ;
- *  - illustrate_missing: tâche planifiée (pg_cron, jeton x-cron-token) qui crée les illustrations manquantes, quelques-unes
- *                        par passage, pour que chaque plat ait son image avant d'être proposé.
+ *  - illustrate        : crée l'illustration d'une recette (génération d'image Mistral) et l'enregistre en JPEG ;
+ *  - illustrate_missing: tâche planifiée (pg_cron, jeton x-cron-token) qui crée les illustrations manquantes (et remplace
+ *                        celles de l'essai Pollinations), quelques-unes par passage, selon le quota gratuit de Mistral.
  * Les recettes renvoyées sont des brouillons : l'application les vérifie et les fait confirmer avant de les enregistrer.
  */
 
@@ -29,9 +29,6 @@ const LOG_RETENTION_DAYS = 90;
 const IMAGE_PAUSE_MS = 3600 * 1000;
 /** Tâche planifiée : une nouvelle image n'est commencée que dans ce délai (une image prend 15 à 30 s, limite de 150 s). */
 const BATCH_START_BUDGET_MS = 45_000;
-/** Gemini « Nano Banana » (payant, ≈ 0,04 $ l'image) : générateur principal quand le secret GEMINI_API_KEY est présent. */
-const GEMINI_IMAGE_MODEL = Deno.env.get("GEMINI_IMAGE_MODEL") ?? "gemini-2.5-flash-image";
-const GEMINI_TIMEOUT_MS = 90_000;
 /** Qualité JPEG des images enregistrées (≈ 150 Ko au lieu de 1,5 Mo en PNG : affichage rapide, plan gratuit Supabase). */
 const JPEG_QUALITY = 85;
 
@@ -289,31 +286,7 @@ async function mistralImage(db: SupabaseClient, prompt: string): Promise<Uint8Ar
   return new Uint8Array(await file.arrayBuffer());
 }
 
-/** Image créée par Gemini (« Nano Banana »), format 4:3. */
-async function geminiImage(prompt: string): Promise<Uint8Array> {
-  const key = Deno.env.get("GEMINI_API_KEY");
-  if (!key) throw new HttpError(503, "Clé Gemini absente (secret GEMINI_API_KEY).");
-  let r: Response;
-  try {
-    r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent`, {
-      method: "POST", signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
-      headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: "4:3" } },
-      }),
-    });
-  } catch {
-    throw new HttpError(504, "Gemini ne répond pas.");
-  }
-  if (!r.ok) throw new HttpError(r.status === 429 ? 429 : 502, `Gemini a refusé la demande (${r.status} : ${(await r.text()).slice(0, 160)}).`);
-  const body = await r.json();
-  const part = (body.candidates?.[0]?.content?.parts ?? []).find((p: any) => p.inlineData?.data);
-  if (!part) throw new HttpError(502, `Gemini n'a pas renvoyé d'image (${JSON.stringify(body).slice(0, 200)}).`);
-  return Uint8Array.from(atob(part.inlineData.data), (c) => c.charCodeAt(0));
-}
-
-/** Image enregistrée en JPEG (les PNG de Gemini et Mistral pèsent ≈ 10 fois plus). */
+/** Image enregistrée en JPEG (les PNG de Mistral pèsent ≈ 10 fois plus). */
 function asJpeg(bytes: Uint8Array): Uint8Array {
   if (bytes[0] === 0xff && bytes[1] === 0xd8) return bytes;
   if (bytes[0] !== 0x89 || bytes[1] !== 0x50) return bytes;
@@ -330,7 +303,7 @@ function asJpeg(bytes: Uint8Array): Uint8Array {
   return jpeg.encode({ data: rgba, width, height }, JPEG_QUALITY).data;
 }
 
-async function illustrate(reader: SupabaseClient, recipeId: string): Promise<{ path: string; source: "gemini" | "mistral" }> {
+async function illustrate(reader: SupabaseClient, recipeId: string): Promise<{ path: string }> {
   const db = admin();
   const { data: recipe, error } = await reader.from("recipe_catalog").select("id, household_id, name, description, version_id").eq("id", recipeId).maybeSingle();
   if (error || !recipe) throw new HttpError(404, "Recette introuvable.");
@@ -338,25 +311,7 @@ async function illustrate(reader: SupabaseClient, recipeId: string): Promise<{ p
   const ingredients = (ings ?? []).filter((i: any) => !i.optional).map((i: any) => i.label).join(", ");
   const prompt = `Génère une image avec l'outil de génération d'images. Photographie culinaire réaliste, vue de trois-quarts, lumière naturelle, assiette familiale simple : « ${recipe.name} ». `
     + `${recipe.description ?? ""} Ingrédients : ${ingredients}. Pas de texte.`;
-  let bytes: Uint8Array;
-  let source: "gemini" | "mistral" = "gemini";
-  try {
-    if (!Deno.env.get("GEMINI_API_KEY")) throw new HttpError(503, "Clé Gemini absente.");
-    bytes = await geminiImage(`Photographie culinaire réaliste et appétissante, vue de trois-quarts, lumière naturelle, `
-      + `assiette familiale simple sur une table en bois : « ${recipe.name} ». ${recipe.description ?? ""} `
-      + `Ingrédients visibles : ${ingredients}. Pas de texte, pas de logo.`);
-  } catch (e) {
-    // Gemini indisponible (clé absente, refus) : image Mistral, si son quota gratuit le permet.
-    try {
-      bytes = await mistralImage(db, prompt);
-      source = "mistral";
-    } catch (fallback) {
-      const first = e instanceof Error ? e.message : String(e);
-      const second = fallback instanceof Error ? fallback.message : String(fallback);
-      throw new HttpError(fallback instanceof HttpError ? fallback.status : 502, `${first} ${second}`);
-    }
-  }
-  bytes = asJpeg(bytes);
+  const bytes = asJpeg(await mistralImage(db, prompt));
   if (bytes.length > 5_000_000) throw new HttpError(502, "Image trop lourde.");
   // Format réel d'après les premiers octets (l'en-tête HTTP du lien n'est pas fiable).
   const contentType = bytes[0] === 0xff && bytes[1] === 0xd8 ? "image/jpeg"
@@ -366,20 +321,23 @@ async function illustrate(reader: SupabaseClient, recipeId: string): Promise<{ p
   const up = await db.storage.from("recipe-images").upload(path, bytes, { contentType, upsert: true });
   if (up.error) throw new HttpError(500, `Image non enregistrée : ${up.error.message}`);
   // La date sert de version pour le cache des téléphones.
-  const ins = await db.from("recipe_images").upsert({ recipe_id: recipe.id, household_id: owner, storage_path: path, source,
+  const ins = await db.from("recipe_images").upsert({ recipe_id: recipe.id, household_id: owner, storage_path: path, source: "mistral",
     created_at: new Date().toISOString() }, { onConflict: "recipe_id,household_id" });
   if (ins.error) throw new HttpError(500, `Image non référencée : ${ins.error.message}`);
-  return { path, source };
+  return { path };
 }
 
-/** Crée les illustrations manquantes, une à la fois, jusqu'à un échec ou à la fin du temps imparti. */
+/**
+ * Crée les illustrations manquantes, une à la fois, jusqu'à un échec (quota Mistral) ou à la fin du temps imparti.
+ * Les images de l'essai Pollinations comptent comme manquantes : elles restent affichées jusqu'à leur remplacement.
+ */
 async function illustrateMissing(db: SupabaseClient) {
   const started = Date.now();
   const [recipes, images] = await Promise.all([
     db.from("recipe_catalog").select("id, name").order("name"),
-    db.from("recipe_images").select("recipe_id"),
+    db.from("recipe_images").select("recipe_id, source"),
   ]);
-  const have = new Set((images.data ?? []).map((i: any) => i.recipe_id));
+  const have = new Set((images.data ?? []).filter((i: any) => i.source !== "pollinations").map((i: any) => i.recipe_id));
   const missing = (recipes.data ?? []).filter((r: any) => !have.has(r.id));
   const log = (ok: boolean, model: string | null, detail?: string) =>
     db.from("ai_calls").insert({ action: "illustrate_missing", model, ok, detail: detail?.slice(0, 300) });
@@ -387,8 +345,8 @@ async function illustrateMissing(db: SupabaseClient) {
   for (const recipe of missing) {
     if (Date.now() - started > BATCH_START_BUDGET_MS) break;
     try {
-      const { source } = await illustrate(db, recipe.id);
-      await log(true, source === "mistral" ? IMAGE_MODEL : GEMINI_IMAGE_MODEL, recipe.name);
+      await illustrate(db, recipe.id);
+      await log(true, IMAGE_MODEL, recipe.name);
       created++;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -511,7 +469,7 @@ Deno.serve(async (req) => {
       }
       if (body.action === "illustrate") {
         const result = await illustrate(user, String(body.recipe_id ?? ""));
-        await log(true, result.source === "mistral" ? IMAGE_MODEL : GEMINI_IMAGE_MODEL);
+        await log(true, IMAGE_MODEL);
         return json(result);
       }
       throw new HttpError(400, "Action inconnue.");
