@@ -41,7 +41,7 @@ Après chaque `git pull`, relancer `npm install` dans `app/`.
 4. **Build › Generate App Bundles or APKs › Generate APKs** (selon la version : **Build › Build Bundle(s) / APK(s) ›
    Build APK(s)**). La première compilation dure 10 à 30 minutes.
 5. À la fin, cliquer sur **locate** dans la notification : le fichier est
-   `app/android/app/build/outputs/apk/release/app-release.apk` (≈ 60 Mo).
+   `app/android/app/build/outputs/apk/release/app-release.apk` (≈ 50 Mo).
 
 Même chose en ligne de commande, depuis `app/android` : `gradlew.bat assembleRelease` sous Windows,
 `./gradlew assembleRelease` sous macOS / Linux.
@@ -87,6 +87,9 @@ pas à une publication sur le Play Store.
 | L'application s'ouvre puis se ferme | Vérifier que `app/.env` est présent (adresse et clé publique Supabase) puis recompiler. |
 
 ## Notes pour la maintenance
+
+- Compilation vérifiée le 30 octobre 2026 en ligne de commande (`assembleRelease`, 21 minutes sur 4 processeurs) :
+  APK de 48,6 Mo, paquet `fr.foyer.menus`, version 0.1.0 (code 1), Android 7 minimum, processeurs ARM 32 et 64 bits.
 
 - `app/android/` est désormais versionné : ne pas relancer `npx expo prebuild --clean`, qui l'écraserait. Si un module
   natif est ajouté, lancer `npx expo prebuild --platform android --no-install` puis vérifier le diff de
