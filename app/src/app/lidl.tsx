@@ -52,7 +52,7 @@ export default function LidlConnexion() {
       <Screen title="Lidl Plus">
         <Card>
           <Body>Lidl Plus est connecté sur ce téléphone. Les tickets seront récupérés directement depuis Lidl.</Body>
-          <Button title="Revenir à l'accueil" onPress={() => router.back()} />
+          <Button title="Revenir aux paramètres" onPress={() => router.back()} />
         </Card>
       </Screen>
     );

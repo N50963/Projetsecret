@@ -46,6 +46,7 @@ function Gate() {
         <Stack.Screen name="recettes" />
         <Stack.Screen name="recette/[id]" />
         <Stack.Screen name="ajout-recette" />
+        <Stack.Screen name="parametres" />
         <Stack.Screen name="preferences" />
       </Stack.Protected>
     </Stack>

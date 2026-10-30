@@ -1,22 +1,36 @@
 /** Éléments d'interface communs. */
 
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { Stack } from "expo-router";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useColors } from "../lib/theme";
 
-export function Screen({ title, children, scroll = true }: { title?: string; children: ReactNode; scroll?: boolean }) {
+export function Screen({ title, headerRight, children, scroll = true }: {
+  title?: string; headerRight?: () => ReactNode; children: ReactNode; scroll?: boolean;
+}) {
   const c = useColors();
   const body = scroll
     ? <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">{children}</ScrollView>
     : <View style={[styles.content, { flex: 1 }]}>{children}</View>;
   return (
     <SafeAreaView edges={["bottom", "left", "right"]} style={{ flex: 1, backgroundColor: c.background }}>
-      {title !== undefined && <Stack.Screen options={{ title }} />}
+      {title !== undefined && <Stack.Screen options={{ title, headerRight }} />}
       {body}
     </SafeAreaView>
+  );
+}
+
+/** Bouton icône de la barre de titre (par exemple la roue crantée des paramètres). */
+export function HeaderIcon({ name, label, onPress }: { name: ComponentProps<typeof Ionicons>["name"]; label: string; onPress: () => void }) {
+  const c = useColors();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} hitSlop={12}
+      style={({ pressed }) => ({ padding: 6, opacity: pressed ? 0.6 : 1 })}>
+      <Ionicons name={name} size={26} color={c.text} />
+    </Pressable>
   );
 }
 

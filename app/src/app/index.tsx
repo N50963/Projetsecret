@@ -2,17 +2,13 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { View } from "react-native";
 
-import { Body, Button, Card, ErrorText, H1, H2, Muted, Row, Screen } from "../components/ui";
-import { dateTime, dayLabel, mealLabel } from "../lib/format";
-import { isLidlConnected, syncLidl } from "../lib/lidl";
+import { Body, Button, Card, ErrorText, H1, H2, HeaderIcon, Muted, Row, Screen } from "../components/ui";
+import { dayLabel, mealLabel } from "../lib/format";
 import { useHousehold, useSession } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { getShoppingList, getUpcomingMeals, toIsoDate, type ShoppingItem, type UpcomingMeal } from "../modules/planning";
 
 interface Overview {
-  lidlConnected: boolean;
-  lastReceipt: string | null;
-  lastSync: string | null;
   shopping: ShoppingItem[];
   upcoming: UpcomingMeal[];
 }
@@ -23,20 +19,15 @@ export default function Accueil() {
   const { signOut } = useSession();
   const today = toIsoDate(new Date());
   const [data, setData] = useState<Overview | null>(null);
-  const [syncing, setSyncing] = useState(false);
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const [lidlConnected, receipt, sync, shopping, upcoming] = await Promise.all([
-        isLidlConnected(),
-        supabase.from("receipts").select("purchased_at").eq("household_id", household.id).order("purchased_at", { ascending: false }).limit(1).maybeSingle(),
-        supabase.from("last_sync").select("finished_at, status").eq("household_id", household.id).maybeSingle(),
+      const [shopping, upcoming] = await Promise.all([
         getShoppingList(supabase, household.id),
         getUpcomingMeals(supabase, household.id, today),
       ]);
-      setData({ lidlConnected, lastReceipt: receipt.data?.purchased_at ?? null, lastSync: sync.data?.finished_at ?? null, shopping, upcoming });
+      setData({ shopping, upcoming });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -46,44 +37,14 @@ export default function Accueil() {
     load();
   }, [load]));
 
-  const sync = async () => {
-    if (!data?.lidlConnected) {
-      router.push("/lidl");
-      return;
-    }
-    setSyncing(true);
-    setMessage("");
-    setError("");
-    try {
-      const result = await syncLidl(household.id);
-      if (result.status === "reauth_required") {
-        setError("La connexion Lidl Plus a expiré : reconnectez-vous.");
-        router.push("/lidl");
-      } else if (result.status === "error") setError(result.message ?? "Synchronisation impossible.");
-      else setMessage(result.newReceipts ? `${result.newReceipts} nouveau${result.newReceipts > 1 ? "x" : ""} ticket${result.newReceipts > 1 ? "s" : ""} enregistré${result.newReceipts > 1 ? "s" : ""}.`
-        : "Aucun nouveau ticket.");
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   const toBuy = data?.shopping.filter((i) => !i.boughtAt && !i.checkedAt) ?? [];
   const bought = data?.shopping.filter((i) => i.boughtAt) ?? [];
 
   return (
-    <Screen title={household.name}>
+    <Screen title={household.name}
+      headerRight={() => <HeaderIcon name="settings-outline" label="Paramètres" onPress={() => router.push("/parametres")} />}>
       <H1>Bonjour</H1>
-
-      <Card>
-        <H2>Tickets Lidl Plus</H2>
-        <Muted>Dernier ticket : {data?.lastReceipt ? dayLabel(data.lastReceipt.slice(0, 10)) : "aucun"} · vérifié {dateTime(data?.lastSync ?? null)}</Muted>
-        <Button title={data && !data.lidlConnected ? "Connecter Lidl Plus" : "Récupérer les nouveaux tickets"} onPress={sync} busy={syncing} />
-        {message ? <Body>{message}</Body> : null}
-        <ErrorText>{error}</ErrorText>
-      </Card>
+      <ErrorText>{error}</ErrorText>
 
       {data && data.shopping.length > 0 && (
         <Card>
@@ -108,10 +69,7 @@ export default function Accueil() {
         <Button title="Recettes" kind="secondary" onPress={() => router.push("/recettes")} style={{ flex: 1 }} />
         <Button title="Courses" kind="secondary" onPress={() => router.push("/courses")} style={{ flex: 1 }} />
       </Row>
-      <Row>
-        <Button title="Préférences" kind="secondary" onPress={() => router.push("/preferences")} style={{ flex: 1 }} />
-        <Button title="Déconnexion" kind="secondary" onPress={signOut} style={{ flex: 1 }} />
-      </Row>
+      <Button title="Déconnexion" kind="secondary" onPress={signOut} />
     </Screen>
   );
 }
