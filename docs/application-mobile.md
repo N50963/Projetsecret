@@ -76,7 +76,7 @@ Pour une application installée sans ordinateur allumé (fichier APK Android ou 
   et 42 tests Python.
 - Paquets Android (Hermes) et web compilés ; `expo-doctor` : 20 contrôles sur 20.
 - Parcours réel dans l'aperçu web avec un compte de test temporaire : connexion, choix des repas, propositions,
-  refus puis choix, repas suivant, fiche recette ; aucune erreur.
+  refus puis choix, repas suivant, fiche recette ; aucune erreur. Compte et données de test supprimés ensuite.
 - Fonction Mistral : clé valide, génération de recettes (Ministral 14B), création d'image (photo du poulet basquaise,
   1024 × 768), accès refusé sans compte ou hors du foyer.
 
