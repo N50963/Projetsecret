@@ -29,6 +29,9 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    // Le processus de l'écran d'erreur ne charge pas React Native.
+    if (ErreurActivity.estProcessusErreur()) return
+    ErreurActivity.installer(this)
     DefaultNewArchitectureEntryPoint.releaseLevel = try {
       ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())
     } catch (e: IllegalArgumentException) {
@@ -40,6 +43,7 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onConfigurationChanged(newConfig: Configuration) {
     super.onConfigurationChanged(newConfig)
+    if (ErreurActivity.estProcessusErreur()) return
     ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig)
   }
 }

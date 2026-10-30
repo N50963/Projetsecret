@@ -29,5 +29,6 @@
         <data android:scheme="menusdufoyer"/>
       </intent-filter>
     </activity>
+    <activity android:name=".ErreurActivity" android:process=":erreur" android:exported="false" android:theme="@android:style/Theme.DeviceDefault"/>
   </application>
 </manifest>
