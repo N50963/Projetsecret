@@ -13,9 +13,9 @@ import { useColors } from "../lib/theme";
 export function Illustration({ picture, height = 180, rounded = 16 }: { picture: Picture | null | undefined; height?: number; rounded?: number }) {
   const c = useColors();
   if (picture) {
-    // Clé de cache stable : l'image est gardée sur le téléphone même quand le lien d'accès change.
-    return <Image source={{ uri: picture.uri, cacheKey: picture.cacheKey }} cachePolicy="disk"
-      style={{ height, borderRadius: rounded, width: "100%", backgroundColor: c.chip }} contentFit="cover" transition={150}
+    // Image déjà téléchargée en avance (lib/images) : affichée depuis le cache du téléphone, sans fondu.
+    return <Image source={{ uri: picture.uri, cacheKey: picture.cacheKey }} cachePolicy="memory-disk"
+      style={{ height, borderRadius: rounded, width: "100%", backgroundColor: c.chip }} contentFit="cover" transition={0}
       accessibilityLabel="Photo du plat" />;
   }
   return (
