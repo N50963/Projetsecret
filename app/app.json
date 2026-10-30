@@ -3,7 +3,7 @@
     "name": "Menus du foyer",
     "slug": "menus-du-foyer",
     "scheme": "menusdufoyer",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -12,7 +12,7 @@
     },
     "android": {
       "package": "fr.foyer.menus",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4EA",
         "foregroundImage": "./assets/android-icon-foreground.png",
