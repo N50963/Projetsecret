@@ -4,7 +4,7 @@ import { View } from "react-native";
 
 import { Illustration } from "../components/Illustration";
 import { SwipeCard, type SwipeDirection } from "../components/SwipeCard";
-import { Body, Button, Card, ErrorText, H1, H2, Loading, Muted, Row, Screen } from "../components/ui";
+import { Body, Button, Card, ErrorText, H2, Loading, Muted, Row, Screen } from "../components/ui";
 import { dayLabel, mealLabel, minutes, PROTEIN_LABEL } from "../lib/format";
 import { forgetIllustration, illustrationUrls, type Picture } from "../lib/images";
 import { draftToInput, generateRecipes, illustrateRecipe, type Draft } from "../lib/mistral";
@@ -12,8 +12,8 @@ import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { useColors } from "../lib/theme";
 import {
-  acceptProposal, DEFAULT_TARGETS, getPlanSlots, getShoppingList, loadPlannerContext, loadRecipesForPlanning, missingForSlot, planMeals,
-  recordShown, rejectProposal, skipSlot, toIsoDate, type PlannedSlot, type PlannerContext, type Proposal, type ShoppingItem,
+  acceptProposal, DEFAULT_TARGETS, getPlanSlots, loadPlannerContext, loadRecipesForPlanning, missingForSlot, planMeals,
+  recordShown, rejectProposal, skipSlot, toIsoDate, type PlannedSlot, type PlannerContext, type Proposal,
 } from "../modules/planning";
 import { createRecipe, currentSeason } from "../modules/recipes";
 
@@ -50,7 +50,6 @@ export default function Propositions() {
   const [images, setImages] = useState<Record<string, Picture | null>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [shopping, setShopping] = useState<ShoppingItem[]>([]);
   const swipe = useRef<((d: SwipeDirection) => void) | null>(null);
   // Une seule illustration demandée à la fois ; plus aucune pendant la session si Mistral refuse (quota gratuit).
   const illustrating = useRef(false);
@@ -105,9 +104,12 @@ export default function Propositions() {
       });
   }, [shown, images, household.id]);
 
+  // Tous les repas ont leur menu : retour au calendrier de l'accueil (photos et menus de la semaine).
   useEffect(() => {
-    if (slots && !current) getShoppingList(supabase, household.id).then(setShopping).catch(() => undefined);
-  }, [slots, current, household.id]);
+    if (!slots || !ctx || current) return;
+    if (router.canGoBack()) router.back();
+    else router.replace("/");
+  }, [slots, ctx, current, router]);
 
   const next = useCallback(() => {
     setDeck((d) => {
@@ -202,54 +204,30 @@ export default function Propositions() {
 
   if (!slots || !ctx) return error ? <Screen title="Propositions"><ErrorText>{error}</ErrorText></Screen> : <Loading label="Préparation des menus…" />;
 
-  if (!current) {
-    const names = new Map(ctx.recipes.map((r) => [r.id, r.name]));
-    const planSlotIds = new Set(ordered.map((s) => s.id));
-    const missing = shopping.filter((i) => !i.boughtAt && !i.checkedAt);
-    return (
-      <Screen title="Menus de la semaine">
-        <H1>Menus prêts</H1>
-        <Card>
-          {ordered.map((s) => (
-            <Body key={s.id} onPress={s.recipeId ? () => router.push(`/recette/${s.recipeId}`) : undefined}>
-              {dayLabel(s.date, today)} · {mealLabel(s.mealType)} : {s.recipeId ? names.get(s.recipeId) ?? "Recette" : "—"}
-            </Body>
-          ))}
-        </Card>
-        {missing.length > 0 && (
-          <Card>
-            <H2>À acheter</H2>
-            {missing.map((i) => <Body key={i.id}>• {i.label}</Body>)}
-            <Muted>{planSlotIds.size} repas prévus · la liste se met à jour avec vos prochains tickets.</Muted>
-          </Card>
-        )}
-        <Button title="Liste de courses" onPress={() => router.push("/courses")} />
-        <Button title="Accueil" kind="secondary" onPress={() => router.replace("/")} />
-      </Screen>
-    );
-  }
+  if (!current) return <Loading label="Menus choisis : retour au calendrier…" />;
 
   const top = deck[0];
   const draft = drafts?.[0];
   return (
     <Screen title="Propositions">
-      <Muted>Repas {done + 1} sur {ordered.length}</Muted>
-      <H2>{dayLabel(current.date, today)} · {mealLabel(current.mealType)} · ⏱ {minutes(current.maxTotalMin)}</H2>
-      <Muted>{drafts ? "Idées de Mistral (nouvelles recettes)" : round === 1 ? "Avec vos courses" : "Avec quelques achats (1 à 3 ingrédients)"}</Muted>
+      <H2>{dayLabel(current.date, today)} · {mealLabel(current.mealType)}</H2>
+      <Muted>
+        Repas {done + 1} sur {ordered.length} · {minutes(current.maxTotalMin)}{current.maxTotalMin ? " au plus" : ""} · {drafts
+          ? "idées de Mistral" : round === 1 ? "avec vos courses" : "avec 1 à 3 ingrédients à acheter"}
+      </Muted>
       <ErrorText>{error}</ErrorText>
 
       {top && !drafts && (
         <>
           <SwipeCard key={`${current.id}-${top.recipeId}`} swipeRef={swipe} onSwipe={(d) => onSwipe(top, d)} onPress={() => router.push(`/recette/${top.recipeId}`)}>
             <Card style={{ padding: 0, overflow: "hidden" }}>
-              <Illustration picture={images[top.recipeId]} mainProtein={top.mainProtein}
-                slugs={ctx.recipes.find((r) => r.id === top.recipeId)?.ingredients.map((i) => i.slug) ?? []} height={210} rounded={0} />
+              <Illustration picture={images[top.recipeId]} height={230} rounded={0} />
               <View style={{ padding: 16, gap: 6 }}>
                 <H2>{top.name}</H2>
-                <Muted>⏱ {minutes(top.totalMin)} · {PROTEIN_LABEL[top.mainProtein] ?? top.mainProtein}</Muted>
-                {top.reasons.filter((r) => !r.startsWith("À acheter")).slice(0, 3).map((r) => <Body key={r}>• {r}</Body>)}
-                {top.missing.length > 0 && <Body style={{ color: c.accent, fontWeight: "600" }}>🛒 À acheter : {top.missing.map((m) => m.label).join(", ")}</Body>}
-                <Muted>Touchez la carte pour voir la fiche</Muted>
+                <Muted>{minutes(top.totalMin)} · {PROTEIN_LABEL[top.mainProtein] ?? top.mainProtein}</Muted>
+                <Body>{ctx.recipes.find((r) => r.id === top.recipeId)?.ingredients.filter((i) => !i.optional).map((i) => i.label).join(" · ")}</Body>
+                {top.missing.length > 0 && <Body style={{ color: c.accent, fontWeight: "600" }}>À acheter : {top.missing.map((m) => m.label).join(", ")}</Body>}
+                <Muted>Touchez la photo pour la recette complète</Muted>
               </View>
             </Card>
           </SwipeCard>
@@ -257,7 +235,6 @@ export default function Propositions() {
             <Button title="✕ Autre idée" kind="secondary" onPress={() => swipe.current?.("left")} style={{ flex: 1 }} disabled={busy !== null} />
             <Button title="✓ Je choisis" onPress={() => swipe.current?.("right")} style={{ flex: 1 }} busy={busy === "accept"} />
           </Row>
-          <Muted>{deck.length - 1} autre{deck.length > 2 ? "s" : ""} proposition{deck.length > 2 ? "s" : ""} pour ce repas.</Muted>
         </>
       )}
 
@@ -265,10 +242,10 @@ export default function Propositions() {
         <>
           <SwipeCard key={`draft-${draft.recipe.name}`} swipeRef={swipe} onSwipe={(d) => onDraftSwipe(draft, d)}>
             <Card style={{ padding: 0, overflow: "hidden" }}>
-              <Illustration picture={null} mainProtein={draft.recipe.main_protein} slugs={draft.recipe.ingredients.map((i) => i.slug)} height={180} rounded={0} />
+              <Illustration picture={null} height={180} rounded={0} />
               <View style={{ padding: 16, gap: 6 }}>
                 <H2>{draft.recipe.name}</H2>
-                <Muted>⏱ {minutes(draft.recipe.prep_min + draft.recipe.cook_min)} · {PROTEIN_LABEL[draft.recipe.main_protein]}</Muted>
+                <Muted>{minutes(draft.recipe.prep_min + draft.recipe.cook_min)} · {PROTEIN_LABEL[draft.recipe.main_protein]}</Muted>
                 {draft.recipe.description ? <Body>{draft.recipe.description}</Body> : null}
                 <Muted>{draft.recipe.ingredients.filter((i) => !i.optional).map((i) => i.label).join(" · ")}</Muted>
               </View>

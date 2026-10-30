@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { Body, Button, Card, ErrorText, H2, Muted, Screen } from "../components/ui";
 import { dateTime, dayLabel } from "../lib/format";
 import { isLidlConnected, syncLidl } from "../lib/lidl";
-import { useHousehold } from "../lib/session";
+import { useHousehold, useSession } from "../lib/session";
 import { supabase } from "../lib/supabase";
 
 interface LidlStatus {
@@ -13,10 +13,11 @@ interface LidlStatus {
   lastSync: string | null;
 }
 
-/** Paramètres (roue crantée de l'accueil) : tickets Lidl Plus et préférences du foyer. */
+/** Paramètres (roue crantée de l'accueil) : tickets Lidl Plus, préférences du foyer, déconnexion. */
 export default function Parametres() {
   const router = useRouter();
   const household = useHousehold();
+  const { signOut } = useSession();
   const [lidl, setLidl] = useState<LidlStatus | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState("");
@@ -67,7 +68,8 @@ export default function Parametres() {
     <Screen title="Paramètres">
       <Card>
         <H2>Tickets Lidl Plus</H2>
-        <Muted>Dernier ticket : {lidl?.lastReceipt ? dayLabel(lidl.lastReceipt.slice(0, 10)) : "aucun"} · vérifié {dateTime(lidl?.lastSync ?? null)}</Muted>
+        <Muted>{lidl ? `Dernier ticket : ${lidl.lastReceipt ? dayLabel(lidl.lastReceipt.slice(0, 10)) : "aucun"} · vérifié ${dateTime(lidl.lastSync)}`
+          : "Chargement…"}</Muted>
         <Button title={lidl && !lidl.connected ? "Connecter Lidl Plus" : "Récupérer les nouveaux tickets"} onPress={sync} busy={syncing} />
         {message ? <Body>{message}</Body> : null}
         <ErrorText>{error}</ErrorText>
@@ -78,6 +80,8 @@ export default function Parametres() {
         <Muted>Composition du foyer, épices, aliments jamais proposés, allergies, soirs sans viande, mot de passe du compte.</Muted>
         <Button title="Modifier les préférences" kind="secondary" onPress={() => router.push("/preferences")} />
       </Card>
+
+      <Button title="Déconnexion" kind="secondary" onPress={signOut} />
     </Screen>
   );
 }

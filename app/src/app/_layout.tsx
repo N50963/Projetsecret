@@ -40,7 +40,6 @@ function Gate() {
       <Stack.Protected guard={member} redirectTo={signedIn ? "/foyer" : "/connexion"}>
         <Stack.Screen name="index" />
         <Stack.Screen name="lidl" />
-        <Stack.Screen name="semaine" />
         <Stack.Screen name="propositions" />
         <Stack.Screen name="courses" />
         <Stack.Screen name="recettes" />

@@ -6,8 +6,8 @@ import { StyleSheet, TextInput, View } from "react-native";
 import { Illustration } from "../../components/Illustration";
 import { Body, Button, Card, Chip, ErrorText, H1, H2, Loading, Muted, Row, Screen } from "../../components/ui";
 import { minutes, PROTEIN_LABEL, quantity } from "../../lib/format";
-import { forgetIllustration, illustrationUrls, uploadRecipePhoto, type Picture } from "../../lib/images";
-import { adaptRecipeDraft, draftToInput, illustrateRecipe, type Draft } from "../../lib/mistral";
+import { illustrationUrls, uploadRecipePhoto, type Picture } from "../../lib/images";
+import { adaptRecipeDraft, draftToInput, type Draft } from "../../lib/mistral";
 import { useHousehold } from "../../lib/session";
 import { supabase } from "../../lib/supabase";
 import { useColors } from "../../lib/theme";
@@ -18,7 +18,7 @@ const ALLERGEN: Record<string, string> = {
   soja: "soja", moutarde: "moutarde", celeri: "céleri", sesame: "sésame",
 };
 
-/** Fiche recette : illustration, quantités pour le nombre de personnes, étapes, avis, adaptation. */
+/** Fiche recette : photo, quantités pour le nombre de personnes, étapes, avis ; adaptation et photo dans « Plus d'options ». */
 export default function FicheRecette() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -33,6 +33,7 @@ export default function FicheRecette() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  const [more, setMore] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -79,11 +80,6 @@ export default function FicheRecette() {
     await uploadRecipePhoto(household.id, recipe.id, asset.uri, asset.width);
     setImage((await illustrationUrls([recipe.id]))[recipe.id] ?? null);
   });
-  const createImage = () => act("image", async () => {
-    await illustrateRecipe(household.id, recipe.id);
-    forgetIllustration(recipe.id);
-    setImage((await illustrationUrls([recipe.id]))[recipe.id] ?? null);
-  });
   const askAdaptation = () => act("adapt", async () => {
     setDraft(await adaptRecipeDraft(household.id, toPayload(recipe), feedback));
   });
@@ -98,11 +94,11 @@ export default function FicheRecette() {
 
   return (
     <Screen title={recipe.name}>
-      <Illustration picture={image} mainProtein={recipe.mainProtein} slugs={recipe.ingredients.map((i) => i.slug)} height={220} />
+      <Illustration picture={image} height={240} />
       <H1>{recipe.name}</H1>
       {recipe.description ? <Body>{recipe.description}</Body> : null}
       <Muted>
-        ⏱ {minutes(recipe.totalMin)} (préparation {minutes(recipe.prepMin)}, cuisson {minutes(recipe.cookMin)}) · {PROTEIN_LABEL[recipe.mainProtein]}
+        {minutes(recipe.totalMin)} (préparation {minutes(recipe.prepMin)}, cuisson {minutes(recipe.cookMin)}) · {PROTEIN_LABEL[recipe.mainProtein]}
         {recipe.allergens.length ? ` · Allergènes : ${recipe.allergens.map((a) => ALLERGEN[a] ?? a).join(", ")}` : ""}
       </Muted>
 
@@ -136,14 +132,15 @@ export default function FicheRecette() {
       <Card>
         <H2>Votre avis</H2>
         <Row>
-          <Chip label="😋 J'aime" active={rated === "like"} onPress={() => rate("like")} />
-          <Chip label="😐 Bof" active={rated === "neutral"} onPress={() => rate("neutral")} />
-          <Chip label="🙁 Pas aimé" active={rated === "dislike"} onPress={() => rate("dislike")} />
+          <Chip label="J'aime" active={rated === "like"} onPress={() => rate("like")} />
+          <Chip label="Bof" active={rated === "neutral"} onPress={() => rate("neutral")} />
+          <Chip label="Pas aimé" active={rated === "dislike"} onPress={() => rate("dislike")} />
         </Row>
         {info ? <Body>{info}</Body> : null}
       </Card>
 
-      <Card>
+      <Button title={more ? "Moins d'options" : "Plus d'options"} kind="secondary" onPress={() => setMore((m) => !m)} />
+      {more && <Card>
         <H2>Adapter avec Mistral</H2>
         <TextInput multiline value={feedback} onChangeText={setFeedback} placeholderTextColor={c.muted}
           placeholder="Ex. : plus de légumes, sans champignons, plus rapide…"
@@ -162,16 +159,16 @@ export default function FicheRecette() {
             </Row>
           </View>
         )}
-      </Card>
+      </Card>}
 
-      <Card>
-        <H2>Illustration</H2>
+      {more && <Card>
+        <H2>Photo du plat</H2>
+        <Muted>Remplace l'image par votre propre photo.</Muted>
         <Row>
-          <Button title="📷 Photo" kind="secondary" onPress={() => pickPhoto(true)} busy={busy === "photo"} style={{ flex: 1 }} />
-          <Button title="🖼️ Galerie" kind="secondary" onPress={() => pickPhoto(false)} style={{ flex: 1 }} />
+          <Button title="Prendre une photo" kind="secondary" onPress={() => pickPhoto(true)} busy={busy === "photo"} style={{ flex: 1 }} />
+          <Button title="Galerie" kind="secondary" onPress={() => pickPhoto(false)} style={{ flex: 1 }} />
         </Row>
-        {!image && <Button title="Créer l'image avec Mistral" kind="secondary" onPress={createImage} busy={busy === "image"} />}
-      </Card>
+      </Card>}
       <ErrorText>{error}</ErrorText>
     </Screen>
   );

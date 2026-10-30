@@ -216,6 +216,38 @@ export interface UpcomingMeal {
   name: string;
 }
 
+export interface WeekSlot {
+  slotId: string;
+  date: IsoDate;
+  mealType: MealType;
+  status: "open" | "accepted" | "skipped";
+  maxTotalMin: number | null;
+  recipeId: string | null;
+  name: string | null;
+}
+
+/** Repas enregistrés entre deux dates, avec le nom de la recette choisie (calendrier de l'accueil). */
+export async function getWeekSlots(supabase: SupabaseClient, householdId: string, from: IsoDate, to: IsoDate): Promise<WeekSlot[]> {
+  const { data, error } = await supabase.from("meal_slots").select("id, meal_date, meal_type, status, max_total_min, recipe_id")
+    .eq("household_id", householdId).gte("meal_date", from).lte("meal_date", to);
+  check(error, "Repas illisibles");
+  const rows = (data ?? []) as Row[];
+  const ids = [...new Set(rows.map((r) => r.recipe_id).filter(Boolean))];
+  const { data: names, error: e2 } = ids.length ? await supabase.from("recipe_catalog").select("id, name").in("id", ids) : { data: [], error: null };
+  check(e2, "Recettes illisibles");
+  const nameOf = new Map(((names ?? []) as Row[]).map((n) => [n.id, n.name]));
+  return rows.map((r) => ({
+    slotId: r.id, date: r.meal_date, mealType: r.meal_type, status: r.status, maxTotalMin: r.max_total_min, recipeId: r.recipe_id,
+    name: r.recipe_id ? nameOf.get(r.recipe_id) ?? "Recette" : null,
+  }));
+}
+
+/** Annule le menu choisi : le repas redevient à prévoir et ses articles non cochés quittent la liste de courses. */
+export async function cancelMealChoice(supabase: SupabaseClient, slotId: string) {
+  const { error } = await supabase.rpc("cancel_meal_choice", { p_slot_id: slotId });
+  check(error, "Choix non annulé");
+}
+
 /** Repas choisis à partir d'une date (accueil). */
 export async function getUpcomingMeals(supabase: SupabaseClient, householdId: string, from: IsoDate, limit = 7): Promise<UpcomingMeal[]> {
   const { data, error } = await supabase.from("meal_slots").select("id, meal_date, meal_type, recipe_id").eq("household_id", householdId)

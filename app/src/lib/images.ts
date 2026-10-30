@@ -14,6 +14,8 @@ const LINK_SECONDS = 7 * 24 * 3600;
 /** Un lien est redemandé un jour avant son expiration. */
 const RENEW_MS = (LINK_SECONDS - 24 * 3600) * 1000;
 const PHOTO_MAX_WIDTH = 1024;
+/** Image pas encore créée (tâche planifiée) : le lien est recherché de nouveau après ce délai. */
+const ABSENT_RETRY_MS = 2 * 60 * 1000;
 
 /** Image à afficher : lien temporaire et clé de cache stable. */
 export interface Picture {
@@ -27,7 +29,7 @@ export async function illustrationUrls(recipeIds: string[]): Promise<Record<stri
   const now = Date.now();
   const missing = recipeIds.filter((id) => {
     const hit = cache.get(id);
-    return !hit || (hit.picture !== null && now - hit.at > RENEW_MS);
+    return !hit || now - hit.at > (hit.picture ? RENEW_MS : ABSENT_RETRY_MS);
   });
   if (missing.length) {
     const { data } = await supabase.from("recipe_images").select("recipe_id, household_id, storage_path, created_at").in("recipe_id", missing);
