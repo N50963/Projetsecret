@@ -15,7 +15,7 @@ import {
   acceptProposal, DEFAULT_TARGETS, getPlanSlots, loadPlannerContext, loadRecipesForPlanning, missingForSlot, planMeals,
   recordShown, rejectProposal, skipSlot, toIsoDate, type PlannedSlot, type PlannerContext, type Proposal,
 } from "../modules/planning";
-import { createRecipe, currentSeason } from "../modules/recipes";
+import { createRecipe, currentSeason, type MainProtein } from "../modules/recipes";
 
 /** Résumé de l'équilibre de la semaine pour orienter les idées de Mistral. */
 function balanceBrief(ctx: PlannerContext, mealsInPlan: number): string {
@@ -34,6 +34,36 @@ function balanceBrief(ctx: PlannerContext, mealsInPlan: number): string {
     + "Toujours des légumes, un féculent varié, rien de frit.";
 }
 
+/**
+ * Trois protéines différentes pour les idées de Mistral (une demande par idée) : d'abord celles qui manquent à l'équilibre
+ * de la semaine, jamais celles que le foyer exclut.
+ */
+function ideaProteins(ctx: PlannerContext, mealsInPlan: number): MainProtein[] {
+  const byId = new Map(ctx.recipes.map((r) => [r.id, r]));
+  const chosen = ctx.accepted.map((m) => byId.get(m.recipeId)).filter((r) => r !== undefined);
+  const f = Math.max(1, mealsInPlan) / 7;
+  const count = (proteins: MainProtein[]) => chosen.filter((r) => proteins.includes(r.mainProtein)).length;
+  const needed: MainProtein[] = [];
+  if (count(["poisson", "fruits_de_mer"]) < Math.round(DEFAULT_TARGETS.fishMin * f)) needed.push("poisson");
+  if (count(["vegetarien", "legumineuse", "oeuf"]) < Math.round(ctx.prefs.meatlessDinnersMin * f)) needed.push("vegetarien");
+  const excluded = new Set<string>(ctx.prefs.excludedFoodGroups);
+  const allowed = (p: MainProtein) => !(p === "porc" && excluded.has("porc")) && !(p === "boeuf" && excluded.has("boeuf"))
+    && !(p === "poisson" && excluded.has("poisson")) && !(p === "fruits_de_mer" && (excluded.has("crustaces") || excluded.has("coquillages")));
+  const order: MainProtein[] = [...needed, "volaille", "vegetarien", "poisson", "legumineuse", "boeuf", "porc", "oeuf"];
+  return [...new Set(order)].filter(allowed).slice(0, 3);
+}
+
+/** Idées de Mistral pour un repas : chacune arrive dès qu'elle est prête. */
+interface Ideas {
+  slotId: string;
+  drafts: Draft[];
+  pending: number;
+  failed: string | null;
+}
+
+/** Écart entre les demandes d'idées envoyées ensemble (limite de débit de l'offre gratuite de Mistral). */
+const IDEA_STAGGER_MS = 1500;
+
 export default function Propositions() {
   const { plan: planId, start } = useLocalSearchParams<{ plan: string; start: string }>();
   const router = useRouter();
@@ -46,7 +76,9 @@ export default function Propositions() {
   const [round, setRound] = useState<1 | 2>(1);
   const [deck, setDeck] = useState<Proposal[]>([]);
   const [exhausted, setExhausted] = useState(false);
-  const [drafts, setDrafts] = useState<Draft[] | null>(null);
+  const [ideas, setIdeas] = useState<Ideas | null>(null);
+  /** Idées déjà montrées (refusées) pour le repas courant. */
+  const [seen, setSeen] = useState(0);
   const [images, setImages] = useState<Record<string, Picture | null>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -54,6 +86,7 @@ export default function Propositions() {
   // Une seule illustration demandée à la fois ; plus aucune pendant la session si Mistral refuse (quota gratuit).
   const illustrating = useRef(false);
   const imagesPaused = useRef(false);
+  const ideaTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
   useEffect(() => {
     (async () => {
@@ -79,7 +112,6 @@ export default function Propositions() {
     if (entry && entry.round !== round) setRound(entry.round);
     setDeck(proposals);
     setExhausted(!proposals.length);
-    setDrafts(null);
     recordShown(supabase, household.id, current.id, proposals).catch(() => undefined);
     illustrationUrls(proposals.map((p) => p.recipeId)).then((urls) => setImages((prev) => ({ ...prev, ...urls }))).catch(() => undefined);
     // Le paquet ne dépend que du repas, du tour et des choix acceptés (pas des refus en cours).
@@ -147,29 +179,42 @@ export default function Propositions() {
     }
   };
 
-  const askMistral = async () => {
-    if (!current || !ctx) return;
-    setBusy("mistral");
-    setError("");
-    try {
-      const avoid = [...(ctx.rejected[current.id] ?? []), ...ctx.accepted.map((m) => m.recipeId)]
-        .map((id) => ctx.recipes.find((r) => r.id === id)?.name).filter((n): n is string => Boolean(n));
-      const { recipes } = await generateRecipes(household.id, {
-        brief: balanceBrief(ctx, ordered.length), count: 3, servings: current.servings,
-        constraints: { max_total_min: current.maxTotalMin, meal_type: current.mealType, season: currentSeason(new Date(`${current.date}T12:00:00`)), avoid },
-      });
-      setDrafts(recipes.filter((d) => d.recipe.name && d.recipe.ingredients.length >= 3));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(null);
-    }
-  };
+  /**
+   * Demande 3 idées à Mistral pour un repas, une par protéine, envoyées presque ensemble : la première arrive en 20 à 30 s
+   * (contre près d'une minute pour 3 idées d'un coup) et s'affiche aussitôt.
+   */
+  const startIdeas = useCallback((slot: PlannedSlot, context: PlannerContext) => {
+    const proteins = ideaProteins(context, ordered.length);
+    const avoid = [...(context.rejected[slot.id] ?? []), ...context.accepted.map((m) => m.recipeId)]
+      .map((id) => context.recipes.find((r) => r.id === id)?.name).filter((n): n is string => Boolean(n));
+    const brief = balanceBrief(context, ordered.length);
+    const season = currentSeason(new Date(`${slot.date}T12:00:00`));
+    const forSlot = (update: (i: Ideas) => Ideas) => setIdeas((i) => (i?.slotId === slot.id ? update(i) : i));
+    setIdeas({ slotId: slot.id, drafts: [], pending: proteins.length, failed: null });
+    setSeen(0);
+    proteins.forEach((protein, n) => ideaTimers.current.push(setTimeout(() => {
+      generateRecipes(household.id, {
+        brief, count: 1, servings: slot.servings,
+        constraints: { max_total_min: slot.maxTotalMin, meal_type: slot.mealType, season, main_protein: protein, avoid },
+      })
+        .then(({ recipes }) => forSlot((i) => ({ ...i, pending: i.pending - 1,
+          drafts: [...i.drafts, ...recipes.filter((d) => d.recipe.name && d.recipe.ingredients.length >= 3)] })))
+        .catch((e) => forSlot((i) => ({ ...i, pending: i.pending - 1, failed: e instanceof Error ? e.message : String(e) })));
+    }, n * IDEA_STAGGER_MS)));
+  }, [household.id, ordered.length]);
+
+  // Dès les propositions avec achats (ou quand il n'y a plus rien à proposer), les idées sont préparées en arrière-plan.
+  useEffect(() => {
+    if (current && ctx && (round === 2 || exhausted) && ideas?.slotId !== current.id) startIdeas(current, ctx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id, round, exhausted]);
+
+  useEffect(() => () => ideaTimers.current.forEach(clearTimeout), []);
 
   const onDraftSwipe = async (d: Draft, direction: SwipeDirection) => {
     if (!current || !ctx) return;
     if (direction === "left") {
-      setDrafts((list) => (list ?? []).slice(1));
+      setSeen((n) => n + 1);
       return;
     }
     setBusy("accept");
@@ -207,17 +252,19 @@ export default function Propositions() {
   if (!current) return <Loading label="Menus choisis : retour au calendrier…" />;
 
   const top = deck[0];
-  const draft = drafts?.[0];
+  const slotIdeas = ideas?.slotId === current.id ? ideas : null;
+  const draft = exhausted ? slotIdeas?.drafts[seen] : undefined;
+  const waiting = slotIdeas ? slotIdeas.pending : 3;
   return (
     <Screen title="Propositions">
       <H2>{dayLabel(current.date, today)} · {mealLabel(current.mealType)}</H2>
       <Muted>
-        Repas {done + 1} sur {ordered.length} · {minutes(current.maxTotalMin)}{current.maxTotalMin ? " au plus" : ""} · {drafts
+        Repas {done + 1} sur {ordered.length} · {minutes(current.maxTotalMin)}{current.maxTotalMin ? " au plus" : ""} · {exhausted
           ? "idées de Mistral" : round === 1 ? "avec vos courses" : "avec 1 à 3 ingrédients à acheter"}
       </Muted>
       <ErrorText>{error}</ErrorText>
 
-      {top && !drafts && (
+      {top && !exhausted && (
         <>
           <SwipeCard key={`${current.id}-${top.recipeId}`} swipeRef={swipe} onSwipe={(d) => onSwipe(top, d)} onPress={() => router.push(`/recette/${top.recipeId}`)}>
             <Card style={{ padding: 0, overflow: "hidden" }}>
@@ -240,7 +287,7 @@ export default function Propositions() {
 
       {draft && (
         <>
-          <SwipeCard key={`draft-${draft.recipe.name}`} swipeRef={swipe} onSwipe={(d) => onDraftSwipe(draft, d)}>
+          <SwipeCard key={`draft-${seen}-${draft.recipe.name}`} swipeRef={swipe} onSwipe={(d) => onDraftSwipe(draft, d)}>
             <Card style={{ padding: 0, overflow: "hidden" }}>
               <Illustration picture={null} height={180} rounded={0} />
               <View style={{ padding: 16, gap: 6 }}>
@@ -259,10 +306,16 @@ export default function Propositions() {
         </>
       )}
 
-      {exhausted && !draft && (
+      {exhausted && !draft && waiting > 0 && (
         <Card>
-          <Body>{drafts ? "Plus d'idées pour ce repas." : "Plus d'autre proposition pour ce repas parmi vos recettes."}</Body>
-          <Button title="Demander 3 idées à Mistral" onPress={askMistral} busy={busy === "mistral"} />
+          <Loading label={seen ? `Mistral prépare encore ${waiting} idée${waiting > 1 ? "s" : ""}…` : "Mistral prépare de nouvelles idées…"} />
+        </Card>
+      )}
+      {exhausted && !draft && waiting === 0 && (
+        <Card>
+          <Body>{slotIdeas?.drafts.length ? "Plus d'idées pour ce repas." : "Les idées de Mistral n'ont pas pu être préparées."}</Body>
+          {!slotIdeas?.drafts.length && slotIdeas?.failed ? <Muted>{slotIdeas.failed}</Muted> : null}
+          <Button title={slotIdeas?.drafts.length ? "Demander 3 autres idées" : "Réessayer"} onPress={() => startIdeas(current, ctx)} />
           <Button title="Passer ce repas" kind="secondary" onPress={skip} />
         </Card>
       )}
