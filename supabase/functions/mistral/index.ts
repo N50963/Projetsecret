@@ -5,7 +5,9 @@
  *  - import_recipe     : met en forme une recette collée en texte (ingrédients rattachés au référentiel) ;
  *  - generate_recipes  : propose de nouvelles recettes selon les notes du foyer, l'équilibre demandé et les achats récents ;
  *  - adapt_recipe      : adapte une recette d'après un avis (« trop sec », « sans champignons »...) ;
- *  - illustrate        : crée l'illustration d'une recette (génération d'image Mistral) et l'enregistre.
+ *  - illustrate        : crée l'illustration d'une recette (génération d'image Mistral) et l'enregistre ;
+ *  - illustrate_missing: tâche planifiée (pg_cron, jeton x-cron-token) qui crée les illustrations manquantes, quelques-unes
+ *                        par passage, pour que chaque plat ait son image avant d'être proposé.
  * Les recettes renvoyées sont des brouillons : l'application les vérifie et les fait confirmer avant de les enregistrer.
  */
 
@@ -22,7 +24,9 @@ const DOWNLOAD_TIMEOUT_MS = 30_000;
 /** Journal des appels conservé 90 jours (taille de la base). */
 const LOG_RETENTION_DAYS = 90;
 /** Après un refus de Mistral (quota d'images de l'offre gratuite), plus aucune demande d'image pendant ce délai. */
-const IMAGE_PAUSE_MS = 6 * 3600 * 1000;
+const IMAGE_PAUSE_MS = 3600 * 1000;
+/** Tâche planifiée : une nouvelle image n'est commencée que dans ce délai (une image prend 15 à 30 s, limite de 150 s). */
+const BATCH_START_BUDGET_MS = 45_000;
 
 const UNITS = ["g", "ml", "piece", "cs", "cc", "pincee"];
 const BASE_UNITS = ["g", "ml", "piece"];
@@ -247,16 +251,15 @@ function findToolFile(node: any): { file_id: string } | null {
   return null;
 }
 
-async function illustrate(user: SupabaseClient, householdId: string, recipeId: string) {
+async function illustrate(reader: SupabaseClient, recipeId: string) {
   const db = admin();
   const pause = (await db.from("app_settings").select("value").eq("key", "mistral_image_pause_until").maybeSingle()).data?.value;
   if (pause && Date.parse(pause) > Date.now()) {
     throw new HttpError(429, `Création d'images en pause jusqu'à ${new Date(pause).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })} (quota gratuit Mistral).`);
   }
-  const { data: recipe, error } = await user.from("recipe_catalog").select("id, household_id, name, description").eq("id", recipeId).maybeSingle();
+  const { data: recipe, error } = await reader.from("recipe_catalog").select("id, household_id, name, description, version_id").eq("id", recipeId).maybeSingle();
   if (error || !recipe) throw new HttpError(404, "Recette introuvable.");
-  const { data: ings } = await user.from("recipe_ingredients").select("label, optional").eq("version_id",
-    (await user.from("recipe_catalog").select("version_id").eq("id", recipeId).single()).data?.version_id).order("position");
+  const { data: ings } = await reader.from("recipe_ingredients").select("label, optional").eq("version_id", recipe.version_id).order("position");
   const agentId = await imageAgent(db);
   const prompt = `Génère une image avec l'outil de génération d'images. Photographie culinaire réaliste, vue de trois-quarts, lumière naturelle, assiette familiale simple : « ${recipe.name} ». `
     + `${recipe.description ?? ""} Ingrédients : ${(ings ?? []).filter((i: any) => !i.optional).map((i: any) => i.label).join(", ")}. Pas de texte.`;
@@ -266,7 +269,8 @@ async function illustrate(user: SupabaseClient, householdId: string, recipeId: s
       await db.from("app_settings").upsert({ key: "mistral_image_pause_until", value: new Date(Date.now() + IMAGE_PAUSE_MS).toISOString(),
         updated_at: new Date().toISOString() });
     }
-    throw new HttpError(unavailable(r) ? 429 : 502, `Création d'images indisponible avec cette clé (${r.status}).`);
+    // Le message de Mistral indique la limite atteinte (gardé dans le journal ai_calls).
+    throw new HttpError(unavailable(r) ? 429 : 502, `Création d'images indisponible avec cette clé (${r.status} : ${(await r.text()).slice(0, 160)}).`);
   }
   const conv = await r.json();
   const chunk = findToolFile(conv);
@@ -296,6 +300,34 @@ async function illustrate(user: SupabaseClient, householdId: string, recipeId: s
   return { path };
 }
 
+/** Crée les illustrations manquantes, une à la fois, jusqu'au refus de Mistral ou à la fin du temps imparti. */
+async function illustrateMissing(db: SupabaseClient) {
+  const started = Date.now();
+  const [recipes, images] = await Promise.all([
+    db.from("recipe_catalog").select("id, name").order("name"),
+    db.from("recipe_images").select("recipe_id"),
+  ]);
+  const have = new Set((images.data ?? []).map((i: any) => i.recipe_id));
+  const missing = (recipes.data ?? []).filter((r: any) => !have.has(r.id));
+  const log = (ok: boolean, detail?: string) =>
+    db.from("ai_calls").insert({ action: "illustrate_missing", model: ok ? IMAGE_MODEL : null, ok, detail: detail?.slice(0, 300) });
+  let created = 0;
+  for (const recipe of missing) {
+    if (Date.now() - started > BATCH_START_BUDGET_MS) break;
+    try {
+      await illustrate(db, recipe.id);
+      await log(true, recipe.name);
+      created++;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      // La pause en cours n'est pas un nouvel échec : rien à journaliser.
+      if (!message.startsWith("Création d'images en pause")) await log(false, `${recipe.name} : ${message}`);
+      return { created, remaining: missing.length - created, stopped: message };
+    }
+  }
+  return { created, remaining: missing.length - created };
+}
+
 // --- Point d'entrée --------------------------------------------------------------------------------------------------------
 
 Deno.serve(async (req) => {
@@ -306,6 +338,17 @@ Deno.serve(async (req) => {
     body = await req.json();
   } catch {
     return json({ error: "Corps JSON attendu" }, 400);
+  }
+
+  if (body.action === "illustrate_missing") {
+    try {
+      const db = admin();
+      const expected = (await db.from("app_settings").select("value").eq("key", "cron_token").maybeSingle()).data?.value;
+      if (!expected || req.headers.get("x-cron-token") !== expected) throw new HttpError(401, "Jeton de tâche planifiée invalide.");
+      return json(await illustrateMissing(db));
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : String(e) }, e instanceof HttpError ? e.status : 500);
+    }
   }
 
   const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
@@ -396,7 +439,7 @@ Deno.serve(async (req) => {
         return json({ ...out, change_note: String(data.change_note ?? feedback).slice(0, 300), model });
       }
       if (body.action === "illustrate") {
-        const result = await illustrate(user, householdId, String(body.recipe_id ?? ""));
+        const result = await illustrate(user, String(body.recipe_id ?? ""));
         await log(true, IMAGE_MODEL);
         return json(result);
       }
