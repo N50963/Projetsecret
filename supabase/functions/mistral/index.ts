@@ -5,13 +5,14 @@
  *  - import_recipe     : met en forme une recette collée en texte (ingrédients rattachés au référentiel) ;
  *  - generate_recipes  : propose de nouvelles recettes selon les notes du foyer, l'équilibre demandé et les achats récents ;
  *  - adapt_recipe      : adapte une recette d'après un avis (« trop sec », « sans champignons »...) ;
- *  - illustrate        : crée l'illustration d'une recette (génération d'image Mistral) et l'enregistre ;
+ *  - illustrate        : crée l'illustration d'une recette (image Mistral ; si Mistral refuse, Pollinations.ai) et l'enregistre ;
  *  - illustrate_missing: tâche planifiée (pg_cron, jeton x-cron-token) qui crée les illustrations manquantes, quelques-unes
  *                        par passage, pour que chaque plat ait son image avant d'être proposé.
  * Les recettes renvoyées sont des brouillons : l'application les vérifie et les fait confirmer avant de les enregistrer.
  */
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.117.0";
+import jpeg from "npm:jpeg-js@0.4.4";
 
 const MISTRAL = "https://api.mistral.ai/v1";
 const TEXT_MODELS = (Deno.env.get("MISTRAL_TEXT_MODELS") ?? "mistral-small-latest,ministral-14b-latest,ministral-8b-latest").split(",").map((m) => m.trim());
@@ -27,6 +28,11 @@ const LOG_RETENTION_DAYS = 90;
 const IMAGE_PAUSE_MS = 3600 * 1000;
 /** Tâche planifiée : une nouvelle image n'est commencée que dans ce délai (une image prend 15 à 30 s, limite de 150 s). */
 const BATCH_START_BUDGET_MS = 45_000;
+/** Générateur de secours quand Mistral refuse (quota) : Pollinations.ai, gratuit et sans clé (1 image / 45 s par adresse IP). */
+const FALLBACK_IMAGE_URL = "https://image.pollinations.ai/prompt/";
+const FALLBACK_TIMEOUT_MS = 60_000;
+/** Part gardée de l'image de secours : le bas (logo et légende ajoutés par le service gratuit) est retiré. */
+const FALLBACK_KEEP_RATIO = 0.9;
 
 const UNITS = ["g", "ml", "piece", "cs", "cc", "pincee"];
 const BASE_UNITS = ["g", "ml", "piece"];
@@ -251,18 +257,13 @@ function findToolFile(node: any): { file_id: string } | null {
   return null;
 }
 
-async function illustrate(reader: SupabaseClient, recipeId: string) {
-  const db = admin();
+/** Image créée par Mistral (agent avec l'outil de génération d'images). */
+async function mistralImage(db: SupabaseClient, prompt: string): Promise<Uint8Array> {
   const pause = (await db.from("app_settings").select("value").eq("key", "mistral_image_pause_until").maybeSingle()).data?.value;
   if (pause && Date.parse(pause) > Date.now()) {
-    throw new HttpError(429, `Création d'images en pause jusqu'à ${new Date(pause).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })} (quota gratuit Mistral).`);
+    throw new HttpError(429, `Création d'images Mistral en pause jusqu'à ${new Date(pause).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })} (quota gratuit).`);
   }
-  const { data: recipe, error } = await reader.from("recipe_catalog").select("id, household_id, name, description, version_id").eq("id", recipeId).maybeSingle();
-  if (error || !recipe) throw new HttpError(404, "Recette introuvable.");
-  const { data: ings } = await reader.from("recipe_ingredients").select("label, optional").eq("version_id", recipe.version_id).order("position");
   const agentId = await imageAgent(db);
-  const prompt = `Génère une image avec l'outil de génération d'images. Photographie culinaire réaliste, vue de trois-quarts, lumière naturelle, assiette familiale simple : « ${recipe.name} ». `
-    + `${recipe.description ?? ""} Ingrédients : ${(ings ?? []).filter((i: any) => !i.optional).map((i: any) => i.label).join(", ")}. Pas de texte.`;
   const r = await mistralFetch("/conversations", { method: "POST", body: JSON.stringify({ agent_id: agentId, inputs: prompt }) });
   if (!r.ok) {
     if (unavailable(r)) {
@@ -284,7 +285,65 @@ async function illustrate(reader: SupabaseClient, recipeId: string) {
   const file = chunk?.file_id ? await mistralFetch(`/files/${chunk.file_id}/content`, { headers: { Accept: "*/*" } })
     : await fetch(url!, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
   if (!file.ok) throw new HttpError(502, `Image non téléchargée (${file.status}).`);
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  return new Uint8Array(await file.arrayBuffer());
+}
+
+/** Description visuelle du plat en anglais (le générateur de secours comprend mal les noms de plats français). */
+async function englishDescription(recipe: { name: string; description: string | null }, ingredients: string): Promise<string> {
+  try {
+    const { data } = await chatJson([{ role: "user", content:
+      `Plat : « ${recipe.name} ». ${recipe.description ?? ""} Ingrédients : ${ingredients}. Décris en anglais, en une phrase de 30 mots `
+      + `au plus, ce que l'on voit dans l'assiette (forme du plat, ingrédients visibles, cuisson), sans nom de plat français. `
+      + `Réponds {"en": "..."}.` }], 0.2);
+    if (typeof data.en === "string" && data.en.trim()) return data.en.trim().slice(0, 300);
+  } catch { /* Mistral indisponible : nom et ingrédients tels quels */ }
+  return `the French home-cooked dish "${recipe.name}" with ${ingredients}`;
+}
+
+/** Image de secours (Pollinations.ai), JPEG dont le bas est retiré. */
+async function fallbackImage(recipe: { id: string; name: string; description: string | null }, ingredients: string): Promise<Uint8Array> {
+  const prompt = (`Professional food photography: ${await englishDescription(recipe, ingredients)}. `
+    + "Served on a simple family plate, three-quarter view, natural daylight, appetizing, realistic. No text.").slice(0, 700);
+  // Même recette, même image : la graine dépend de la recette.
+  const seed = [...recipe.id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % 1_000_000;
+  let r: Response;
+  try {
+    r = await fetch(`${FALLBACK_IMAGE_URL}${encodeURIComponent(prompt)}?width=1024&height=768&nologo=true&seed=${seed}`,
+      { signal: AbortSignal.timeout(FALLBACK_TIMEOUT_MS) });
+  } catch {
+    throw new HttpError(504, "Générateur d'images de secours injoignable.");
+  }
+  if (!r.ok) {
+    throw new HttpError(r.status === 402 || r.status === 429 ? 429 : 502,
+      `Générateur d'images de secours indisponible (${r.status} : ${(await r.text()).slice(0, 120)}).`);
+  }
+  const image = jpeg.decode(new Uint8Array(await r.arrayBuffer()), { useTArray: true, formatAsRGBA: true });
+  const keep = Math.round(image.height * FALLBACK_KEEP_RATIO);
+  return jpeg.encode({ data: image.data.subarray(0, image.width * keep * 4), width: image.width, height: keep }, 85).data;
+}
+
+async function illustrate(reader: SupabaseClient, recipeId: string): Promise<{ path: string; source: "mistral" | "pollinations" }> {
+  const db = admin();
+  const { data: recipe, error } = await reader.from("recipe_catalog").select("id, household_id, name, description, version_id").eq("id", recipeId).maybeSingle();
+  if (error || !recipe) throw new HttpError(404, "Recette introuvable.");
+  const { data: ings } = await reader.from("recipe_ingredients").select("label, optional").eq("version_id", recipe.version_id).order("position");
+  const ingredients = (ings ?? []).filter((i: any) => !i.optional).map((i: any) => i.label).join(", ");
+  const prompt = `Génère une image avec l'outil de génération d'images. Photographie culinaire réaliste, vue de trois-quarts, lumière naturelle, assiette familiale simple : « ${recipe.name} ». `
+    + `${recipe.description ?? ""} Ingrédients : ${ingredients}. Pas de texte.`;
+  let bytes: Uint8Array;
+  let source: "mistral" | "pollinations" = "mistral";
+  try {
+    bytes = await mistralImage(db, prompt);
+  } catch (e) {
+    try {
+      bytes = await fallbackImage(recipe, ingredients);
+      source = "pollinations";
+    } catch (fallback) {
+      const first = e instanceof Error ? e.message : String(e);
+      const second = fallback instanceof Error ? fallback.message : String(fallback);
+      throw new HttpError(fallback instanceof HttpError ? fallback.status : 502, `${first} ${second}`);
+    }
+  }
   if (bytes.length > 5_000_000) throw new HttpError(502, "Image trop lourde.");
   // Format réel d'après les premiers octets (l'en-tête HTTP du lien n'est pas fiable).
   const contentType = bytes[0] === 0xff && bytes[1] === 0xd8 ? "image/jpeg"
@@ -294,13 +353,16 @@ async function illustrate(reader: SupabaseClient, recipeId: string) {
   const up = await db.storage.from("recipe-images").upload(path, bytes, { contentType, upsert: true });
   if (up.error) throw new HttpError(500, `Image non enregistrée : ${up.error.message}`);
   // La date sert de version pour le cache des téléphones.
-  const ins = await db.from("recipe_images").upsert({ recipe_id: recipe.id, household_id: owner, storage_path: path, source: "mistral",
+  const ins = await db.from("recipe_images").upsert({ recipe_id: recipe.id, household_id: owner, storage_path: path, source,
     created_at: new Date().toISOString() }, { onConflict: "recipe_id,household_id" });
   if (ins.error) throw new HttpError(500, `Image non référencée : ${ins.error.message}`);
-  return { path };
+  return { path, source };
 }
 
-/** Crée les illustrations manquantes, une à la fois, jusqu'au refus de Mistral ou à la fin du temps imparti. */
+/**
+ * Crée les illustrations manquantes, une à la fois, jusqu'à un échec ou à la fin du temps imparti ; une seule image de
+ * secours par passage (limite du service gratuit : 1 image toutes les 45 s).
+ */
 async function illustrateMissing(db: SupabaseClient) {
   const started = Date.now();
   const [recipes, images] = await Promise.all([
@@ -309,19 +371,19 @@ async function illustrateMissing(db: SupabaseClient) {
   ]);
   const have = new Set((images.data ?? []).map((i: any) => i.recipe_id));
   const missing = (recipes.data ?? []).filter((r: any) => !have.has(r.id));
-  const log = (ok: boolean, detail?: string) =>
-    db.from("ai_calls").insert({ action: "illustrate_missing", model: ok ? IMAGE_MODEL : null, ok, detail: detail?.slice(0, 300) });
+  const log = (ok: boolean, model: string | null, detail?: string) =>
+    db.from("ai_calls").insert({ action: "illustrate_missing", model, ok, detail: detail?.slice(0, 300) });
   let created = 0;
   for (const recipe of missing) {
     if (Date.now() - started > BATCH_START_BUDGET_MS) break;
     try {
-      await illustrate(db, recipe.id);
-      await log(true, recipe.name);
+      const { source } = await illustrate(db, recipe.id);
+      await log(true, source === "mistral" ? IMAGE_MODEL : source, recipe.name);
       created++;
+      if (source === "pollinations") break;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      // La pause en cours n'est pas un nouvel échec : rien à journaliser.
-      if (!message.startsWith("Création d'images en pause")) await log(false, `${recipe.name} : ${message}`);
+      await log(false, null, `${recipe.name} : ${message}`);
       return { created, remaining: missing.length - created, stopped: message };
     }
   }
@@ -440,7 +502,7 @@ Deno.serve(async (req) => {
       }
       if (body.action === "illustrate") {
         const result = await illustrate(user, String(body.recipe_id ?? ""));
-        await log(true, IMAGE_MODEL);
+        await log(true, result.source === "mistral" ? IMAGE_MODEL : result.source);
         return json(result);
       }
       throw new HttpError(400, "Action inconnue.");
