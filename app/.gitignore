@@ -7,4 +7,3 @@ expo-env.d.ts
 *.tsbuildinfo
 .env*.local
 /ios
-/android

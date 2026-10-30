@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { StyleSheet, TextInput } from "react-native";
 
 import { Body, Button, Card, Chip, ErrorText, H2, Loading, Muted, Row, Screen } from "../components/ui";
-import { useHousehold } from "../lib/session";
+import { useHousehold, useSession } from "../lib/session";
 import { supabase } from "../lib/supabase";
+import { useColors } from "../lib/theme";
 import { getHouseholdPreferences, saveHouseholdPreferences, type FoodGroup, type HouseholdPreferences, type SpiceLevel } from "../modules/recipes";
 
 const GROUPS: Array<[FoodGroup, string]> = [
@@ -16,7 +18,12 @@ const ALLERGENS: Array<[string, string]> = [["gluten", "Gluten"], ["lait", "Lait
 /** Préférences du foyer : appliquées d'office aux propositions de menus et aux idées de Mistral. */
 export default function Preferences() {
   const household = useHousehold();
+  const { session, changePassword } = useSession();
+  const c = useColors();
   const [prefs, setPrefs] = useState<HouseholdPreferences | null>(null);
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -53,6 +60,21 @@ export default function Preferences() {
     }
   };
 
+  const savePassword = async () => {
+    setPasswordMessage("");
+    if (password.length < 8) return setPasswordMessage("8 caractères au moins.");
+    if (password !== confirm) return setPasswordMessage("Les deux saisies sont différentes.");
+    try {
+      await changePassword(password);
+      setPassword("");
+      setConfirm("");
+      setPasswordMessage("Mot de passe changé : utilisez-le aussi sur l'autre téléphone.");
+    } catch (e) {
+      setPasswordMessage(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const input = [styles.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }];
+
   return (
     <Screen title="Préférences">
       <Card>
@@ -86,6 +108,20 @@ export default function Preferences() {
       <ErrorText>{error}</ErrorText>
       {message ? <Body>{message}</Body> : null}
       <Button title="Enregistrer" onPress={save} busy={busy} />
+      <Card>
+        <H2>Compte</H2>
+        <Muted>{session?.user.email}</Muted>
+        <TextInput style={input} placeholder="Nouveau mot de passe" placeholderTextColor={c.muted} secureTextEntry
+          autoComplete="new-password" value={password} onChangeText={setPassword} />
+        <TextInput style={input} placeholder="Nouveau mot de passe (confirmation)" placeholderTextColor={c.muted} secureTextEntry
+          autoComplete="new-password" value={confirm} onChangeText={setConfirm} />
+        {passwordMessage ? <Body>{passwordMessage}</Body> : null}
+        <Button title="Changer le mot de passe" kind="secondary" onPress={savePassword} disabled={!password} />
+      </Card>
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  input: { minHeight: 48, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 14, fontSize: 16 },
+});

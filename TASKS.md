@@ -11,7 +11,7 @@
 | 7. Planification | **Fait** | Choix des repas et du temps, propositions à swiper (courses, puis 1 à 3 achats, puis Mistral), équilibre et variété (`app/src/modules/planning`). |
 | 8. Préférences et équilibre | **Fait** | `household_preferences` (2 adultes, 1 ado, 1 enfant ; ni abats ni coquillages ; curry et chorizo doux, rien de piquant ; 1 à 2 soirs sans viande), appliquées par le moteur et par Mistral ; écran Préférences. |
 | 9. Liste de courses | **Fait** | Ingrédients manquants des repas choisis, cochés automatiquement quand ils apparaissent sur un ticket. |
-| 10. Finalisation | En cours | Essai sur téléphone, illustrations de toutes les recettes, version installable (EAS) si souhaitée. |
+| 10. Finalisation | En cours | Projet Android natif (`app/android`) compilable en APK dans Android Studio (`docs/android-apk.md`) ; compte du foyer créé, connexion seule dans l'application. Reste : essai sur téléphone, illustrations de toutes les recettes. |
 
 ## À traiter ensuite
 - Essayer sur un vrai téléphone : connexion Lidl dans l'application, récupération des tickets, swipe.

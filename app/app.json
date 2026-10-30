@@ -11,6 +11,8 @@
       "supportsTablet": false
     },
     "android": {
+      "package": "fr.foyer.menus",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4EA",
         "foregroundImage": "./assets/android-icon-foreground.png",

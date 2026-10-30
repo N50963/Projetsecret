@@ -16,8 +16,7 @@ interface SessionState {
   session: Session | null;
   household: Household | null;
   signIn(email: string, password: string): Promise<void>;
-  /** Renvoie true si un e-mail de confirmation doit être validé avant la première connexion. */
-  signUp(email: string, password: string): Promise<boolean>;
+  changePassword(password: string): Promise<void>;
   signOut(): Promise<void>;
   joinHousehold(code: string): Promise<void>;
   refreshHousehold(): Promise<void>;
@@ -71,10 +70,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (error) throw new Error(error.message === "Invalid login credentials" ? "E-mail ou mot de passe incorrect." : error.message);
     },
-    async signUp(email, password) {
-      const { data, error } = await supabase.auth.signUp({ email: email.trim(), password });
+    async changePassword(password) {
+      const { error } = await supabase.auth.updateUser({ password });
       if (error) throw new Error(error.message);
-      return !data.session;
     },
     async signOut() {
       await supabase.auth.signOut();

@@ -44,31 +44,27 @@ légumes 7…) ; un repas choisi réserve ses ingrédients. Les recettes aimées
 - Limite : 40 appels par heure et par foyer (journal `ai_calls`).
 - Plan gratuit Supabase : voir `docs/plan-gratuit-supabase.md`.
 
-## Lancer l'application sur les téléphones
+## Installer l'application sur les téléphones
 
-Prérequis sur un ordinateur : Node.js 22 et le dépôt à jour (branche `ccr-dfe53054-07n16j`). Sur chaque téléphone :
-l'application **Expo Go** (App Store / Play Store).
+**APK Android** (application installée, sans ordinateur allumé) : compilation dans Android Studio, voir
+`docs/android-apk.md`.
+
+**Pour le développement** : Node.js 22 et l'application **Expo Go** sur le téléphone.
 
 ```bash
 git pull
 cd app
 npm install
-npx expo start          # même réseau Wi-Fi que les téléphones
-# ou : npx expo start --tunnel   si les téléphones ne sont pas sur le même réseau
+npx expo start          # même réseau Wi-Fi que le téléphone ; scanner le QR code avec Expo Go
 ```
-
-Scanner le QR code affiché : avec Expo Go sur Android, avec l'appareil photo sur iPhone.
-
-Pour une application installée sans ordinateur allumé (fichier APK Android ou TestFlight iOS) : compilation avec EAS
-(`npx eas-cli@latest build`), qui nécessite un compte Expo (gratuit).
 
 ### Première ouverture
 
-1. « Créer le compte du foyer » (e-mail + mot de passe d'au moins 8 caractères), puis valider l'e-mail de confirmation
-   envoyé par Supabase (la page ouverte par le lien peut ne pas s'afficher : le compte est quand même confirmé).
-2. Se connecter, puis saisir le code du foyer (donné à part, il relie le compte aux tickets déjà importés).
-3. « Connecter Lidl Plus » et se connecter sur la page Lidl ; puis « Récupérer les nouveaux tickets ».
-4. Sur le second téléphone : se connecter avec les mêmes identifiants, puis « Connecter Lidl Plus ».
+1. Se connecter avec l'e-mail et le mot de passe du compte du foyer. Ce compte est créé à l'avance (l'application ne
+   permet pas d'en créer) et déjà relié au foyer « Mon foyer » et à ses tickets ; le mot de passe se change dans
+   **Préférences › Compte**. Un autre compte devrait saisir le code du foyer après sa première connexion.
+2. « Connecter Lidl Plus » et se connecter sur la page Lidl ; puis « Récupérer les nouveaux tickets ».
+3. Sur le second téléphone : se connecter avec les mêmes identifiants, puis « Connecter Lidl Plus ».
 
 ## Vérifications faites (29 octobre 2026)
 

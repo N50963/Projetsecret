@@ -1,35 +1,32 @@
 import { useState } from "react";
 import { StyleSheet, TextInput } from "react-native";
 
-import { Body, Button, Card, ErrorText, H1, Muted, Screen } from "../components/ui";
+import { Button, Card, ErrorText, H1, Muted, Screen } from "../components/ui";
 import { useSession } from "../lib/session";
 import { useColors } from "../lib/theme";
 
 export default function Connexion() {
-  const { signIn, signUp } = useSession();
+  const { signIn } = useSession();
   const c = useColors();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState<"in" | "up" | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [info, setInfo] = useState("");
   const input = [styles.input, { backgroundColor: c.card, borderColor: c.border, color: c.text }];
 
-  const run = async (kind: "in" | "up") => {
+  const run = async () => {
     setError("");
-    setInfo("");
-    if (!email.includes("@") || password.length < 8) {
-      setError("Saisissez un e-mail valide et un mot de passe d'au moins 8 caractères.");
+    if (!email.includes("@") || !password) {
+      setError("Saisissez l'e-mail et le mot de passe du compte du foyer.");
       return;
     }
-    setBusy(kind);
+    setBusy(true);
     try {
-      if (kind === "in") await signIn(email, password);
-      else if (await signUp(email, password)) setInfo("Compte créé. Ouvrez l'e-mail de confirmation, puis revenez vous connecter.");
+      await signIn(email, password);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
 
@@ -43,9 +40,7 @@ export default function Connexion() {
         <TextInput style={input} placeholder="Mot de passe" placeholderTextColor={c.muted} secureTextEntry
           autoComplete="password" value={password} onChangeText={setPassword} />
         <ErrorText>{error}</ErrorText>
-        {info ? <Body>{info}</Body> : null}
-        <Button title="Se connecter" onPress={() => run("in")} busy={busy === "in"} disabled={busy !== null} />
-        <Button title="Créer le compte du foyer" kind="secondary" onPress={() => run("up")} busy={busy === "up"} disabled={busy !== null} />
+        <Button title="Se connecter" onPress={run} busy={busy} />
       </Card>
       <Muted>Le compte de l'application est distinct du compte Lidl Plus, que vous connecterez ensuite.</Muted>
     </Screen>

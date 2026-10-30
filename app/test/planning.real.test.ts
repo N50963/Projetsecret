@@ -14,10 +14,12 @@ import type { MealSlot, PlannerRecipe, Purchase } from "../src/modules/planning/
 import { DEFAULT_PREFERENCES, maxSpicinessFor } from "../src/modules/recipes/preferences";
 
 const dir = process.env.PLANNER_SNAPSHOT_DIR;
+// Vitest exécute le corps du describe même quand il est ignoré : sans instantané, on lit des listes vides.
+const snapshot = (name: string): any => (dir ? JSON.parse(readFileSync(join(dir, name), "utf8")) : name === "purchases.json" ? [] : {});
 
 describe.skipIf(!dir)("menus de la semaine sur les achats réels", () => {
-  const meta = JSON.parse(readFileSync(join(dir ?? "", "ingredients.json"), "utf8")) as Record<string, [string, boolean]>;
-  const purchases: Purchase[] = (JSON.parse(readFileSync(join(dir ?? "", "purchases.json"), "utf8")) as any[][])
+  const meta = snapshot("ingredients.json") as Record<string, [string, boolean]>;
+  const purchases: Purchase[] = (snapshot("purchases.json") as any[][])
     .map(([slug, category, quantity, unit, purchasedAt]) => ({ slug, category, quantity, unit, purchasedAt }));
   const seed = JSON.parse(readFileSync(fileURLToPath(new URL("../../data/recipes/seed.json", import.meta.url)), "utf8")) as any[];
   const recipes: PlannerRecipe[] = seed.map((r) => ({
