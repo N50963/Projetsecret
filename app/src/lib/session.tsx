@@ -12,9 +12,13 @@ export interface Household {
 }
 
 interface SessionState {
+  /** Session lue et foyer du compte connecté chargé : les écrans peuvent s'afficher. */
   ready: boolean;
   session: Session | null;
+  /** Foyer du compte connecté (null s'il n'en a pas encore). */
   household: Household | null;
+  /** Échec du chargement du foyer (réseau…), affiché avec un bouton pour réessayer. */
+  householdError: string;
   signIn(email: string, password: string): Promise<void>;
   changePassword(password: string): Promise<void>;
   signOut(): Promise<void>;
@@ -33,39 +37,40 @@ async function loadHousehold(userId: string): Promise<Household | null> {
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [ready, setReady] = useState(false);
+  const [sessionRead, setSessionRead] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
+  // Foyer chargé pour le compte `householdUser`. Il n'est pas effacé à la déconnexion : les écrans encore affichés
+  // pendant le retour à la connexion le lisent toujours (useHousehold).
   const [household, setHousehold] = useState<Household | null>(null);
-
-  const refreshHousehold = useCallback(async () => {
-    const { data } = await supabase.auth.getSession();
-    setHousehold(data.session ? await loadHousehold(data.session.user.id) : null);
-  }, []);
+  const [householdUser, setHouseholdUser] = useState<string | null>(null);
+  const [householdError, setHouseholdError] = useState("");
+  const userId = session?.user.id ?? null;
 
   useEffect(() => {
-    let active = true;
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!active) return;
-      setSession(data.session);
-      try {
-        setHousehold(data.session ? await loadHousehold(data.session.user.id) : null);
-      } finally {
-        if (active) setReady(true);
-      }
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
-      setSession(next);
-      if (!next) setHousehold(null);
-      else setTimeout(() => loadHousehold(next.user.id).then(setHousehold).catch(() => setHousehold(null)), 0);
-    });
-    return () => {
-      active = false;
-      sub.subscription.unsubscribe();
-    };
+    supabase.auth.getSession().then(({ data }) => setSession(data.session)).finally(() => setSessionRead(true));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
+    return () => sub.subscription.unsubscribe();
   }, []);
 
+  const refreshHousehold = useCallback(async () => {
+    if (!userId) return;
+    setHouseholdError("");
+    try {
+      setHousehold(await loadHousehold(userId));
+      setHouseholdUser(userId);
+    } catch (e) {
+      setHouseholdError(e instanceof Error ? e.message : String(e));
+    }
+  }, [userId]);
+
+  // Chargé à la connexion seulement (pas au rafraîchissement du jeton, qui garde le même compte).
+  useEffect(() => {
+    void refreshHousehold();
+  }, [refreshHousehold]);
+
+  const ready = sessionRead && (!userId || householdUser === userId);
   const value = useMemo<SessionState>(() => ({
-    ready, session, household, refreshHousehold,
+    ready, session, household: userId && householdUser === userId ? household : null, householdError, refreshHousehold,
     async signIn(email, password) {
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (error) throw new Error(error.message === "Invalid login credentials" ? "E-mail ou mot de passe incorrect." : error.message);
@@ -82,10 +87,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (error) throw new Error(error.message.includes("invalide") ? "Code de foyer invalide." : error.message);
       await refreshHousehold();
     },
-  }), [ready, session, household, refreshHousehold]);
+  }), [ready, session, userId, householdUser, household, householdError, refreshHousehold]);
 
-  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+  return (
+    <SessionContext.Provider value={value}>
+      <LastHouseholdContext.Provider value={household}>{children}</LastHouseholdContext.Provider>
+    </SessionContext.Provider>
+  );
 }
+
+const LastHouseholdContext = createContext<Household | null>(null);
 
 export function useSession(): SessionState {
   const value = useContext(SessionContext);
@@ -93,9 +104,12 @@ export function useSession(): SessionState {
   return value;
 }
 
-/** Foyer courant (les écrans qui l'utilisent ne sont accessibles qu'une fois le foyer rejoint). */
+/**
+ * Foyer courant, pour les écrans réservés aux membres (Stack.Protected dans _layout.tsx). Après une déconnexion, ces
+ * écrans peuvent s'afficher une dernière fois : ils reçoivent alors le dernier foyer chargé.
+ */
 export function useHousehold(): Household {
-  const { household } = useSession();
+  const household = useContext(LastHouseholdContext);
   if (!household) throw new Error("Aucun foyer");
   return household;
 }
