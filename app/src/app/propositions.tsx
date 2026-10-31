@@ -6,8 +6,8 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SwipeCard, type SwipeDirection } from "../components/SwipeCard";
 import { Icon } from "../components/icons";
 import { Button, ErrorText, Loading, Pill, Screen, Tag } from "../components/ui";
-import { dayLabel, mealLabel, minutes, PROTEIN_LABEL } from "../lib/format";
-import { forgetIllustration, illustrationUrls, type Picture } from "../lib/images";
+import { dayLabel, mealLabel, minutes, proteinLabel } from "../lib/format";
+import { forgetIllustration, illustrationUrls, pictureOf, preloadPictures, type Picture } from "../lib/images";
 import { draftToInput, generateRecipes, illustrateRecipe, type Draft } from "../lib/mistral";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
@@ -108,8 +108,11 @@ export default function Propositions() {
   // Paquet de propositions pour le repas courant (recalculé à chaque repas et à chaque tour).
   useEffect(() => {
     if (!ctx || !current) return;
-    const entry = planMeals(ctx, ordered, { rounds: { [current.id]: round } }).find((p) => p.slotId === current.id);
+    const plan = planMeals(ctx, ordered, { rounds: { [current.id]: round } });
+    const entry = plan.find((p) => p.slotId === current.id);
     const proposals = entry?.proposals ?? [];
+    // Photos de ce repas et des repas suivants mises en mémoire : elles s'affichent dès que la carte apparaît.
+    preloadPictures([...proposals, ...plan.flatMap((p) => p.proposals)].map((p) => p.recipeId));
     if (entry && entry.round !== round) setRound(entry.round);
     setDeck(proposals);
     setExhausted(!proposals.length);
@@ -280,7 +283,7 @@ export default function Propositions() {
         <Text style={[styles.name, { color: c.text }]} numberOfLines={2}>{name}</Text>
         <View style={{ flexDirection: "row", gap: 7.5 }}>
           <Pill icon="timer">{minutes(duration)}</Pill>
-          <Pill icon="cutlery">{protein}</Pill>
+          {protein ? <Pill icon="cutlery">{protein}</Pill> : null}
         </View>
         <Text style={{ color: c.muted, fontSize: 16, lineHeight: 21 }} numberOfLines={2}>{ingredients}</Text>
         {toBuy ? (
@@ -308,14 +311,14 @@ export default function Propositions() {
         {top && !exhausted && (
           <SwipeCard key={`${current.id}-${top.recipeId}`} swipeRef={swipe} onSwipe={(d) => onSwipe(top, d)} style={StyleSheet.absoluteFill}
             onPress={() => router.push(`/recette/${top.recipeId}`)}>
-            {card(top.name, images[top.recipeId], top.totalMin, PROTEIN_LABEL[top.mainProtein] ?? top.mainProtein,
+            {card(top.name, images[top.recipeId] ?? pictureOf(top.recipeId), top.totalMin, proteinLabel(top.mainProtein),
               ctx.recipes.find((r) => r.id === top.recipeId)?.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", ") ?? "",
               top.missing.length ? top.missing.map((m) => m.label).join(", ") : undefined)}
           </SwipeCard>
         )}
         {draft && (
           <SwipeCard key={`draft-${seen}-${draft.recipe.name}`} swipeRef={swipe} onSwipe={(d) => onDraftSwipe(draft, d)} style={StyleSheet.absoluteFill}>
-            {card(draft.recipe.name, null, draft.recipe.prep_min + draft.recipe.cook_min, PROTEIN_LABEL[draft.recipe.main_protein] ?? "",
+            {card(draft.recipe.name, null, draft.recipe.prep_min + draft.recipe.cook_min, proteinLabel(draft.recipe.main_protein),
               draft.recipe.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", "))}
           </SwipeCard>
         )}

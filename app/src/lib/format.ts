@@ -4,11 +4,20 @@ import type { IsoDate } from "../modules/planning";
 
 const DAYS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
 const MONTHS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+const FULL_MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 
+/**
+ * Jour écrit en entier (« Samedi 1er novembre ») ; « Aujourd'hui » et « Demain » quand la date du jour est donnée.
+ */
 export function dayLabel(date: IsoDate, today?: IsoDate): string {
   const d = new Date(`${date}T12:00:00`);
   if (today && date === today) return "Aujourd'hui";
-  const label = `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  if (today) {
+    const t = new Date(`${today}T12:00:00`);
+    t.setDate(t.getDate() + 1);
+    if (t.getFullYear() === d.getFullYear() && t.getMonth() === d.getMonth() && t.getDate() === d.getDate()) return "Demain";
+  }
+  const label = `${DAYS[d.getDay()]} ${d.getDate() === 1 ? "1er" : d.getDate()} ${FULL_MONTHS[d.getMonth()]}`;
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
@@ -16,6 +25,9 @@ export const PROTEIN_LABEL: Record<string, string> = {
   volaille: "Volaille", boeuf: "Bœuf", porc: "Porc", poisson: "Poisson", fruits_de_mer: "Fruits de mer", oeuf: "Œufs",
   legumineuse: "Légumineuses", vegetarien: "Végétarien",
 };
+
+/** Protéine affichée sur les fiches et les cartes ; les plats végétariens ne sont pas signalés (chaîne vide). */
+export const proteinLabel = (protein: string) => (protein === "vegetarien" ? "" : PROTEIN_LABEL[protein] ?? "");
 
 export const mealLabel = (mealType: string) => (mealType === "dejeuner" ? "Déjeuner" : "Dîner");
 

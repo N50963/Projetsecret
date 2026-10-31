@@ -31,20 +31,6 @@ const ICONS = {
       <Circle cx={11} cy={23} r={2.5} fill={color} /><Circle cx={21} cy={23} r={2.5} fill={color} />
     </>,
   },
-  budget: {
-    viewBox: "0 0 24 24", draw: ({ color }) => <>
-      <Rect x={3} y={12} width={4.5} height={9.5} rx={1.8} {...stroke(color, 1.8)} />
-      <Rect x={9.8} y={3} width={4.5} height={18.5} rx={1.8} {...stroke(color, 1.8)} />
-      <Rect x={16.5} y={8} width={4.5} height={13.5} rx={1.8} {...stroke(color, 1.8)} />
-    </>,
-  },
-  budgetFilled: {
-    viewBox: "0 0 24 24", draw: ({ color }) => <>
-      <Rect x={3} y={12} width={4.5} height={9.5} rx={1.8} fill={color} />
-      <Rect x={9.8} y={3} width={4.5} height={18.5} rx={1.8} fill={color} />
-      <Rect x={16.5} y={8} width={4.5} height={13.5} rx={1.8} fill={color} />
-    </>,
-  },
   profile: {
     viewBox: "0 0 24 24", draw: ({ color }) => <>
       <Circle cx={12} cy={7.5} r={4.8} {...stroke(color, 2.2)} />

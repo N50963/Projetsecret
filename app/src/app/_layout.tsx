@@ -1,9 +1,11 @@
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
+import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { Button, ErrorText, Loading, Muted, Screen } from "../components/ui";
+import { warmIllustrations } from "../lib/images";
 import { SessionProvider, useSession } from "../lib/session";
 import { BRAND_FONT, useColors } from "../lib/theme";
 
@@ -15,6 +17,11 @@ import { BRAND_FONT, useColors } from "../lib/theme";
 function Gate() {
   const { ready, session, household, householdError, refreshHousehold } = useSession();
   const c = useColors();
+  const member = session !== null && household !== null;
+  // Dès l'ouverture : liste des photos lue sur le téléphone, puis toutes les photos téléchargées en avance.
+  useEffect(() => {
+    if (member) warmIllustrations();
+  }, [member]);
 
   if (!ready) {
     if (!householdError) return <Loading label="Ouverture…" />;
@@ -27,7 +34,6 @@ function Gate() {
     );
   }
   const signedIn = session !== null;
-  const member = signedIn && household !== null;
   return (
     <Stack screenOptions={{
       headerStyle: { backgroundColor: c.band }, headerTintColor: "#FFFFFF", headerShadowVisible: false,
@@ -45,9 +51,8 @@ function Gate() {
         <Stack.Screen name="lidl" options={{ title: "Tickets Lidl Plus" }} />
         <Stack.Screen name="propositions" options={{ title: "Propositions" }} />
         <Stack.Screen name="courses" options={{ title: "Liste de courses", animation: "none" }} />
-        <Stack.Screen name="budget" options={{ title: "Budget", animation: "none" }} />
         <Stack.Screen name="recettes" options={{ title: "Recettes" }} />
-        <Stack.Screen name="recette/[id]" options={{ title: "Recette" }} />
+        <Stack.Screen name="recette/[id]" options={{ title: "Recette", animation: "fade", animationDuration: 220 }} />
         <Stack.Screen name="ajout-recette" options={{ title: "Ajouter une recette" }} />
         <Stack.Screen name="parametres" options={{ title: "Paramètres", animation: "none" }} />
         <Stack.Screen name="preferences" options={{ title: "Préférences" }} />

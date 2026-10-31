@@ -9,7 +9,7 @@ Courses, Paramètres, Connexion, états et planche de composants), reproduit au 
   (`app/assets/fonts`, licence OFL) ;
 - logo en feuilles et icônes : tracés SVG des maquettes (`app/src/components/icons.tsx`, react-native-svg) ;
 - boutons pleine largeur à dégradé vert, puces beiges (vert doux bordé de vert quand elles sont choisies),
-  barre du bas Accueil · Courses · Budget · Profil.
+  barre du bas Accueil · Courses · Profil.
 
 Code : `app/` (Expo SDK 58, Expo Router, TypeScript). Données : Supabase (projet `avhqhvedgppuieellruz`).
 Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistral reste dans les secrets Supabase).
@@ -24,15 +24,18 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    téléphone, puis enregistrés dans Supabase.
 3. **Comparaison avec la liste de courses** : un article est coché tout seul quand son ingrédient apparaît sur un ticket
    postérieur à son ajout (vue `shopping_list_status`).
-4. **Repas de la semaine** : choix des déjeuners et dîners à prévoir et du temps disponible (préparation + cuisson),
-   jour par jour.
+4. **Accueil** : en grand, le menu du jour (ou, s'il n'y en a pas, le prochain menu de la semaine) ; puis les menus de
+   la semaine empilés en lignes (photo qui part du bord gauche et s'efface en fondu avant le nom, jour écrit en entier ;
+   un toucher ouvre la recette en fondu). Les repas à prévoir (déjeuners et dîners à cocher, temps disponible :
+   30 min, 1 h ou sans limite) sont masqués dès que des menus sont choisis, derrière le raccourci « Prévoir d'autres
+   repas ».
 5. **Propositions** (moteur `app/src/modules/planning`) : pour chaque repas, 3 recettes réalisables avec les courses,
    classées selon l'équilibre et la variété de la semaine. Swipe à droite pour choisir, à gauche pour passer (ou
    boutons). Si aucune ne convient : 3 recettes avec 1 à 3 ingrédients à acheter, puis 3 idées créées par Mistral.
    Les ingrédients manquants des recettes choisies vont sur la liste de courses.
 6. **Fiches recettes** : photo du plat (« Plus d'options » › Photo du plat : appareil photo ou galerie ; la photo du foyer remplace
    l'image créée par Mistral, qui ne l'écrase jamais), quantités pour le nombre de personnes, étapes « pas à pas »
-   avec un seul minuteur par étape. Chaque minuteur dit ce qu'il minute (« Cuire le riz », étape 6) : on s'y retrouve
+   avec un seul minuteur par étape ; la recette faite, « Bon appétit ! » propose de mettre sa propre photo du plat. Chaque minuteur dit ce qu'il minute (« Cuire le riz », étape 6) : on s'y retrouve
    quand plusieurs tournent. Avis sur 5 étoiles avec un commentaire facultatif (4-5 étoiles comptent comme « aimé »,
    3 comme « bof », 1-2 comme « pas aimé » pour le choix des menus). Le commentaire peut servir à faire adapter la
    recette par Mistral ; la version proposée s'ouvre dans un éditeur (nom, temps, ingrédients, étapes) et c'est
@@ -41,9 +44,7 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    température précisés : chaque étape avec une durée aura son minuteur). L'utilisateur relit et corrige tout dans
    l'éditeur avant d'enregistrer ; photo du plat facultative (appareil photo ou galerie), sinon Mistral crée une
    illustration.
-8. **Budget** : dépenses du mois d'après les tickets Lidl Plus, économies Lidl Plus, dépenses des 8 dernières semaines
-   (histogramme), derniers tickets.
-9. **Favoris** : cœur dans la bande verte de la fiche ; filtre « Favoris » dans la liste des recettes. « Ajouter à ma
+8. **Favoris** : cœur dans la bande verte de la fiche ; filtre « Favoris » dans la liste des recettes. « Ajouter à ma
    liste » met sur la liste de courses les ingrédients ni de placard ni achetés ces 7 derniers jours.
 
 Hors champ : petits-déjeuners, entrées, desserts, plateaux de fromages (seuls les plats principaux sont proposés).

@@ -9,8 +9,8 @@ import { cleanDraft, RecipeEditor } from "../../components/RecipeEditor";
 import { StarRating, starsLabel } from "../../components/StarRating";
 import { StepText, TimersBar } from "../../components/Steps";
 import { Body, Button, Card, ErrorText, Field, H1, H2, HeaderIcon, Loading, Muted, Pill, Row, Screen } from "../../components/ui";
-import { minutes, PROTEIN_LABEL, quantity } from "../../lib/format";
-import { illustrationUrls, uploadRecipePhoto, type Picture } from "../../lib/images";
+import { minutes, proteinLabel, quantity } from "../../lib/format";
+import { illustrationUrls, pictureOf, uploadRecipePhoto, type Picture } from "../../lib/images";
 import { adaptRecipeDraft, draftToInput, type Draft } from "../../lib/mistral";
 import { pickDishPhoto } from "../../lib/photo";
 import { useHousehold } from "../../lib/session";
@@ -23,17 +23,13 @@ import {
   toPayload, validateRecipe, type Recipe, type RecipeRating, type ShoppingNeed, type Stars,
 } from "../../modules/recipes";
 
-const ALLERGEN: Record<string, string> = {
-  gluten: "gluten", lait: "lait", oeuf: "œuf", poisson: "poisson", crustaces: "crustacés", fruits_a_coque: "fruits à coque",
-  soja: "soja", moutarde: "moutarde", celeri: "céleri", sesame: "sésame",
-};
-
 type Tab = "ingredients" | "preparation";
 
 /**
- * Fiche recette MenuMalin : photo, puces (temps, protéine, personnes), onglets Ingrédients (« à acheter », « Ajouter à ma
- * liste ») et Préparation (pas à pas, un minuteur par étape, écran gardé allumé), durées, avis sur 5 étoiles avec
- * commentaire, « Plus d'options » (adaptation par Mistral, photo du plat). Favoris et partage dans la bande verte.
+ * Fiche recette MenuMalin (ouverte en fondu) : photo, puces (temps, protéine, personnes), onglets Ingrédients (« à
+ * acheter », « Ajouter à ma liste ») et Préparation (pas à pas, un minuteur par étape, écran gardé allumé ; la recette
+ * faite, on peut mettre sa propre photo du plat), durées, avis sur 5 étoiles avec commentaire, « Plus d'options »
+ * (adaptation par Mistral, photo du plat). Favoris et partage dans la bande verte.
  */
 export default function FicheRecette() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -42,7 +38,8 @@ export default function FicheRecette() {
   const c = useColors();
   const { timers, now } = useTimers();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
-  const [image, setImage] = useState<Picture | null>(null);
+  // Photo connue du téléphone affichée tout de suite ; la liste est rafraîchie au chargement.
+  const [image, setImage] = useState<Picture | null>(() => pictureOf(id));
   const [servings, setServings] = useState(household.defaultServings);
   const [tab, setTab] = useState<Tab>("ingredients");
   const [needs, setNeeds] = useState<ShoppingNeed[]>([]);
@@ -104,6 +101,8 @@ export default function FicheRecette() {
 
   if (!recipe) return error ? <Screen title="Recette"><ErrorText>{error}</ErrorText></Screen> : <Loading />;
   const ingredients = scaleIngredients(recipe.ingredients, recipe.servings, servings);
+  // Minuteurs de cette recette qui tournent encore : le plat ne peut pas être prêt avant leur fin.
+  const cooking = timers.filter((t) => t.recipeId === recipe.id && !t.done);
   const toBuy = new Set(needs.filter((n) => !n.onList).map((n) => n.slug));
   const onList = new Set(needs.filter((n) => n.onList).map((n) => n.slug));
 
@@ -165,12 +164,11 @@ export default function FicheRecette() {
       <View style={styles.head}>
         <H1>{recipe.name}</H1>
         {recipe.description ? <Body style={{ color: c.muted }}>{recipe.description}</Body> : null}
-        {recipe.allergens.length ? <Muted>Allergènes : {recipe.allergens.map((a) => ALLERGEN[a] ?? a).join(", ")}</Muted> : null}
       </View>
 
       <View style={styles.pills}>
         <Pill icon="timer">{minutes(recipe.totalMin)}</Pill>
-        <Pill icon="cutlery">{PROTEIN_LABEL[recipe.mainProtein] ?? ""}</Pill>
+        {proteinLabel(recipe.mainProtein) ? <Pill icon="cutlery">{proteinLabel(recipe.mainProtein)}</Pill> : null}
         <View style={[styles.stepper, { backgroundColor: c.chip }]} accessibilityLabel="Nombre de personnes">
           <Pressable onPress={() => setServings((s) => Math.max(1, s - 1))} accessibilityRole="button" accessibilityLabel="Une personne de moins" style={styles.stepperButton}>
             <Icon name="minus" size={20} color={c.text} />
@@ -249,8 +247,17 @@ export default function FicheRecette() {
                   {isCurrent && (
                     <Row>
                       {n > 0 && <Button title="Précédente" kind="secondary" onPress={() => setCurrent(n - 1)} style={{ flex: 1 }} />}
-                      <Button title={n < recipe.steps.length - 1 ? "Étape suivante" : "C'est prêt"} onPress={() => setCurrent(n + 1)} style={{ flex: 1 }} />
+                      {n < recipe.steps.length - 1
+                        ? <Button title="Étape suivante" onPress={() => setCurrent(n + 1)} style={{ flex: 1 }} />
+                        : <Button title={cooking.length ? "Minuteurs en cours" : "C'est prêt"} onPress={() => setCurrent(n + 1)} disabled={cooking.length > 0}
+                          style={{ flex: 1 }} />}
                     </Row>
+                  )}
+                  {isCurrent && n === recipe.steps.length - 1 && cooking.length > 0 && (
+                    <Muted>
+                      Le plat sera prêt à la fin {cooking.length > 1 ? "des minuteurs" : "du minuteur"} :{" "}
+                      {cooking.map((t) => `${t.subject} (étape ${t.step}, ${clock((t.endsAt - now) / 1000)})`).join(", ")}.
+                    </Muted>
                   )}
                 </View>
               </Pressable>
@@ -259,6 +266,12 @@ export default function FicheRecette() {
           {current >= recipe.steps.length && (
             <Card>
               <H2>Bon appétit !</H2>
+              <Muted>Prenez votre plat en photo : elle remplacera l'image de la recette.</Muted>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <Button title="Prendre une photo" kind="secondary" icon="camera" onPress={() => changePhoto(true)} busy={busy === "photo"} style={{ flex: 1.6 }} />
+                <Button title="Galerie" kind="secondary" icon="gallery" onPress={() => changePhoto(false)} style={{ flex: 1 }} />
+              </View>
+              {info ? <Body style={{ color: c.greenInk }}>{info}</Body> : null}
               <Button title="Reprendre depuis le début" kind="secondary" onPress={() => setCurrent(0)} />
             </Card>
           )}

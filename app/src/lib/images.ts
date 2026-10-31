@@ -41,6 +41,7 @@ let refreshedAt = 0;
 let restored: Promise<void> | null = null;
 let refreshing: Promise<void> | null = null;
 const prefetched = new Set<string>();
+const inMemory = new Set<string>();
 
 function restore(): Promise<void> {
   restored ??= AsyncStorage.getItem(STORAGE_KEY)
@@ -96,6 +97,31 @@ export async function illustrationUrls(recipeIds: string[]): Promise<Record<stri
     else refreshing.catch(() => undefined);
   }
   return Object.fromEntries(recipeIds.map((id) => [id, pictures.get(id) ?? null]));
+}
+
+/**
+ * Image d'une recette connue de ce téléphone, sans attendre Supabase (null si elle n'est pas encore connue). Sert à
+ * afficher les photos au premier rendu ; `illustrationUrls` met la liste à jour en arrière-plan.
+ */
+export function pictureOf(recipeId: string | null | undefined): Picture | null {
+  return recipeId ? pictures.get(recipeId) ?? null : null;
+}
+
+/** Charge la liste gardée sur le téléphone, puis la rafraîchit et télécharge en avance toutes les photos (au démarrage). */
+export function warmIllustrations(): void {
+  illustrationUrls([]).catch(() => undefined);
+}
+
+/**
+ * Met en mémoire les photos qui vont s'afficher (cartes des propositions, menus de la semaine) : elles apparaissent
+ * alors instantanément, sans relecture du disque ni téléchargement.
+ */
+export function preloadPictures(recipeIds: Array<string | null | undefined>): void {
+  const uris = [...new Set(recipeIds.map((id) => pictureOf(id)?.uri).filter((u): u is string => Boolean(u)))]
+    .filter((u) => !inMemory.has(u));
+  if (!uris.length) return;
+  uris.forEach((u) => inMemory.add(u));
+  Image.prefetch(uris, "memory-disk").catch(() => uris.forEach((u) => inMemory.delete(u)));
 }
 
 /** Une image vient d'être créée ou remplacée : la liste sera relue à la prochaine demande. */

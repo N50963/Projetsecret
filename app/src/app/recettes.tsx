@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Icon } from "../components/icons";
 import { Illustration } from "../components/Illustration";
 import { Button, Chip, ErrorText, Field, Muted, Screen } from "../components/ui";
-import { minutes, PROTEIN_LABEL } from "../lib/format";
+import { minutes, proteinLabel } from "../lib/format";
 import { illustrationUrls, type Picture } from "../lib/images";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
@@ -65,7 +65,7 @@ export default function Recettes() {
             <View style={styles.text}>
               <Text style={[styles.name, { color: c.text }]} numberOfLines={2}>{r.name}</Text>
               <Text style={[styles.meta, { color: c.muted }]}>
-                {PROTEIN_LABEL[r.mainProtein]} • {minutes(r.totalMin)}{r.householdId ? " • du foyer" : ""}
+                {[proteinLabel(r.mainProtein), minutes(r.totalMin), r.householdId ? "du foyer" : ""].filter(Boolean).join(" • ")}
               </Text>
             </View>
             {favorites.has(r.id) ? <Icon name="heart" width={18} height={16} color={c.primary} /> : null}

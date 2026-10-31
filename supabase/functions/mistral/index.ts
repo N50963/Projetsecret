@@ -7,7 +7,8 @@
  *  - adapt_recipe      : adapte une recette d'après un avis (étoiles et commentaire : « trop sec », « sans champignons »...) ;
  *  - illustrate        : crée l'illustration d'une recette (génération d'image Mistral) et l'enregistre en JPEG ;
  *  - illustrate_missing: tâche planifiée (pg_cron, jeton x-cron-token) qui crée les illustrations manquantes (et remplace
- *                        celles de l'essai Pollinations), quelques-unes par passage, selon le quota gratuit de Mistral.
+ *                        celles de l'essai Pollinations), quelques-unes par passage, selon le quota gratuit de Mistral ;
+ *  - shrink_images     : (jeton x-cron-token) réduit à 800 px les images enregistrées avant cette limite.
  * Les recettes renvoyées sont des brouillons : l'application les vérifie et les fait confirmer avant de les enregistrer.
  */
 
@@ -29,8 +30,8 @@ const LOG_RETENTION_DAYS = 90;
 const IMAGE_PAUSE_MS = 3600 * 1000;
 /** Tâche planifiée : une nouvelle image n'est commencée que dans ce délai (une image prend 15 à 30 s, limite de 150 s). */
 const BATCH_START_BUDGET_MS = 45_000;
-/** Qualité JPEG des images enregistrées (≈ 150 Ko au lieu de 1,5 Mo en PNG : affichage rapide, plan gratuit Supabase). */
-const JPEG_QUALITY = 85;
+/** Qualité JPEG des images enregistrées (800 px : ≈ 70 Ko au lieu de 1,5 Mo en PNG ; affichage rapide, plan gratuit Supabase). */
+const JPEG_QUALITY = 75;
 
 const UNITS = ["g", "ml", "piece", "cs", "cc", "pincee"];
 const BASE_UNITS = ["g", "ml", "piece"];
@@ -295,21 +296,89 @@ async function mistralImage(db: SupabaseClient, prompt: string): Promise<Uint8Ar
   return new Uint8Array(await file.arrayBuffer());
 }
 
-/** Image enregistrée en JPEG (les PNG de Mistral pèsent ≈ 10 fois plus). */
-function asJpeg(bytes: Uint8Array): Uint8Array {
-  if (bytes[0] === 0xff && bytes[1] === 0xd8) return bytes;
-  if (bytes[0] !== 0x89 || bytes[1] !== 0x50) return bytes;
-  const png = decodePng(bytes);
-  const { width, height, channels } = png;
-  const rgba = new Uint8Array(width * height * 4);
-  const data = png.data as Uint8Array;
-  for (let i = 0, j = 0; i < width * height; i++, j += channels) {
-    rgba[i * 4] = data[j];
-    rgba[i * 4 + 1] = data[channels >= 3 ? j + 1 : j];
-    rgba[i * 4 + 2] = data[channels >= 3 ? j + 2 : j];
-    rgba[i * 4 + 3] = 255;
+/** Largeur des images enregistrées : assez pour la photo pleine largeur d'un téléphone, légère à télécharger (≈ 70 Ko). */
+const IMAGE_WIDTH = 800;
+
+/** Pixels RGBA d'une image PNG ou JPEG. */
+function decodeImage(bytes: Uint8Array): { width: number; height: number; rgba: Uint8Array } {
+  if (bytes[0] === 0x89 && bytes[1] === 0x50) {
+    const png = decodePng(bytes);
+    const { width, height, channels } = png;
+    const data = png.data as Uint8Array;
+    const rgba = new Uint8Array(width * height * 4);
+    for (let i = 0, j = 0; i < width * height; i++, j += channels) {
+      rgba[i * 4] = data[j];
+      rgba[i * 4 + 1] = data[channels >= 3 ? j + 1 : j];
+      rgba[i * 4 + 2] = data[channels >= 3 ? j + 2 : j];
+      rgba[i * 4 + 3] = 255;
+    }
+    return { width, height, rgba };
   }
-  return jpeg.encode({ data: rgba, width, height }, JPEG_QUALITY).data;
+  const img = jpeg.decode(bytes, { useTArray: true, formatAsRGBA: true });
+  return { width: img.width, height: img.height, rgba: img.data as Uint8Array };
+}
+
+/** Réduction par moyenne des pixels couverts (nette, sans crénelage). */
+function downscale(src: { width: number; height: number; rgba: Uint8Array }, width: number) {
+  if (src.width <= width) return src;
+  const height = Math.round(src.height * width / src.width);
+  const out = new Uint8Array(width * height * 4);
+  const fx = src.width / width;
+  const fy = src.height / height;
+  for (let y = 0; y < height; y++) {
+    const y0 = Math.floor(y * fy);
+    const y1 = Math.max(y0 + 1, Math.floor((y + 1) * fy));
+    for (let x = 0; x < width; x++) {
+      const x0 = Math.floor(x * fx);
+      const x1 = Math.max(x0 + 1, Math.floor((x + 1) * fx));
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let yy = y0; yy < y1; yy++) {
+        let k = (yy * src.width + x0) * 4;
+        for (let xx = x0; xx < x1; xx++, k += 4) {
+          r += src.rgba[k];
+          g += src.rgba[k + 1];
+          b += src.rgba[k + 2];
+          n++;
+        }
+      }
+      const o = (y * width + x) * 4;
+      out[o] = r / n;
+      out[o + 1] = g / n;
+      out[o + 2] = b / n;
+      out[o + 3] = 255;
+    }
+  }
+  return { width, height, rgba: out };
+}
+
+/** Image enregistrée en JPEG de 800 px de large (les PNG de Mistral pèsent ≈ 20 fois plus). */
+function asJpeg(bytes: Uint8Array): Uint8Array {
+  const img = downscale(decodeImage(bytes), IMAGE_WIDTH);
+  return jpeg.encode({ data: img.rgba, width: img.width, height: img.height }, JPEG_QUALITY).data;
+}
+
+/**
+ * Réduit les images déjà enregistrées (anciennes images de 1024 px, ≈ 370 Ko) : quelques-unes par appel pour rester
+ * dans le temps de calcul d'une fonction. La nouvelle date change le lien, donc le cache des téléphones.
+ */
+async function shrinkImages(db: SupabaseClient, limit: number) {
+  const { data: files } = await db.storage.from("recipe-images").list("common", { limit: 200 });
+  const big = (files ?? []).filter((f: any) => (f.metadata?.size ?? 0) > 160_000).slice(0, limit);
+  const done: string[] = [];
+  for (const f of big) {
+    const path = `common/${f.name}`;
+    const file = await db.storage.from("recipe-images").download(path);
+    if (file.error || !file.data) continue;
+    const small = asJpeg(new Uint8Array(await file.data.arrayBuffer()));
+    const target = path.replace(/\.(png|webp)$/, ".jpg");
+    const up = await db.storage.from("recipe-images").upload(target, small, { contentType: "image/jpeg", upsert: true });
+    if (up.error) continue;
+    await db.from("recipe_images").update({ storage_path: target, created_at: new Date().toISOString() }).eq("storage_path", path);
+    if (target !== path) await db.storage.from("recipe-images").remove([path]);
+    done.push(`${f.name} ${Math.round((f.metadata?.size ?? 0) / 1024)} → ${Math.round(small.length / 1024)} Ko`);
+  }
+  const left = (files ?? []).filter((f: any) => (f.metadata?.size ?? 0) > 160_000).length - done.length;
+  return { shrunk: done, remaining: left };
 }
 
 /** Le foyer a mis sa propre photo du plat (recette du foyer) : elle prime sur toute image créée. */
@@ -388,11 +457,12 @@ Deno.serve(async (req) => {
     return json({ error: "Corps JSON attendu" }, 400);
   }
 
-  if (body.action === "illustrate_missing") {
+  if (body.action === "illustrate_missing" || body.action === "shrink_images") {
     try {
       const db = admin();
       const expected = (await db.from("app_settings").select("value").eq("key", "cron_token").maybeSingle()).data?.value;
       if (!expected || req.headers.get("x-cron-token") !== expected) throw new HttpError(401, "Jeton de tâche planifiée invalide.");
+      if (body.action === "shrink_images") return json(await shrinkImages(db, Math.min(6, Math.max(1, Number(body.limit ?? 3)))));
       return json(await illustrateMissing(db));
     } catch (e) {
       return json({ error: e instanceof Error ? e.message : String(e) }, e instanceof HttpError ? e.status : 500);
