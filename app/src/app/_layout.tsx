@@ -1,14 +1,16 @@
+import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { Button, ErrorText, Loading, Muted, Screen } from "../components/ui";
 import { SessionProvider, useSession } from "../lib/session";
-import { useColors } from "../lib/theme";
+import { BRAND_FONT, useColors } from "../lib/theme";
 
 /**
  * Écrans accessibles selon l'état du compte : connexion, puis code du foyer, puis l'application. Un écran dont la
  * condition est fausse n'est pas déclaré dans la pile ; Expo Router redirige alors vers `redirectTo`.
+ * En-têtes : bande verte avec titre blanc (maquettes MenuMalin) ; l'accueil et la connexion ont leur propre en-tête.
  */
 function Gate() {
   const { ready, session, household, householdError, refreshHousehold } = useSession();
@@ -28,35 +30,39 @@ function Gate() {
   const member = signedIn && household !== null;
   return (
     <Stack screenOptions={{
-      headerStyle: { backgroundColor: c.background }, headerTintColor: c.text, headerShadowVisible: false,
-      contentStyle: { backgroundColor: c.background }, headerBackTitle: "Retour",
+      headerStyle: { backgroundColor: c.band }, headerTintColor: "#FFFFFF", headerShadowVisible: false,
+      headerTitleStyle: { fontSize: 19, fontWeight: "700" }, contentStyle: { backgroundColor: c.background },
+      headerBackButtonDisplayMode: "minimal", animation: "slide_from_right",
     }}>
       <Stack.Protected guard={!signedIn} redirectTo={member ? "/" : "/foyer"}>
-        <Stack.Screen name="connexion" />
+        <Stack.Screen name="connexion" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={signedIn && !member} redirectTo={member ? "/" : "/connexion"}>
-        <Stack.Screen name="foyer" />
+        <Stack.Screen name="foyer" options={{ title: "Votre foyer" }} />
       </Stack.Protected>
       <Stack.Protected guard={member} redirectTo={signedIn ? "/foyer" : "/connexion"}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="lidl" />
-        <Stack.Screen name="propositions" />
-        <Stack.Screen name="courses" />
-        <Stack.Screen name="recettes" />
-        <Stack.Screen name="recette/[id]" />
-        <Stack.Screen name="ajout-recette" />
-        <Stack.Screen name="parametres" />
-        <Stack.Screen name="preferences" />
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="lidl" options={{ title: "Tickets Lidl Plus" }} />
+        <Stack.Screen name="propositions" options={{ title: "Propositions" }} />
+        <Stack.Screen name="courses" options={{ title: "Liste de courses", animation: "none" }} />
+        <Stack.Screen name="budget" options={{ title: "Budget", animation: "none" }} />
+        <Stack.Screen name="recettes" options={{ title: "Recettes" }} />
+        <Stack.Screen name="recette/[id]" options={{ title: "Recette" }} />
+        <Stack.Screen name="ajout-recette" options={{ title: "Ajouter une recette" }} />
+        <Stack.Screen name="parametres" options={{ title: "Paramètres", animation: "none" }} />
+        <Stack.Screen name="preferences" options={{ title: "Préférences" }} />
       </Stack.Protected>
     </Stack>
   );
 }
 
 export default function RootLayout() {
+  // Police du nom MenuMalin ; le reste du texte utilise Roboto, la police du système Android.
+  useFonts({ [BRAND_FONT]: require("../../assets/fonts/Cabin-BoldItalic.ttf") });
   return (
     <SafeAreaProvider>
       <SessionProvider>
-        <StatusBar style="auto" />
+        <StatusBar style="light" />
         <Gate />
       </SessionProvider>
     </SafeAreaProvider>

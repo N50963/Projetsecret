@@ -1,10 +1,11 @@
+import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { Illustration } from "../components/Illustration";
 import { SwipeCard, type SwipeDirection } from "../components/SwipeCard";
-import { Body, Button, Card, ErrorText, H2, Loading, Muted, Row, Screen } from "../components/ui";
+import { Icon } from "../components/icons";
+import { Button, ErrorText, Loading, Pill, Screen, Tag } from "../components/ui";
 import { dayLabel, mealLabel, minutes, PROTEIN_LABEL } from "../lib/format";
 import { forgetIllustration, illustrationUrls, type Picture } from "../lib/images";
 import { draftToInput, generateRecipes, illustrateRecipe, type Draft } from "../lib/mistral";
@@ -255,70 +256,128 @@ export default function Propositions() {
   const slotIdeas = ideas?.slotId === current.id ? ideas : null;
   const draft = exhausted ? slotIdeas?.drafts[seen] : undefined;
   const waiting = slotIdeas ? slotIdeas.pending : 3;
+  const ready = slotIdeas ? slotIdeas.drafts.length : 0;
+  const failed = exhausted && !draft && waiting === 0;
+  const tag = exhausted
+    ? <Tag label="idée Mistral" tone="plain" icon="sparkle" />
+    : round === 1 || !top?.missing.length
+      ? <Tag label="avec vos courses" tone="green" />
+      : <Tag label={`${top.missing.length} à acheter`} tone="orange" />;
+  const card = (name: string, picture: Picture | null | undefined, duration: number, protein: string, ingredients: string, toBuy?: string) => (
+    <View style={[styles.card, { backgroundColor: c.background, borderColor: c.border }]}>
+      <View style={{ flex: 1, minHeight: 160, backgroundColor: c.chip }}>
+        {picture
+          ? <Image source={{ uri: picture.uri, cacheKey: picture.cacheKey }} cachePolicy="memory-disk" style={StyleSheet.absoluteFill} contentFit="cover"
+            transition={0} accessibilityLabel={name} />
+          : (
+            <View style={styles.placeholder} accessibilityLabel="Photo du plat en préparation">
+              <Icon name="image" size={44} color={c.muted} />
+              <Text style={{ color: c.muted, fontSize: 16 }}>Photo du plat en préparation</Text>
+            </View>
+          )}
+      </View>
+      <View style={styles.cardText}>
+        <Text style={[styles.name, { color: c.text }]} numberOfLines={2}>{name}</Text>
+        <View style={{ flexDirection: "row", gap: 7.5 }}>
+          <Pill icon="timer">{minutes(duration)}</Pill>
+          <Pill icon="cutlery">{protein}</Pill>
+        </View>
+        <Text style={{ color: c.muted, fontSize: 16, lineHeight: 21 }} numberOfLines={2}>{ingredients}</Text>
+        {toBuy ? (
+          <View style={[styles.toBuy, { backgroundColor: c.chip }]}>
+            <Icon name="cartFilled" width={22} height={20} color={c.orangeInk} />
+            <Text style={{ color: c.orangeInk, fontSize: 16, fontWeight: "500", flex: 1 }}>À acheter : {toBuy}</Text>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+
   return (
-    <Screen title="Propositions">
-      <H2>{dayLabel(current.date, today)} · {mealLabel(current.mealType)}</H2>
-      <Muted>
-        Repas {done + 1} sur {ordered.length} · {minutes(current.maxTotalMin)}{current.maxTotalMin ? " au plus" : ""} · {exhausted
-          ? "idées de Mistral" : round === 1 ? "avec vos courses" : "avec 1 à 3 ingrédients à acheter"}
-      </Muted>
-      <ErrorText>{error}</ErrorText>
+    <Screen title={`${dayLabel(current.date, today)} · ${mealLabel(current.mealType)}`} scroll={false} padded={false}>
+      <View style={styles.line}>
+        <Text style={{ color: c.muted, fontSize: 15 }}>
+          Repas {done + 1} sur {ordered.length} · {current.maxTotalMin ? `${minutes(current.maxTotalMin)} au plus` : "sans limite"} ·
+        </Text>
+        {tag}
+      </View>
+      <View style={{ paddingHorizontal: 14 }}><ErrorText>{error}</ErrorText></View>
 
-      {top && !exhausted && (
-        <>
-          <SwipeCard key={`${current.id}-${top.recipeId}`} swipeRef={swipe} onSwipe={(d) => onSwipe(top, d)} onPress={() => router.push(`/recette/${top.recipeId}`)}>
-            <Card style={{ padding: 0, overflow: "hidden" }}>
-              <Illustration picture={images[top.recipeId]} height={230} rounded={0} />
-              <View style={{ padding: 16, gap: 6 }}>
-                <H2>{top.name}</H2>
-                <Muted>{minutes(top.totalMin)} · {PROTEIN_LABEL[top.mainProtein] ?? top.mainProtein}</Muted>
-                <Body>{ctx.recipes.find((r) => r.id === top.recipeId)?.ingredients.filter((i) => !i.optional).map((i) => i.label).join(" · ")}</Body>
-                {top.missing.length > 0 && <Body style={{ color: c.accent, fontWeight: "600" }}>À acheter : {top.missing.map((m) => m.label).join(", ")}</Body>}
-                <Muted>Touchez la photo pour la recette complète</Muted>
-              </View>
-            </Card>
+      <View style={styles.main}>
+        <View style={[styles.pile, { backgroundColor: c.card, borderColor: c.border }]} />
+        {top && !exhausted && (
+          <SwipeCard key={`${current.id}-${top.recipeId}`} swipeRef={swipe} onSwipe={(d) => onSwipe(top, d)} style={StyleSheet.absoluteFill}
+            onPress={() => router.push(`/recette/${top.recipeId}`)}>
+            {card(top.name, images[top.recipeId], top.totalMin, PROTEIN_LABEL[top.mainProtein] ?? top.mainProtein,
+              ctx.recipes.find((r) => r.id === top.recipeId)?.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", ") ?? "",
+              top.missing.length ? top.missing.map((m) => m.label).join(", ") : undefined)}
           </SwipeCard>
-          <Row>
-            <Button title="✕ Autre idée" kind="secondary" onPress={() => swipe.current?.("left")} style={{ flex: 1 }} disabled={busy !== null} />
-            <Button title="✓ Je choisis" onPress={() => swipe.current?.("right")} style={{ flex: 1 }} busy={busy === "accept"} />
-          </Row>
-        </>
-      )}
-
-      {draft && (
-        <>
-          <SwipeCard key={`draft-${seen}-${draft.recipe.name}`} swipeRef={swipe} onSwipe={(d) => onDraftSwipe(draft, d)}>
-            <Card style={{ padding: 0, overflow: "hidden" }}>
-              <Illustration picture={null} height={180} rounded={0} />
-              <View style={{ padding: 16, gap: 6 }}>
-                <H2>{draft.recipe.name}</H2>
-                <Muted>{minutes(draft.recipe.prep_min + draft.recipe.cook_min)} · {PROTEIN_LABEL[draft.recipe.main_protein]}</Muted>
-                {draft.recipe.description ? <Body>{draft.recipe.description}</Body> : null}
-                <Muted>{draft.recipe.ingredients.filter((i) => !i.optional).map((i) => i.label).join(" · ")}</Muted>
-              </View>
-            </Card>
+        )}
+        {draft && (
+          <SwipeCard key={`draft-${seen}-${draft.recipe.name}`} swipeRef={swipe} onSwipe={(d) => onDraftSwipe(draft, d)} style={StyleSheet.absoluteFill}>
+            {card(draft.recipe.name, null, draft.recipe.prep_min + draft.recipe.cook_min, PROTEIN_LABEL[draft.recipe.main_protein] ?? "",
+              draft.recipe.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", "))}
           </SwipeCard>
-          <Row>
-            <Button title="✕ Non" kind="secondary" onPress={() => swipe.current?.("left")} style={{ flex: 1 }} disabled={busy !== null} />
-            <Button title="✓ Je choisis" onPress={() => swipe.current?.("right")} style={{ flex: 1 }} busy={busy === "accept"} />
-          </Row>
-          <Muted>Choisie, la recette est ajoutée à vos recettes ; ses ingrédients manquants vont sur la liste de courses.</Muted>
-        </>
-      )}
+        )}
+        {exhausted && !draft && waiting > 0 && (
+          <View style={[styles.state, { backgroundColor: c.card, borderColor: c.border }]} accessibilityRole="progressbar">
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              {[0, 1, 2].map((k) => {
+                const isReady = k < ready;
+                return (
+                  <View key={k} style={[styles.slot, { backgroundColor: isReady ? c.greenSoft : c.chip }]}>
+                    <Icon name={isReady ? "check" : "sparkle"} size={30} color={isReady ? c.greenInk : c.muted} />
+                  </View>
+                );
+              })}
+            </View>
+            <Text style={[styles.stateTitle, { color: c.text }]}>
+              {seen ? `Mistral prépare encore ${waiting} idée${waiting > 1 ? "s" : ""}…` : "Mistral prépare 3 idées…"}
+            </Text>
+          </View>
+        )}
+        {failed && (
+          <View style={[styles.state, { backgroundColor: c.card, borderColor: c.border }]} accessibilityRole="alert">
+            <Icon name="alert" size={44} color={c.text} />
+            <Text style={[styles.stateTitle, { color: c.text }]}>
+              {slotIdeas?.drafts.length ? "Plus d'idées pour ce repas" : "Mistral ne répond pas pour le moment"}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 16, textAlign: "center" }}>
+              {!slotIdeas?.drafts.length && slotIdeas?.failed ? slotIdeas.failed : "Les repas déjà choisis sont enregistrés."}
+            </Text>
+          </View>
+        )}
+      </View>
 
-      {exhausted && !draft && waiting > 0 && (
-        <Card>
-          <Loading label={seen ? `Mistral prépare encore ${waiting} idée${waiting > 1 ? "s" : ""}…` : "Mistral prépare de nouvelles idées…"} />
-        </Card>
-      )}
-      {exhausted && !draft && waiting === 0 && (
-        <Card>
-          <Body>{slotIdeas?.drafts.length ? "Plus d'idées pour ce repas." : "Les idées de Mistral n'ont pas pu être préparées."}</Body>
-          {!slotIdeas?.drafts.length && slotIdeas?.failed ? <Muted>{slotIdeas.failed}</Muted> : null}
+      <View style={styles.footer}>
+        {failed ? (
           <Button title={slotIdeas?.drafts.length ? "Demander 3 autres idées" : "Réessayer"} onPress={() => startIdeas(current, ctx)} />
-          <Button title="Passer ce repas" kind="secondary" onPress={skip} />
-        </Card>
-      )}
+        ) : (top && !exhausted) || draft ? (
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <Button title="Autre idée" kind="secondary" icon="close" onPress={() => swipe.current?.("left")} style={{ flex: 1 }} disabled={busy !== null} />
+            <Button title="Je choisis" icon="check" onPress={() => swipe.current?.("right")} style={{ flex: 1.25 }} busy={busy === "accept"} />
+          </View>
+        ) : <View style={{ height: 48 }} />}
+        <Pressable onPress={skip} accessibilityRole="button" style={styles.skip}>
+          <Text style={{ color: c.muted, fontSize: 16, fontWeight: "500", textDecorationLine: "underline" }}>Passer ce repas</Text>
+        </Pressable>
+      </View>
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  line: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 9, marginHorizontal: 19, minHeight: 28, flexWrap: "wrap" },
+  main: { flex: 1, marginTop: 10, marginHorizontal: 14 },
+  pile: { position: "absolute", left: 12, right: 12, top: 20, bottom: -9, borderRadius: 17, borderWidth: 1 },
+  card: { flex: 1, borderRadius: 17, borderWidth: 1, overflow: "hidden" },
+  placeholder: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  cardText: { paddingTop: 7, paddingHorizontal: 14, paddingBottom: 12, gap: 9 },
+  name: { fontSize: 26.5, lineHeight: 28, fontWeight: "700" },
+  toBuy: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 38, borderRadius: 13, paddingHorizontal: 12, paddingVertical: 6 },
+  state: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: 17, borderWidth: 1, padding: 24, alignItems: "center", justifyContent: "center", gap: 18 },
+  slot: { width: 84, height: 84, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  stateTitle: { fontSize: 19, lineHeight: 25, fontWeight: "700", textAlign: "center" },
+  footer: { paddingTop: 21, paddingHorizontal: 14, paddingBottom: 6, gap: 2 },
+  skip: { height: 48, alignItems: "center", justifyContent: "center" },
+});

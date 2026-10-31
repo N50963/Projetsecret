@@ -183,6 +183,9 @@ export interface ShoppingItem {
   createdAt: string;
   checkedAt: string | null;
   boughtAt: string | null;
+  /** Plat pour lequel l'article a été mis sur la liste (photo et nom dans la liste de courses). */
+  recipeId: string | null;
+  recipeName: string | null;
 }
 
 /** Liste de courses comparée aux derniers tickets (articles achetés depuis leur ajout). */
@@ -191,10 +194,20 @@ export async function getShoppingList(supabase: SupabaseClient, householdId: str
   const { data, error } = await supabase.from("shopping_list_status").select("*").eq("household_id", householdId)
     .gte("created_at", since).order("created_at", { ascending: false });
   check(error, "Liste de courses illisible");
-  return ((data ?? []) as Row[]).map((i) => ({
-    id: i.id, label: i.label, quantity: i.quantity === null ? null : Number(i.quantity), unit: i.unit, createdAt: i.created_at,
-    checkedAt: i.checked_at, boughtAt: i.bought_at,
-  }));
+  const rows = (data ?? []) as Row[];
+  const slotIds = [...new Set(rows.map((i) => i.slot_id).filter(Boolean))];
+  const { data: slots } = slotIds.length ? await supabase.from("meal_slots").select("id, recipe_id").in("id", slotIds) : { data: [] };
+  const recipeOfSlot = new Map(((slots ?? []) as Row[]).map((r) => [r.id, r.recipe_id as string | null]));
+  const recipeIds = [...new Set([...recipeOfSlot.values()].filter((v): v is string => Boolean(v)))];
+  const { data: names } = recipeIds.length ? await supabase.from("recipe_catalog").select("id, name").in("id", recipeIds) : { data: [] };
+  const nameOf = new Map(((names ?? []) as Row[]).map((n) => [n.id, n.name as string]));
+  return rows.map((i) => {
+    const recipeId = i.slot_id ? recipeOfSlot.get(i.slot_id) ?? null : null;
+    return {
+      id: i.id, label: i.label, quantity: i.quantity === null ? null : Number(i.quantity), unit: i.unit, createdAt: i.created_at,
+      checkedAt: i.checked_at, boughtAt: i.bought_at, recipeId, recipeName: recipeId ? nameOf.get(recipeId) ?? null : null,
+    };
+  });
 }
 
 export async function setShoppingItemChecked(supabase: SupabaseClient, itemId: string, checked: boolean) {
@@ -224,6 +237,9 @@ export interface WeekSlot {
   maxTotalMin: number | null;
   recipeId: string | null;
   name: string | null;
+  /** Temps total de la recette choisie (minutes) et difficulté (1 à 3). */
+  totalMin: number | null;
+  difficulty: number | null;
 }
 
 /** Repas enregistrés entre deux dates, avec le nom de la recette choisie (calendrier de l'accueil). */
@@ -233,13 +249,17 @@ export async function getWeekSlots(supabase: SupabaseClient, householdId: string
   check(error, "Repas illisibles");
   const rows = (data ?? []) as Row[];
   const ids = [...new Set(rows.map((r) => r.recipe_id).filter(Boolean))];
-  const { data: names, error: e2 } = ids.length ? await supabase.from("recipe_catalog").select("id, name").in("id", ids) : { data: [], error: null };
+  const { data: names, error: e2 } = ids.length
+    ? await supabase.from("recipe_catalog").select("id, name, total_min, difficulty").in("id", ids) : { data: [], error: null };
   check(e2, "Recettes illisibles");
-  const nameOf = new Map(((names ?? []) as Row[]).map((n) => [n.id, n.name]));
-  return rows.map((r) => ({
-    slotId: r.id, date: r.meal_date, mealType: r.meal_type, status: r.status, maxTotalMin: r.max_total_min, recipeId: r.recipe_id,
-    name: r.recipe_id ? nameOf.get(r.recipe_id) ?? "Recette" : null,
-  }));
+  const recipeOf = new Map(((names ?? []) as Row[]).map((n) => [n.id, n]));
+  return rows.map((r) => {
+    const recipe = r.recipe_id ? recipeOf.get(r.recipe_id) : undefined;
+    return {
+      slotId: r.id, date: r.meal_date, mealType: r.meal_type, status: r.status, maxTotalMin: r.max_total_min, recipeId: r.recipe_id,
+      name: r.recipe_id ? recipe?.name ?? "Recette" : null, totalMin: recipe?.total_min ?? null, difficulty: recipe?.difficulty ?? null,
+    };
+  });
 }
 
 /** Annule le menu choisi : le repas redevient à prévoir et ses articles non cochés quittent la liste de courses. */

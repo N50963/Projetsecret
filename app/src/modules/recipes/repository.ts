@@ -189,6 +189,51 @@ export async function rateRecipe(
   check(error, "Avis non enregistré");
 }
 
+/** La recette est-elle dans les favoris du foyer ? */
+export async function isFavorite(supabase: SupabaseClient, householdId: string, recipeId: string): Promise<boolean> {
+  const { data, error } = await supabase.from("recipe_favorites").select("recipe_id").eq("household_id", householdId).eq("recipe_id", recipeId).limit(1);
+  check(error, "Favoris illisibles");
+  return (data ?? []).length > 0;
+}
+
+export async function setFavorite(supabase: SupabaseClient, householdId: string, recipeId: string, favorite: boolean): Promise<void> {
+  const { error } = favorite
+    ? await supabase.from("recipe_favorites").upsert({ household_id: householdId, recipe_id: recipeId }, { onConflict: "household_id,recipe_id" })
+    : await supabase.from("recipe_favorites").delete().eq("household_id", householdId).eq("recipe_id", recipeId);
+  check(error, "Favori non enregistré");
+}
+
+export async function listFavorites(supabase: SupabaseClient, householdId: string): Promise<Set<string>> {
+  const { data, error } = await supabase.from("recipe_favorites").select("recipe_id").eq("household_id", householdId);
+  check(error, "Favoris illisibles");
+  return new Set(((data ?? []) as Row[]).map((r) => r.recipe_id as string));
+}
+
+/** Ingrédient de la recette à acheter (ni de placard, ni acheté ces 7 derniers jours). */
+export interface ShoppingNeed {
+  slug: string;
+  label: string;
+  quantity: number | null;
+  unit: string | null;
+  /** Déjà sur la liste de courses. */
+  onList: boolean;
+}
+
+export async function getShoppingNeeds(supabase: SupabaseClient, householdId: string, recipeId: string, servings: number): Promise<ShoppingNeed[]> {
+  const { data, error } = await supabase.rpc("recipe_shopping_needs", { p_household: householdId, p_recipe_id: recipeId, p_servings: servings });
+  check(error, "Ingrédients à acheter illisibles");
+  return ((data ?? []) as Row[]).map((n) => ({
+    slug: n.slug, label: n.label, quantity: n.quantity === null ? null : Number(n.quantity), unit: n.unit, onList: n.on_list,
+  }));
+}
+
+/** Met sur la liste de courses les ingrédients à acheter ; renvoie le nombre d'articles ajoutés. */
+export async function addRecipeToShoppingList(supabase: SupabaseClient, householdId: string, recipeId: string, servings: number): Promise<number> {
+  const { data, error } = await supabase.rpc("add_recipe_to_shopping_list", { p_household: householdId, p_recipe_id: recipeId, p_servings: servings });
+  check(error, "Liste de courses non complétée");
+  return Number(data ?? 0);
+}
+
 export interface CandidateOptions {
   days?: number;
   maxMissing?: number;

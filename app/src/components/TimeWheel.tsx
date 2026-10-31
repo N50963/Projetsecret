@@ -41,16 +41,16 @@ export function TimeWheel({ value, onChange }: { value: number | null; onChange:
   };
 
   return (
-    <View style={{ height: ITEM * 3 }} accessible accessibilityRole="adjustable" accessibilityLabel="Temps disponible"
+    <View style={[styles.wheel, { backgroundColor: c.chip }]} accessible accessibilityRole="adjustable" accessibilityLabel="Temps disponible"
       accessibilityValue={{ text: minutes(value) }}
       accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
       onAccessibilityAction={(e) => select(Math.min(TIME_CHOICES.length - 1, Math.max(0, index + (e.nativeEvent.actionName === "increment" ? 1 : -1))))}>
-      <View pointerEvents="none" style={[styles.band, { backgroundColor: c.chip }]} />
+      <View pointerEvents="none" style={[styles.band, { backgroundColor: c.card, borderColor: c.border }]} />
       <ScrollView ref={scroll} nestedScrollEnabled showsVerticalScrollIndicator={false} snapToInterval={ITEM} decelerationRate="fast"
         scrollEventThrottle={16} onScroll={onScroll} onLayout={() => scrollTo(index, false)} contentContainerStyle={{ paddingVertical: ITEM }}>
         {TIME_CHOICES.map((t, i) => (
           <Pressable key={String(t)} onPress={() => select(i)} style={styles.item}>
-            <Text style={{ fontSize: i === live ? 16 : 14, fontWeight: i === live ? "700" : "400", color: i === live ? c.text : c.muted }}>
+            <Text style={{ fontSize: i === live ? 16 : 15, fontWeight: i === live ? "700" : "400", color: i === live ? c.text : c.muted }}>
               {minutes(t)}
             </Text>
           </Pressable>
@@ -60,7 +60,9 @@ export function TimeWheel({ value, onChange }: { value: number | null; onChange:
   );
 }
 
+/** Roue de la maquette MenuMalin : 112 × 104, fond beige, valeur retenue dans un bandeau clair. */
 const styles = StyleSheet.create({
-  band: { position: "absolute", left: 0, right: 0, top: ITEM, height: ITEM, borderRadius: 10 },
+  wheel: { width: 112, height: ITEM * 3 + 2, paddingVertical: 1, borderRadius: 13, overflow: "hidden" },
+  band: { position: "absolute", left: 5, right: 5, top: ITEM + 1, height: ITEM, borderRadius: 10, borderWidth: 1 },
   item: { height: ITEM, alignItems: "center", justifyContent: "center" },
 });

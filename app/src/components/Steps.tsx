@@ -1,11 +1,11 @@
 /** Étapes de recette « pas à pas » : texte avec durées, températures et feu en évidence ; barre des minuteurs. */
 
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { clock, stepSegments } from "../lib/steps";
 import { stopTimer, useTimers } from "../lib/timers";
-import { useColors } from "../lib/theme";
+import { CARD_SHADOW, useColors } from "../lib/theme";
+import { Icon } from "./icons";
 
 export function StepText({ text, current, done }: { text: string; current?: boolean; done?: boolean }) {
   const c = useColors();
@@ -28,10 +28,12 @@ export function TimersBar() {
   const c = useColors();
   if (!timers.length) return null;
   return (
-    <View style={[styles.bar, { backgroundColor: c.card, borderColor: c.border }]}>
+    <View style={[styles.bar, { backgroundColor: c.card, borderColor: c.cardLine }, CARD_SHADOW]}>
       {timers.map((t) => (
         <View key={t.id} style={styles.item}>
-          <Ionicons name={t.done ? "alarm" : "timer-outline"} size={22} color={t.done ? c.danger : c.primary} />
+          <View style={[styles.icon, { backgroundColor: t.done ? c.dangerSoft : c.greenSoft }]}>
+            <Icon name={t.done ? "bell" : "timer"} size={20} color={t.done ? c.danger : c.greenInk} />
+          </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.label, { color: c.text }]} numberOfLines={1}>{t.subject}</Text>
             <Text style={[styles.detail, { color: c.muted }]} numberOfLines={1}>Étape {t.step} · {t.recipeName}</Text>
@@ -39,7 +41,7 @@ export function TimersBar() {
           <Text style={[styles.clock, { color: t.done ? c.danger : c.text }]}>{t.done ? "Terminé" : clock((t.endsAt - now) / 1000)}</Text>
           <Pressable onPress={() => stopTimer(t.id)} hitSlop={10} accessibilityRole="button"
             accessibilityLabel={t.done ? "Fermer le minuteur" : "Arrêter le minuteur"}>
-            <Ionicons name="close-circle" size={26} color={c.muted} />
+            <Icon name="close" size={24} color={c.muted} />
           </Pressable>
         </View>
       ))}
@@ -48,9 +50,10 @@ export function TimersBar() {
 }
 
 const styles = StyleSheet.create({
-  bar: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 16, paddingVertical: 8, gap: 6 },
-  item: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 40 },
-  label: { fontSize: 15, fontWeight: "600" },
-  detail: { fontSize: 13 },
+  bar: { marginHorizontal: 10, marginBottom: 6, borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 6, gap: 4 },
+  item: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48 },
+  icon: { width: 36, height: 36, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  label: { fontSize: 15.5, fontWeight: "700" },
+  detail: { fontSize: 14.2 },
   clock: { fontSize: 20, fontWeight: "700", fontVariant: ["tabular-nums"] },
 });

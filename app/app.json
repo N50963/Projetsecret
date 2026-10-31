@@ -1,20 +1,20 @@
 {
   "expo": {
-    "name": "Menus du foyer",
+    "name": "MenuMalin",
     "slug": "menus-du-foyer",
     "scheme": "menusdufoyer",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false
     },
     "android": {
       "package": "fr.foyer.menus",
-      "versionCode": 5,
+      "versionCode": 6,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4EA",
+        "backgroundColor": "#FEF3E3",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"

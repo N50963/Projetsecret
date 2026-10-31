@@ -1,9 +1,9 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { Icon } from "../components/icons";
 import { cleanDraft, RecipeEditor } from "../components/RecipeEditor";
 import { Button, Card, Chip, ErrorText, H2, Muted, Row, Screen } from "../components/ui";
 import { uploadRecipePhoto } from "../lib/images";
@@ -26,7 +26,7 @@ function PhotoPicker({ photo, onChange, onError }: { photo: PickedPhoto | null; 
           <Image source={{ uri: photo.uri }} style={styles.photo} contentFit="cover" />
           <Pressable onPress={() => onChange(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Retirer la photo"
             style={[styles.remove, { backgroundColor: c.card }]}>
-            <Ionicons name="close" size={20} color={c.text} />
+            <Icon name="close" size={20} color={c.text} />
           </Pressable>
         </View>
       ) : (
@@ -58,7 +58,7 @@ export default function AjoutRecette() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const input = [styles.input, { borderColor: c.border, color: c.text, backgroundColor: c.card }];
+  const input = [styles.input, { borderColor: c.field, color: c.text, backgroundColor: c.card }];
 
   const source = mode === "coller" ? text
     : `${name}\nTemps : ${time}\nIngrédients pour ${household.defaultServings} personnes :\n${ingredients}\nÉtapes :\n${steps}`;
@@ -155,7 +155,7 @@ export default function AjoutRecette() {
 }
 
 const styles = StyleSheet.create({
-  input: { minHeight: 48, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: 12, fontSize: 16, textAlignVertical: "top" },
+  input: { minHeight: 48, borderRadius: 13, borderWidth: 1.5, padding: 12, fontSize: 16, textAlignVertical: "top" },
   photo: { width: "100%", height: 200, borderRadius: 12 },
   remove: { position: "absolute", top: 8, right: 8, width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
 });

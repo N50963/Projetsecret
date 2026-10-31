@@ -1,10 +1,10 @@
 /** Barre de 5 étoiles à remplir. */
 
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { Pressable, View } from "react-native";
 
 import { useColors } from "../lib/theme";
 import type { Stars } from "../modules/recipes";
+import { Icon } from "./icons";
 
 const LABELS = ["Pas aimé du tout", "Pas aimé", "Moyen", "Bon", "Excellent"];
 
@@ -19,7 +19,7 @@ export function StarRating({ value, onChange, size = 38 }: { value: number | nul
         <Pressable key={n} onPress={onChange ? () => onChange(n as Stars) : undefined} disabled={!onChange} hitSlop={4}
           accessibilityRole="button" accessibilityLabel={`${n} étoile${n > 1 ? "s" : ""} : ${starsLabel(n)}`}
           style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
-          <Ionicons name={value !== null && n <= value ? "star" : "star-outline"} size={size} color={value !== null && n <= value ? c.accent : c.muted} />
+          <Icon name={value !== null && n <= value ? "star" : "starOutline"} size={size} color={value !== null && n <= value ? c.accent : c.field} />
         </Pressable>
       ))}
     </View>

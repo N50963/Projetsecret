@@ -1,4 +1,15 @@
-# Application mobile « Menus du foyer »
+# Application mobile « MenuMalin »
+
+Charte graphique : canevas Claude Design « MenuMalin » (claude.ai, artboards Accueil, Fiche recette, Propositions,
+Courses, Paramètres, Connexion, états et planche de composants), reproduit au plus près :
+
+- couleurs (`app/src/lib/theme.ts`) : fond crème #FEF3E3, cartes #FDF4E9, vert #2C5A27, vert doux #E7E3BE, texte
+  orange #8A4B12 pour « à acheter », bande verte #445A33 en tête des écrans ;
+- typographie : Roboto (police du système Android), nom « MenuMalin » en Cabin gras italique
+  (`app/assets/fonts`, licence OFL) ;
+- logo en feuilles et icônes : tracés SVG des maquettes (`app/src/components/icons.tsx`, react-native-svg) ;
+- boutons pleine largeur à dégradé vert, puces beiges (vert doux bordé de vert quand elles sont choisies),
+  barre du bas Accueil · Courses · Budget · Profil.
 
 Code : `app/` (Expo SDK 58, Expo Router, TypeScript). Données : Supabase (projet `avhqhvedgppuieellruz`).
 Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistral reste dans les secrets Supabase).
@@ -19,7 +30,7 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    classées selon l'équilibre et la variété de la semaine. Swipe à droite pour choisir, à gauche pour passer (ou
    boutons). Si aucune ne convient : 3 recettes avec 1 à 3 ingrédients à acheter, puis 3 idées créées par Mistral.
    Les ingrédients manquants des recettes choisies vont sur la liste de courses.
-6. **Fiches recettes** : photo du plat (bouton « Ma photo » : appareil photo ou galerie ; la photo du foyer remplace
+6. **Fiches recettes** : photo du plat (« Plus d'options » › Photo du plat : appareil photo ou galerie ; la photo du foyer remplace
    l'image créée par Mistral, qui ne l'écrase jamais), quantités pour le nombre de personnes, étapes « pas à pas »
    avec un seul minuteur par étape. Chaque minuteur dit ce qu'il minute (« Cuire le riz », étape 6) : on s'y retrouve
    quand plusieurs tournent. Avis sur 5 étoiles avec un commentaire facultatif (4-5 étoiles comptent comme « aimé »,
@@ -30,6 +41,10 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    température précisés : chaque étape avec une durée aura son minuteur). L'utilisateur relit et corrige tout dans
    l'éditeur avant d'enregistrer ; photo du plat facultative (appareil photo ou galerie), sinon Mistral crée une
    illustration.
+8. **Budget** : dépenses du mois d'après les tickets Lidl Plus, économies Lidl Plus, dépenses des 8 dernières semaines
+   (histogramme), derniers tickets.
+9. **Favoris** : cœur dans la bande verte de la fiche ; filtre « Favoris » dans la liste des recettes. « Ajouter à ma
+   liste » met sur la liste de courses les ingrédients ni de placard ni achetés ces 7 derniers jours.
 
 Hors champ : petits-déjeuners, entrées, desserts, plateaux de fromages (seuls les plats principaux sont proposés).
 

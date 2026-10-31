@@ -37,7 +37,7 @@ class ErreurActivity : Activity() {
           val trace = StringWriter().also { erreur.printStackTrace(PrintWriter(it)) }.toString()
           val version = app.packageManager.getPackageInfo(app.packageName, 0).versionName
           File(app.filesDir, FICHIER).writeText(
-            "Menus du foyer $version, Android ${android.os.Build.VERSION.RELEASE} " +
+            "MenuMalin $version, Android ${android.os.Build.VERSION.RELEASE} " +
               "(${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}), fil ${thread.name}\n\n$trace"
           )
           app.startActivity(Intent(app, ErreurActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))

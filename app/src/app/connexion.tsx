@@ -1,18 +1,22 @@
+import { Image } from "expo-image";
 import { useState } from "react";
-import { StyleSheet, TextInput } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Button, Card, ErrorText, H1, Muted, Screen } from "../components/ui";
+import { Logo } from "../components/icons";
+import { Button, ErrorText, Field, Muted } from "../components/ui";
 import { useSession } from "../lib/session";
-import { useColors } from "../lib/theme";
+import { BRAND_FONT, useColors } from "../lib/theme";
 
+/** Connexion MenuMalin : photo d'un plat en haut, panneau crème avec le logo, l'e-mail et le mot de passe du compte du foyer. */
 export default function Connexion() {
   const { signIn } = useSession();
   const c = useColors();
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const input = [styles.input, { backgroundColor: c.card, borderColor: c.border, color: c.text }];
 
   const run = async () => {
     setError("");
@@ -24,29 +28,51 @@ export default function Connexion() {
     try {
       await signIn(email, password);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      setError(/invalid|credentials|incorrect/i.test(message) ? "E-mail ou mot de passe incorrect." : message);
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Screen title="Connexion">
-      <H1>Menus du foyer</H1>
-      <Muted>Un compte partagé, utilisé sur les deux téléphones du foyer.</Muted>
-      <Card>
-        <TextInput style={input} placeholder="E-mail du compte" placeholderTextColor={c.muted} autoCapitalize="none"
-          autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} />
-        <TextInput style={input} placeholder="Mot de passe" placeholderTextColor={c.muted} secureTextEntry
-          autoComplete="password" value={password} onChangeText={setPassword} />
-        <ErrorText>{error}</ErrorText>
-        <Button title="Se connecter" onPress={run} busy={busy} />
-      </Card>
-      <Muted>Le compte de l'application est distinct du compte Lidl Plus, que vous connecterez ensuite.</Muted>
-    </Screen>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <View style={{ height: insets.top, backgroundColor: c.statusBar }} />
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" bounces={false}>
+        <Image source={require("../../assets/connexion.jpg")} style={styles.photo} contentFit="cover" accessibilityIgnoresInvertColors />
+        <View style={[styles.sheet, { backgroundColor: c.background, paddingBottom: 26 + insets.bottom }]}>
+          <View style={styles.brand}>
+            <Logo />
+            <View>
+              <Text style={[styles.name, { color: c.primary, fontFamily: BRAND_FONT }]}>MenuMalin</Text>
+              <Text style={[styles.slogan, { color: c.muted }]}>Bien manger, sans gaspiller</Text>
+            </View>
+          </View>
+          <ErrorText>{error}</ErrorText>
+          <View style={styles.group}>
+            <Text style={[styles.label, { color: c.text }]} nativeID="courriel">E-mail</Text>
+            <Field accessibilityLabelledBy="courriel" placeholder="prenom@exemple.fr" autoCapitalize="none" autoComplete="email" keyboardType="email-address"
+              value={email} onChangeText={setEmail} style={error ? { borderColor: c.danger } : undefined} />
+          </View>
+          <View style={styles.group}>
+            <Text style={[styles.label, { color: c.text }]} nativeID="secret">Mot de passe</Text>
+            <Field accessibilityLabelledBy="secret" secureTextEntry autoComplete="password" value={password} onChangeText={setPassword}
+              onSubmitEditing={run} style={error ? { borderColor: c.danger } : undefined} />
+          </View>
+          <Button title="Se connecter" onPress={run} busy={busy} style={{ marginTop: 4 }} />
+          <Muted style={{ textAlign: "center" }}>Un compte partagé par le foyer, distinct du compte Lidl Plus.</Muted>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  input: { minHeight: 50, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 14, fontSize: 17 },
+  photo: { flex: 1, minHeight: 260, marginBottom: -24 },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingHorizontal: 17, gap: 13 },
+  brand: { flexDirection: "row", alignItems: "center", gap: 5, marginLeft: -3, height: 62 },
+  name: { fontSize: 26.5, lineHeight: 30 },
+  slogan: { fontSize: 12.2, lineHeight: 16, fontWeight: "500" },
+  group: { gap: 6 },
+  label: { fontSize: 16, fontWeight: "500" },
 });

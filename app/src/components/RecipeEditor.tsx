@@ -3,7 +3,6 @@
  * enregistré ; c'est la version de l'utilisateur qui compte. Chaque étape montre le minuteur qu'elle aura.
  */
 
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -11,6 +10,7 @@ import type { DraftRecipe } from "../lib/mistral";
 import { plain, stepTimer } from "../lib/steps";
 import { useColors } from "../lib/theme";
 import { RECIPE_UNITS, type RecipeUnit } from "../modules/recipes";
+import { Icon } from "./icons";
 import { Body, Button, Card, H2, Muted, Row } from "./ui";
 
 type Ingredient = DraftRecipe["ingredients"][number];
@@ -38,13 +38,13 @@ function NumberField({ value, onChange, decimals, placeholder, style }: {
         const n = Number(clean.replace(",", "."));
         onChange(clean === "" || !Number.isFinite(n) ? null : n);
       }}
-      style={[styles.input, { borderColor: c.border, color: c.text, backgroundColor: c.background, textAlign: "center" }, style]} />
+      style={[styles.input, { borderColor: c.field, color: c.text, backgroundColor: c.card, textAlign: "center" }, style]} />
   );
 }
 
 export function RecipeEditor({ value, onChange }: { value: DraftRecipe; onChange: (recipe: DraftRecipe) => void }) {
   const c = useColors();
-  const input = [styles.input, { borderColor: c.border, color: c.text, backgroundColor: c.background }];
+  const input = [styles.input, { borderColor: c.field, color: c.text, backgroundColor: c.card }];
   const set = (patch: Partial<DraftRecipe>) => onChange({ ...value, ...patch });
   const setIngredient = (n: number, patch: Partial<Ingredient>) =>
     set({ ingredients: value.ingredients.map((i, k) => (k === n ? { ...i, ...patch } : i)) });
@@ -101,7 +101,7 @@ export function RecipeEditor({ value, onChange }: { value: DraftRecipe; onChange
               </Pressable>
               <Pressable onPress={() => set({ ingredients: value.ingredients.filter((_, k) => k !== n) })} hitSlop={8}
                 accessibilityRole="button" accessibilityLabel={`Retirer ${i.label}`}>
-                <Ionicons name="close-circle-outline" size={24} color={c.muted} />
+                <Icon name="close" size={22} color={c.muted} />
               </Pressable>
             </View>
             {!i.slug && <Muted style={{ fontSize: 13 }}>Pas relié à vos achats : il ne sera pas comparé aux tickets Lidl.</Muted>}
@@ -125,11 +125,11 @@ export function RecipeEditor({ value, onChange }: { value: DraftRecipe; onChange
                   style={[input, { flex: 1, minHeight: 70 }]} />
                 <Pressable onPress={() => set({ steps: value.steps.filter((_, k) => k !== n) })} hitSlop={8}
                   accessibilityRole="button" accessibilityLabel={`Retirer l'étape ${n + 1}`}>
-                  <Ionicons name="close-circle-outline" size={24} color={c.muted} />
+                  <Icon name="close" size={22} color={c.muted} />
                 </Pressable>
               </View>
               <View style={[styles.timerLine, { marginLeft: 40 }]}>
-                <Ionicons name={timer ? "timer-outline" : "remove-circle-outline"} size={16} color={timer ? c.primary : c.muted} />
+                <Icon name={timer ? "timer" : "minus"} size={16} color={timer ? c.primary : c.muted} />
                 {timer
                   ? <Body style={{ color: c.primary, fontSize: 14 }}>Minuteur : {timer.subject} · {timer.label}</Body>
                   : <Muted style={{ fontSize: 13 }}>Sans minuteur</Muted>}
@@ -155,9 +155,9 @@ export function cleanDraft(d: DraftRecipe): DraftRecipe {
 }
 
 const styles = StyleSheet.create({
-  input: { minHeight: 44, borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, fontSize: 16, textAlignVertical: "top" },
+  input: { minHeight: 48, borderWidth: 1.5, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 8, fontSize: 16, textAlignVertical: "top" },
   ingredient: { flexDirection: "row", alignItems: "center", gap: 8 },
-  unit: { minWidth: 58, height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
-  badge: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  unit: { minWidth: 58, height: 48, borderRadius: 13, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
+  badge: { width: 32, height: 32, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   timerLine: { flexDirection: "row", alignItems: "center", gap: 6 },
 });

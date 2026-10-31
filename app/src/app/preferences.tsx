@@ -73,7 +73,7 @@ export default function Preferences() {
       setPasswordMessage(e instanceof Error ? e.message : String(e));
     }
   };
-  const input = [styles.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }];
+  const input = [styles.input, { backgroundColor: c.background, borderColor: c.field, color: c.text }];
 
   return (
     <Screen title="Préférences">
@@ -123,5 +123,5 @@ export default function Preferences() {
 }
 
 const styles = StyleSheet.create({
-  input: { minHeight: 48, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 14, fontSize: 16 },
+  input: { minHeight: 48, borderRadius: 13, borderWidth: 1.5, paddingHorizontal: 14, fontSize: 16 },
 });
