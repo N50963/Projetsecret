@@ -56,6 +56,7 @@ function Gate() {
         <Stack.Screen name="ajout-recette" options={{ title: "Ajouter une recette" }} />
         <Stack.Screen name="parametres" options={{ title: "Paramètres", animation: "none" }} />
         <Stack.Screen name="preferences" options={{ title: "Préférences" }} />
+        <Stack.Screen name="credits" options={{ title: "Crédits des photos" }} />
       </Stack.Protected>
     </Stack>
   );

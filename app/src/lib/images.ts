@@ -110,6 +110,7 @@ export function pictureOf(recipeId: string | null | undefined): Picture | null {
 /** Charge la liste gardée sur le téléphone, puis la rafraîchit et télécharge en avance toutes les photos (au démarrage). */
 export function warmIllustrations(): void {
   illustrationUrls([]).catch(() => undefined);
+  ingredientPictureUrls().catch(() => undefined);
 }
 
 /**
@@ -152,3 +153,66 @@ export async function uploadRecipePhoto(householdId: string, recipeId: string, u
   forgetIllustration(recipeId);
   await refresh();
 }
+
+// --- Vignettes des ingrédients ------------------------------------------------------------------------------------------
+
+const INGREDIENT_BUCKET = "ingredient-images";
+const INGREDIENT_KEY = "ingredient-pictures-v1";
+
+/** Crédit d'une photo d'ingrédient (Wikimedia Commons, licence libre). */
+export interface IngredientCredit {
+  slug: string;
+  name: string;
+  author: string | null;
+  license: string;
+  licenseUrl: string | null;
+  sourceUrl: string;
+}
+
+let ingredientPictures = new Map<string, string>();
+let ingredientsLoaded: Promise<void> | null = null;
+
+async function loadIngredientPictures() {
+  try {
+    const raw = await AsyncStorage.getItem(INGREDIENT_KEY);
+    if (raw) ingredientPictures = new Map(JSON.parse(raw) as Array<[string, string]>);
+  } catch {
+    // Liste absente : relue depuis Supabase ci-dessous.
+  }
+  const refresh = (async () => {
+    const { data, error } = await supabase.from("ingredient_pictures").select("slug, storage_path, created_at");
+    if (error || !data) return;
+    const next = new Map<string, string>();
+    for (const row of data as Array<{ slug: string; storage_path: string; created_at: string }>) {
+      const url = supabase.storage.from(INGREDIENT_BUCKET).getPublicUrl(row.storage_path).data.publicUrl;
+      next.set(row.slug, `${url}?v=${encodeURIComponent(row.created_at)}`);
+    }
+    ingredientPictures = next;
+    AsyncStorage.setItem(INGREDIENT_KEY, JSON.stringify([...next])).catch(() => undefined);
+    // ≈ 10 Ko par vignette : toutes téléchargées en avance.
+    Image.prefetch([...next.values()], "disk").catch(() => undefined);
+  })();
+  if (!ingredientPictures.size) await refresh;
+}
+
+/** Vignettes des ingrédients par identifiant (slug) ; la liste est gardée sur le téléphone. */
+export async function ingredientPictureUrls(): Promise<Map<string, string>> {
+  ingredientsLoaded ??= loadIngredientPictures();
+  await ingredientsLoaded;
+  return ingredientPictures;
+}
+
+/** Vignette d'un ingrédient déjà connue du téléphone (sans attendre). */
+export const ingredientPicture = (slug: string | null | undefined) => (slug ? ingredientPictures.get(slug) ?? null : null);
+
+/** Auteurs et licences des photos d'ingrédients (écran des crédits). */
+export async function ingredientCredits(): Promise<IngredientCredit[]> {
+  const { data, error } = await supabase.from("ingredient_pictures").select("slug, name, author, license, license_url, source_url").order("name");
+  if (error) throw new Error(`Crédits illisibles : ${error.message}`);
+  return ((data ?? []) as any[]).map((r) => ({
+    slug: r.slug, name: r.name, author: r.author, license: r.license, licenseUrl: r.license_url, sourceUrl: r.source_url,
+  }));
+}
+
+/** Ligne de crédit : « Photo : auteur · licence ». */
+export const ingredientCredit = (c: IngredientCredit) => `Photo : ${c.author ? `${c.author} · ` : ""}${c.license} · Wikimedia Commons`;

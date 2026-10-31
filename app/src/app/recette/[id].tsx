@@ -1,3 +1,4 @@
+import { Image } from "expo-image";
 import { useKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -10,7 +11,7 @@ import { StarRating, starsLabel } from "../../components/StarRating";
 import { StepText, TimersBar } from "../../components/Steps";
 import { Body, Button, Card, ErrorText, Field, H1, H2, HeaderIcon, Loading, Muted, Pill, Row, Screen } from "../../components/ui";
 import { minutes, proteinLabel, quantity } from "../../lib/format";
-import { illustrationUrls, pictureOf, uploadRecipePhoto, type Picture } from "../../lib/images";
+import { ingredientPicture, ingredientPictureUrls, illustrationUrls, pictureOf, uploadRecipePhoto, type Picture } from "../../lib/images";
 import { adaptRecipeDraft, draftToInput, type Draft } from "../../lib/mistral";
 import { pickDishPhoto } from "../../lib/photo";
 import { useHousehold } from "../../lib/session";
@@ -80,6 +81,12 @@ export default function FicheRecette() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Vignettes des ingrédients (gardées sur le téléphone) : nouvel affichage quand la liste est connue.
+  const [, setIngredientPics] = useState(0);
+  useEffect(() => {
+    ingredientPictureUrls().then((m) => setIngredientPics(m.size), () => undefined);
+  }, []);
 
   useEffect(() => {
     if (!recipe) return;
@@ -166,8 +173,15 @@ export default function FicheRecette() {
         {recipe.description ? <Body style={{ color: c.muted }}>{recipe.description}</Body> : null}
       </View>
 
+      <View style={styles.durations}>
+        {[[recipe.totalMin, "au total"], [recipe.prepMin, "préparation"], [recipe.cookMin, "cuisson"]].map(([value, label]) => (
+          <View key={label as string} style={[styles.duration, { backgroundColor: c.greenSoft }]}>
+            <Text style={{ color: c.greenInk, fontSize: 18, lineHeight: 21, fontWeight: "700" }}>{minutes(value as number)}</Text>
+            <Text style={{ color: c.greenInk, fontSize: 14.7, lineHeight: 18 }}>{label as string}</Text>
+          </View>
+        ))}
+      </View>
       <View style={styles.pills}>
-        <Pill icon="timer">{minutes(recipe.totalMin)}</Pill>
         {proteinLabel(recipe.mainProtein) ? <Pill icon="cutlery">{proteinLabel(recipe.mainProtein)}</Pill> : null}
         <View style={[styles.stepper, { backgroundColor: c.chip }]} accessibilityLabel="Nombre de personnes">
           <Pressable onPress={() => setServings((s) => Math.max(1, s - 1))} accessibilityRole="button" accessibilityLabel="Une personne de moins" style={styles.stepperButton}>
@@ -197,6 +211,12 @@ export default function FicheRecette() {
           <View>
             {ingredients.map((i, n) => (
               <View key={n} style={[styles.ingredient, n < ingredients.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.border }]}>
+                {ingredientPicture(i.slug)
+                  ? <Image source={{ uri: ingredientPicture(i.slug)! }} cachePolicy="memory-disk" style={styles.thumb} contentFit="cover" transition={0}
+                    accessibilityIgnoresInvertColors />
+                  : <View style={[styles.thumb, { backgroundColor: c.chip, alignItems: "center", justifyContent: "center" }]}>
+                    <Icon name="cutlery" size={18} color={c.muted} />
+                  </View>}
                 <Text style={{ flex: 1, color: c.muted, fontSize: 16, lineHeight: 21 }}>
                   {i.label}{i.optional ? " (facultatif)" : ""}
                   {i.slug && toBuy.has(i.slug) ? <Text style={{ color: c.orangeInk, fontSize: 15, fontWeight: "500" }}> · à acheter</Text> : null}
@@ -278,14 +298,6 @@ export default function FicheRecette() {
         </View>
       )}
 
-      <View style={styles.durations}>
-        {[[recipe.totalMin, "au total"], [recipe.prepMin, "préparation"], [recipe.cookMin, "cuisson"]].map(([value, label]) => (
-          <View key={label as string} style={[styles.duration, { backgroundColor: c.greenSoft }]}>
-            <Text style={{ color: c.greenInk, fontSize: 18, lineHeight: 21, fontWeight: "700" }}>{minutes(value as number)}</Text>
-            <Text style={{ color: c.greenInk, fontSize: 14.7, lineHeight: 18 }}>{label as string}</Text>
-          </View>
-        ))}
-      </View>
 
       <View style={[styles.section, { gap: 9 }]}>
         {info ? <Body style={{ color: c.greenInk }}>{info}</Body> : null}
@@ -355,11 +367,12 @@ const styles = StyleSheet.create({
   tabs: { flexDirection: "row", gap: 12, marginHorizontal: 18.5, marginTop: 8 },
   tab: { flex: 1, height: 42, alignItems: "center", justifyContent: "center" },
   section: { marginHorizontal: 17, marginTop: 12, gap: 10 },
-  ingredient: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 37, paddingVertical: 6 },
+  ingredient: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 52, paddingVertical: 6 },
+  thumb: { width: 40, height: 40, borderRadius: 10, overflow: "hidden" },
   step: { flexDirection: "row", gap: 12, borderRadius: 13, borderWidth: 1.5, borderColor: "transparent", padding: 8 },
   badge: { width: 32, height: 32, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   timer: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, alignSelf: "flex-start" },
-  durations: { flexDirection: "row", gap: 5.5, marginLeft: 18, marginRight: 12.5, marginTop: 14 },
+  durations: { flexDirection: "row", gap: 5.5, marginLeft: 17.5, marginRight: 13, marginTop: 10 },
   duration: { flex: 1, height: 56, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   more: { height: 48, borderRadius: 24, borderWidth: 1.5, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
 });

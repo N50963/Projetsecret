@@ -6,6 +6,7 @@ import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View, type Sc
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon, Logo } from "../components/icons";
+import { ReminderSheet } from "../components/ReminderSheet";
 import { TimersBar } from "../components/Steps";
 import { TimeWheel } from "../components/TimeWheel";
 import { BottomNav, Button, ErrorText, SectionTitle, TextLink } from "../components/ui";
@@ -65,6 +66,7 @@ export default function Accueil() {
   const [shopping, setShopping] = useState<ShoppingItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [planning, setPlanning] = useState(false);
+  const [reminders, setReminders] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
 
@@ -152,17 +154,7 @@ export default function Accueil() {
   const toBuy = shopping.filter((i) => !i.boughtAt && !i.checkedAt);
   const open = (s: WeekSlot) => router.push(`/recette/${s.recipeId}`);
 
-  const notifications = () => {
-    const lines = [
-      ...menus.filter((s) => s.date === today).map((s) => `${mealLabel(s.mealType)} : ${s.name}`),
-      ...timers.filter((t) => !t.done).map((t) => `Minuteur en cours : ${t.subject}`),
-      ...timers.filter((t) => t.done).map((t) => `Minuteur terminé : ${t.subject}`),
-      toBuy.length ? `${toBuy.length} article${toBuy.length > 1 ? "s" : ""} à acheter` : "",
-    ].filter(Boolean);
-    const text = lines.length ? lines.join("\n") : "Rien de prévu aujourd'hui.";
-    if (Platform.OS === "web") window.alert(text);
-    else Alert.alert("Aujourd'hui", text);
-  };
+  const notifications = () => setReminders(true);
 
   const heroPicture = hero ? picture(hero.recipeId) : null;
 
@@ -316,6 +308,8 @@ export default function Accueil() {
       )}
       <TimersBar />
       <BottomNav active="accueil" />
+      <ReminderSheet visible={reminders} onClose={() => setReminders(false)} today={today} menus={menus} toBuy={toBuy.length}
+        onOpenRecipe={(id) => router.push(`/recette/${id}`)} onOpenShopping={() => router.navigate("/courses")} />
     </View>
   );
 }

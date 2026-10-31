@@ -125,6 +125,17 @@ export default function Parametres() {
         ))}
       </View>
 
+      <Pressable onPress={() => router.push("/credits")} accessibilityRole="button"
+        style={({ pressed }) => [styles.card, styles.list, { backgroundColor: c.card, borderColor: c.cardLine, marginTop: 14, opacity: pressed ? 0.7 : 1 }, CARD_SHADOW]}>
+        <View style={styles.row}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.rowName, { color: c.text }]}>Crédits des photos</Text>
+            <Text style={[styles.rowValue, { color: c.muted }]}>Photos des ingrédients : Wikimedia Commons, licences libres</Text>
+          </View>
+          <Icon name="chevronRight" width={9} height={15} color={c.text} />
+        </View>
+      </Pressable>
+
       <View style={{ marginTop: 14, marginLeft: 14, marginRight: 11 }}>
         <Button title="Déconnexion" kind="secondary" icon="logout" onPress={signOut} />
       </View>

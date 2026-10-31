@@ -8,7 +8,8 @@
  *  - illustrate        : crée l'illustration d'une recette (génération d'image Mistral) et l'enregistre en JPEG ;
  *  - illustrate_missing: tâche planifiée (pg_cron, jeton x-cron-token) qui crée les illustrations manquantes (et remplace
  *                        celles de l'essai Pollinations), quelques-unes par passage, selon le quota gratuit de Mistral ;
- *  - shrink_images     : (jeton x-cron-token) réduit à 800 px les images enregistrées avant cette limite.
+ *  - shrink_images     : (jeton x-cron-token) réduit à 800 px les images enregistrées avant cette limite ;
+ *  - ingredient_images : (jeton x-cron-token) vignettes des ingrédients, images libres de Wikimedia Commons.
  * Les recettes renvoyées sont des brouillons : l'application les vérifie et les fait confirmer avant de les enregistrer.
  */
 
@@ -304,12 +305,27 @@ function decodeImage(bytes: Uint8Array): { width: number; height: number; rgba: 
   if (bytes[0] === 0x89 && bytes[1] === 0x50) {
     const png = decodePng(bytes);
     const { width, height, channels } = png;
-    const data = png.data as Uint8Array;
+    const data = png.data as ArrayLike<number>;
+    const scale = png.depth === 16 ? 257 : 1;
+    const palette = (png as any).palette as number[][] | undefined;
     const rgba = new Uint8Array(width * height * 4);
     for (let i = 0, j = 0; i < width * height; i++, j += channels) {
-      rgba[i * 4] = data[j];
-      rgba[i * 4 + 1] = data[channels >= 3 ? j + 1 : j];
-      rgba[i * 4 + 2] = data[channels >= 3 ? j + 2 : j];
+      let r: number, g: number, b: number, a: number;
+      if (palette) {
+        const entry = palette[data[j]] ?? [255, 255, 255, 255];
+        [r, g, b] = entry;
+        a = entry[3] ?? 255;
+      } else {
+        r = data[j] / scale;
+        g = (channels >= 3 ? data[j + 1] : data[j]) / scale;
+        b = (channels >= 3 ? data[j + 2] : data[j]) / scale;
+        a = channels === 4 ? data[j + 3] / scale : channels === 2 ? data[j + 1] / scale : 255;
+      }
+      // Transparence rendue sur fond blanc.
+      const k = a / 255;
+      rgba[i * 4] = r * k + 255 * (1 - k);
+      rgba[i * 4 + 1] = g * k + 255 * (1 - k);
+      rgba[i * 4 + 2] = b * k + 255 * (1 - k);
       rgba[i * 4 + 3] = 255;
     }
     return { width, height, rgba };
@@ -379,6 +395,138 @@ async function shrinkImages(db: SupabaseClient, limit: number) {
   }
   const left = (files ?? []).filter((f: any) => (f.metadata?.size ?? 0) > 160_000).length - done.length;
   return { shrunk: done, remaining: left };
+}
+
+// --- Photos des ingrédients (Wikimedia Commons, licences libres) --------------------------------------------------------
+
+/** Article Wikipédia (fr) dont l'image principale montre l'ingrédient, quand son nom du référentiel ne suffit pas. */
+const INGREDIENT_ARTICLES: Record<string, string> = {
+  avocat: "Avocat (fruit)", basilic: "Basilic", boeuf_a_mijoter: "Viande bovine", boeuf_hache: "Viande hachée", bouillon: "Bouillon cube",
+  canard_magret: "Magret", cereale_cuisson: "Boulgour", champignon: "Champignon de Paris", charcuterie_tranchee: "Coppa",
+  chevre: "Fromage de chèvre", comte: "Comté (fromage)", concentre_tomate: "Concentré de tomate", cornichon: "Cornichon",
+  courge_butternut: "Doubeurre", couscous: "Semoule", creme_epaisse: "Crème fraîche", creme_liquide: "Crème (produit laitier)",
+  crevette: "Crevette", curry: "Curry (épice)", dinde: "Dinde", echalote: "Échalote", emmental_rape: "Fromage râpé", epinard: "Épinard",
+  falafel: "Falafel", farine: "Farine de blé", fromage_frais: "Fromage frais", galette_sarrasin: "Galette de sarrasin",
+  gouda_cheddar: "Cheddar", graines: "Graine de tournesol", haricot_vert: "Haricot vert", haricots_secs: "Haricot rouge",
+  herbes_fraiches: "Plante aromatique", herbes_provence: "Herbes de Provence", huile_neutre: "Huile de tournesol",
+  huile_olive: "Huile d'olive", jambon_cuit: "Jambon de Paris", lait_coco: "Lait de coco", lardons: "Lardon", lasagne: "Lasagnes",
+  laurier: "Laurier noble", lentilles: "Lentille cultivée", mais: "Maïs doux", miel: "Miel", moutarde: "Moutarde (condiment)",
+  muscade: "Noix de muscade", noix: "Noix", nouilles: "Nouilles chinoises", oeuf: "Œuf (aliment)", oignon: "Oignon",
+  oignon_nouveau: "Oignon nouveau", oignon_rouge: "Oignon rouge", olive: "Olive", origan: "Origan", pain: "Baguette (pain)",
+  pain_burger_pita: "Pain pita", pain_de_mie: "Pain de mie", pak_choi: "Pak-choï", pate_brisee: "Pâte brisée",
+  pate_feuilletee: "Pâte feuilletée", pate_pizza: "Pâte à pizza", pates: "Pâtes alimentaires", petit_pois: "Petit pois",
+  pignons: "Pignon de pin", piment: "Piment", poisson_blanc: "Cabillaud", poivre: "Poivre noir", pois_chiches: "Pois chiche",
+  porc_filet: "Filet mignon de porc", porc_tranche: "Côte de porc", poulet_filet: "Blanc de poulet", proteine_vegetale: "Tofu",
+  raclette: "Raclette (fromage)", salade_verte: "Laitue", sardine_conserve: "Sardine à l'huile", sauce_pesto: "Pesto",
+  sauce_soja: "Sauce soja", saucisse: "Chipolata", saumon: "Saumon (cuisine)", sel: "Sel alimentaire", sucre: "Sucre de table",
+  thon_conserve: "Thon en conserve", tomate_cerise: "Tomate cerise", tomate_conserve: "Tomate pelée", tomate_coulis: "Coulis de tomate",
+  tomme: "Tomme", tortilla_wrap: "Tortilla de blé", truite: "Truite", truite_fumee: "Truite fumée", vinaigre: "Vinaigre",
+  yaourt_grec: "Yaourt grec", yaourt_nature: "Yaourt", parmesan: "Parmigiano reggiano", ketchup: "Ketchup",
+};
+
+/** Identification demandée par Wikimedia pour tout accès automatisé. */
+const WIKI_HEADERS = { "User-Agent": "MenuMalin/0.8 (application familiale de menus, projet privé)" };
+
+async function wikiJson(url: string): Promise<any> {
+  const r = await fetch(url, { headers: WIKI_HEADERS, signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+  if (!r.ok) throw new HttpError(502, `Wikimedia a répondu ${r.status}.`);
+  return r.json();
+}
+
+const stripHtml = (s: unknown) => String(s ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+
+/** Vignette carrée de 160 px (centre de l'image), en JPEG. */
+function squareThumb(bytes: Uint8Array, size = 160): Uint8Array {
+  const img = decodeImage(bytes);
+  const side = Math.min(img.width, img.height);
+  const x0 = Math.floor((img.width - side) / 2);
+  const y0 = Math.floor((img.height - side) / 2);
+  const crop = new Uint8Array(side * side * 4);
+  for (let y = 0; y < side; y++) {
+    const from = ((y0 + y) * img.width + x0) * 4;
+    crop.set(img.rgba.subarray(from, from + side * 4), y * side * 4);
+  }
+  const small = downscale({ width: side, height: side, rgba: crop }, size);
+  return jpeg.encode({ data: small.rgba, width: small.width, height: small.height }, 80).data;
+}
+
+/**
+ * Vignettes des ingrédients du référentiel qui n'en ont pas encore : image principale (sous licence libre) de l'article
+ * Wikipédia de l'ingrédient, recadrée en carré ; auteur et licence enregistrés pour les crédits.
+ */
+async function ingredientImages(db: SupabaseClient, offset: number, limit: number, overrides: Record<string, string> = {}, redo: string[] = []) {
+  if (redo.length) {
+    // Vignettes à refaire (image mal choisie) : effacées puis recherchées avec l'article ou le fichier indiqué.
+    const { data: ids } = await db.from("ingredients").select("id").in("slug", redo);
+    await db.from("ingredient_images").delete().in("ingredient_id", (ids ?? []).map((i: any) => i.id));
+  }
+  const [{ data: ings }, { data: have }] = await Promise.all([
+    db.from("ingredients").select("id, slug, name").order("slug"),
+    db.from("ingredient_images").select("ingredient_id"),
+  ]);
+  const done = new Set((have ?? []).map((h: any) => h.ingredient_id));
+  const pending = (ings ?? []).filter((i: any) => !done.has(i.id));
+  const todo = redo.length ? pending.filter((i: any) => redo.includes(i.slug)) : pending.slice(offset, offset + limit);
+  if (!todo.length) return { added: [], missing: [], remaining: pending.length };
+  const titleOf = new Map<string, string>(todo.map((i: any) => [i.slug,
+    overrides[i.slug] ?? INGREDIENT_ARTICLES[i.slug] ?? String(i.name).split(/[\/(,]/)[0].trim()]));
+  // Un titre « File:… » désigne directement un fichier de Commons ; sinon, image principale de l'article Wikipédia.
+  const articles = [...new Set([...titleOf.values()].filter((t) => !t.startsWith("File:")))];
+  const wiki = articles.length ? await wikiJson(`https://fr.wikipedia.org/w/api.php?action=query&format=json&redirects=1&prop=pageimages`
+    + `&piprop=thumbnail|name&pithumbsize=400&pilicense=free&titles=${encodeURIComponent(articles.join("|"))}`) : { query: {} };
+  const rename = new Map<string, string>();
+  for (const n of [...(wiki.query?.normalized ?? []), ...(wiki.query?.redirects ?? [])]) rename.set(n.from, n.to);
+  const resolve = (t: string) => {
+    let title = t;
+    for (let k = 0; k < 3 && rename.has(title); k++) title = rename.get(title)!;
+    return title;
+  };
+  const pages = new Map<string, any>(Object.values(wiki.query?.pages ?? {}).map((p: any) => [p.title, p]));
+  const fileOf = new Map<string, string>();
+  for (const [slug, title] of titleOf) {
+    const file = title.startsWith("File:") ? title.slice(5) : pages.get(resolve(title))?.pageimage;
+    if (file) fileOf.set(slug, String(file).replace(/ /g, "_"));
+  }
+  const files = [...new Set(fileOf.values())];
+  const commons = files.length ? await wikiJson(`https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo`
+    + `&iiprop=extmetadata|url&iiurlwidth=400&titles=${encodeURIComponent(files.map((f) => `File:${f}`).join("|"))}`) : { query: { pages: {} } };
+  const infoOf = new Map<string, any>();
+  for (const p of Object.values(commons.query?.pages ?? {}) as any[]) {
+    const info = p.imageinfo?.[0];
+    if (info) infoOf.set(String(p.title).replace(/^File:/, "").replace(/ /g, "_"), info);
+  }
+  const free = (license: string) => /public domain|domaine public|^pd|cc0|cc[ -]by|gfdl|free art/i.test(license);
+  const added: string[] = [];
+  const missing: string[] = [];
+  for (const ing of todo) {
+    const file = fileOf.get(ing.slug);
+    const info = file ? infoOf.get(file) : undefined;
+    const meta = info?.extmetadata ?? {};
+    const license = stripHtml(meta.LicenseShortName?.value);
+    const thumbUrl = info?.thumburl ?? pages.get(resolve(titleOf.get(ing.slug)!))?.thumbnail?.source;
+    if (!thumbUrl || !info || !license || !free(license)) {
+      missing.push(`${ing.slug} (${titleOf.get(ing.slug)}${license && !free(license) ? ` : ${license}` : ""})`);
+      continue;
+    }
+    try {
+      const r = await fetch(thumbUrl, { headers: WIKI_HEADERS, signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+      if (!r.ok) throw new Error(`image ${r.status}`);
+      const thumb = squareThumb(new Uint8Array(await r.arrayBuffer()));
+      const path = `${ing.slug}.jpg`;
+      const up = await db.storage.from("ingredient-images").upload(path, thumb, { contentType: "image/jpeg", upsert: true });
+      if (up.error) throw new Error(up.error.message);
+      const ins = await db.from("ingredient_images").upsert({
+        ingredient_id: ing.id, storage_path: path, source_url: info.descriptionurl ?? thumbUrl,
+        author: stripHtml(meta.Artist?.value).slice(0, 200) || null, license: license.slice(0, 80),
+        license_url: meta.LicenseUrl?.value ?? null, created_at: new Date().toISOString(),
+      });
+      if (ins.error) throw new Error(ins.error.message);
+      added.push(`${ing.slug} ← ${file} (${license})`);
+    } catch (e) {
+      missing.push(`${ing.slug} : ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return { added, missing, remaining: pending.length - added.length };
 }
 
 /** Le foyer a mis sa propre photo du plat (recette du foyer) : elle prime sur toute image créée. */
@@ -457,12 +605,17 @@ Deno.serve(async (req) => {
     return json({ error: "Corps JSON attendu" }, 400);
   }
 
-  if (body.action === "illustrate_missing" || body.action === "shrink_images") {
+  if (body.action === "illustrate_missing" || body.action === "shrink_images" || body.action === "ingredient_images") {
     try {
       const db = admin();
       const expected = (await db.from("app_settings").select("value").eq("key", "cron_token").maybeSingle()).data?.value;
       if (!expected || req.headers.get("x-cron-token") !== expected) throw new HttpError(401, "Jeton de tâche planifiée invalide.");
       if (body.action === "shrink_images") return json(await shrinkImages(db, Math.min(6, Math.max(1, Number(body.limit ?? 3)))));
+      if (body.action === "ingredient_images") {
+        const overrides = body.articles && typeof body.articles === "object" ? body.articles as Record<string, string> : {};
+        const redo = Array.isArray(body.redo) ? (body.redo as unknown[]).map(String).slice(0, 40) : [];
+        return json(await ingredientImages(db, Math.max(0, Number(body.offset ?? 0)), Math.min(40, Math.max(1, Number(body.limit ?? 20))), overrides, redo));
+      }
       return json(await illustrateMissing(db));
     } catch (e) {
       return json({ error: e instanceof Error ? e.message : String(e) }, e instanceof HttpError ? e.status : 500);
