@@ -11,6 +11,7 @@
  *                        celles de l'essai Pollinations), quelques-unes par passage, selon le quota gratuit de Mistral ;
  *  - shrink_images     : (jeton x-cron-token) réduit à 800 px les images enregistrées avant cette limite ;
  *  - ingredient_images : (jeton x-cron-token) vignettes des ingrédients, images libres de Wikimedia Commons.
+ *  - ingredient_candidates : (jeton x-cron-token) photos libres candidates de Commons pour remplacer une vignette.
  * Les recettes renvoyées sont des brouillons : l'application les vérifie et les fait confirmer avant de les enregistrer.
  */
 
@@ -454,6 +455,30 @@ function squareThumb(bytes: Uint8Array, size = 160): Uint8Array {
   return jpeg.encode({ data: small.rgba, width: small.width, height: small.height }, 80).data;
 }
 
+const FREE_LICENSE = /public domain|domaine public|^pd|cc0|cc[ -]by|gfdl|free art/i;
+
+/**
+ * Photos candidates pour remplacer une vignette mal choisie : recherche de fichiers dans Wikimedia Commons (photos
+ * seulement), licences libres uniquement. Sert à choisir à l'œil le fichier à passer ensuite à ingredient_images.
+ */
+async function ingredientCandidates(queries: Record<string, string>, per: number) {
+  const out: Record<string, Array<{ file: string; thumb: string; license: string }>> = {};
+  for (const [slug, query] of Object.entries(queries)) {
+    try {
+      const data = await wikiJson(`https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search&gsrnamespace=6`
+        + `&gsrlimit=${per * 2}&gsrsearch=${encodeURIComponent(`${query} filetype:bitmap`)}&prop=imageinfo&iiprop=url|extmetadata`
+        + `&iiurlwidth=160&iiextmetadatafilter=LicenseShortName`);
+      const pages = (Object.values(data.query?.pages ?? {}) as any[]).sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+      out[slug] = pages.map((p) => ({ file: String(p.title).replace(/^File:/, ""), thumb: p.imageinfo?.[0]?.thumburl ?? "",
+        license: stripHtml(p.imageinfo?.[0]?.extmetadata?.LicenseShortName?.value) }))
+        .filter((c) => c.thumb && FREE_LICENSE.test(c.license) && /\.jpe?g$/i.test(c.file)).slice(0, per);
+    } catch {
+      out[slug] = [];
+    }
+  }
+  return out;
+}
+
 /**
  * Vignettes des ingrédients du référentiel qui n'en ont pas encore : image principale (sous licence libre) de l'article
  * Wikipédia de l'ingrédient, recadrée en carré ; auteur et licence enregistrés pour les crédits.
@@ -504,7 +529,7 @@ async function ingredientImages(db: SupabaseClient, offset: number, limit: numbe
     const info = p.imageinfo?.[0];
     if (info) infoOf.set(String(p.title).replace(/^File:/, "").replace(/ /g, "_"), info);
   }
-  const free = (license: string) => /public domain|domaine public|^pd|cc0|cc[ -]by|gfdl|free art/i.test(license);
+  const free = (license: string) => FREE_LICENSE.test(license);
   const added: string[] = [];
   const missing: string[] = [];
   for (const ing of todo) {
@@ -614,12 +639,17 @@ Deno.serve(async (req) => {
     return json({ error: "Corps JSON attendu" }, 400);
   }
 
-  if (body.action === "illustrate_missing" || body.action === "shrink_images" || body.action === "ingredient_images") {
+  if (["illustrate_missing", "shrink_images", "ingredient_images", "ingredient_candidates"].includes(String(body.action))) {
     try {
       const db = admin();
       const expected = (await db.from("app_settings").select("value").eq("key", "cron_token").maybeSingle()).data?.value;
       if (!expected || req.headers.get("x-cron-token") !== expected) throw new HttpError(401, "Jeton de tâche planifiée invalide.");
       if (body.action === "shrink_images") return json(await shrinkImages(db, Math.min(6, Math.max(1, Number(body.limit ?? 3)))));
+      if (body.action === "ingredient_candidates") {
+        const queries = Object.fromEntries(Object.entries(body.queries && typeof body.queries === "object" ? body.queries : {}).slice(0, 50)
+          .map(([k, v]) => [k, String(v)]));
+        return json(await ingredientCandidates(queries, Math.min(8, Math.max(1, Number(body.per ?? 6)))));
+      }
       if (body.action === "ingredient_images") {
         const overrides = body.articles && typeof body.articles === "object" ? body.articles as Record<string, string> : {};
         const redo = Array.isArray(body.redo) ? (body.redo as unknown[]).map(String).slice(0, 40) : [];
