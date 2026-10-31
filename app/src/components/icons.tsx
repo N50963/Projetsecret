@@ -169,6 +169,13 @@ const ICONS = {
       <Path d="M9 7h7" {...stroke(color, 2)} />
     </>,
   },
+  bookFilled: {
+    viewBox: "0 0 24 24", draw: ({ color }) => <>
+      <Path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z" fill={color} stroke={color} strokeWidth={2} strokeLinejoin="round" />
+      <Path d="M4 21.5A2.5 2.5 0 0 1 6.5 19H20v2.5H6.5" {...stroke(color, 2)} />
+      <Path d="M9 7h7" {...stroke("#FDF3E4", 2)} />
+    </>,
+  },
   search: { viewBox: "0 0 24 24", draw: ({ color }) => <><Circle cx={10.5} cy={10.5} r={6.5} {...stroke(color, 2.2)} /><Path d="M15.5 15.5l5 5" {...stroke(color, 2.2)} /></> },
   star: {
     viewBox: "0 0 24 24", draw: ({ color }) => <Path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z" fill={color} stroke={color} strokeWidth={1.5} strokeLinejoin="round" />,

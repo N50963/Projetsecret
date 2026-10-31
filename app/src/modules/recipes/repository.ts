@@ -163,6 +163,16 @@ export async function archiveRecipe(supabase: SupabaseClient, recipeId: string, 
 /** Étoiles ramenées à l'avis utilisé par le planificateur (4-5 : aimé, 3 : bof, 1-2 : pas aimé), comme le fait la base. */
 export const starsToRating = (stars: Stars): Rating => (stars >= 4 ? "like" : stars === 3 ? "neutral" : "dislike");
 
+/** Dernière note (étoiles) du foyer pour chaque recette notée. */
+export async function latestStars(supabase: SupabaseClient, householdId: string): Promise<Map<string, Stars>> {
+  const { data, error } = await supabase.from("recipe_ratings").select("recipe_id, stars, rated_at")
+    .eq("household_id", householdId).not("stars", "is", null).order("rated_at", { ascending: false }).limit(1000);
+  check(error, "Notes illisibles");
+  const out = new Map<string, Stars>();
+  for (const r of (data ?? []) as Row[]) if (!out.has(r.recipe_id)) out.set(r.recipe_id, r.stars as Stars);
+  return out;
+}
+
 /** Dernier avis du foyer sur la recette (null s'il n'y en a pas). */
 export async function getLatestRating(supabase: SupabaseClient, householdId: string, recipeId: string): Promise<RecipeRating | null> {
   const { data, error } = await supabase.from("recipe_ratings").select("id, user_id, version_id, stars, rating, comment, rated_at")

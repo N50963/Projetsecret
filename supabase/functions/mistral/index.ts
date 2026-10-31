@@ -4,7 +4,8 @@
  *  - status            : la clé est-elle configurée et quels modèles répondent (sans compte : modèles listés seulement) ;
  *  - import_recipe     : met en forme une recette collée en texte (ingrédients rattachés au référentiel) ;
  *  - generate_recipes  : propose de nouvelles recettes selon les notes du foyer, l'équilibre demandé et les achats récents ;
- *  - adapt_recipe      : adapte une recette d'après un avis (étoiles et commentaire : « trop sec », « sans champignons »...) ;
+ *  - adapt_recipe      : après un avis (étoiles et commentaire : « trop sec »...), améliore la recette si elle est améliorable
+ *                        ({ improvable: false } sinon) ;
  *  - illustrate        : crée l'illustration d'une recette (génération d'image Mistral) et l'enregistre en JPEG ;
  *  - illustrate_missing: tâche planifiée (pg_cron, jeton x-cron-token) qui crée les illustrations manquantes (et remplace
  *                        celles de l'essai Pollinations), quelques-unes par passage, selon le quota gratuit de Mistral ;
@@ -199,7 +200,7 @@ async function householdContext(db: SupabaseClient, householdId: string) {
   const [prefs, ratings, bought] = await Promise.all([
     db.from("household_preferences").select("*").eq("household_id", householdId).maybeSingle(),
     db.from("recipe_ratings").select("rating, recipe_id, stars, comment").eq("household_id", householdId).order("rated_at", { ascending: false }).limit(60),
-    db.from("purchased_ingredients").select("ingredient_name").eq("household_id", householdId).gte("purchased_at", since).limit(500),
+    db.from("purchased_ingredients").select("ingredient_name, product_name").eq("household_id", householdId).gte("purchased_at", since).limit(500),
   ]);
   const ids = [...new Set((ratings.data ?? []).map((r: any) => r.recipe_id))];
   const names = ids.length ? (await db.from("recipe_catalog").select("id, name").in("id", ids)).data ?? [] : [];
@@ -217,7 +218,10 @@ async function householdContext(db: SupabaseClient, householdId: string) {
     rated("like").length ? `Plats aimés : ${rated("like").slice(0, 15).join(", ")}.` : "",
     rated("dislike").length ? `Plats pas aimés : ${rated("dislike").slice(0, 15).join(", ")}.` : "",
     comments.length ? `Commentaires du foyer : ${comments.join(" ; ")}.` : "",
-    (bought.data ?? []).length ? `Achats des 10 derniers jours : ${[...new Set((bought.data ?? []).map((b: any) => b.ingredient_name))].join(", ")}.` : "",
+    // Produits tels qu'achetés (« Truite fumée », « 2 pavés de truite ») : un produit fumé ou cuit n'est pas un produit cru.
+    (bought.data ?? []).length ? `Achats des 10 derniers jours (produits exacts) : ${[...new Set((bought.data ?? [])
+      .map((b: any) => (b.product_name && b.product_name !== b.ingredient_name ? `${b.product_name} (${b.ingredient_name})` : b.ingredient_name)))].join(", ")}. `
+      + "Respecte leur nature : un produit fumé, cuit, en tranches ou en conserve s'utilise tel quel (la truite fumée en tranches n'est pas une truite fraîche entière à cuire)." : "",
   ];
   return lines.filter(Boolean).join("\n");
 }
@@ -470,18 +474,23 @@ async function ingredientImages(db: SupabaseClient, offset: number, limit: numbe
   if (!todo.length) return { added: [], missing: [], remaining: pending.length };
   const titleOf = new Map<string, string>(todo.map((i: any) => [i.slug,
     overrides[i.slug] ?? INGREDIENT_ARTICLES[i.slug] ?? String(i.name).split(/[\/(,]/)[0].trim()]));
-  // Un titre « File:… » désigne directement un fichier de Commons ; sinon, image principale de l'article Wikipédia.
-  const articles = [...new Set([...titleOf.values()].filter((t) => !t.startsWith("File:")))];
-  const wiki = articles.length ? await wikiJson(`https://fr.wikipedia.org/w/api.php?action=query&format=json&redirects=1&prop=pageimages`
-    + `&piprop=thumbnail|name&pithumbsize=400&pilicense=free&titles=${encodeURIComponent(articles.join("|"))}`) : { query: {} };
+  // « File:… » : un fichier précis de Commons ; « en:… » : article du Wikipédia anglais ; sinon article du Wikipédia français.
   const rename = new Map<string, string>();
-  for (const n of [...(wiki.query?.normalized ?? []), ...(wiki.query?.redirects ?? [])]) rename.set(n.from, n.to);
+  const pages = new Map<string, any>();
+  for (const lang of ["fr", "en"]) {
+    const articles = [...new Set([...titleOf.values()].filter((t) => !t.startsWith("File:") && (lang === "en") === t.startsWith("en:"))
+      .map((t) => t.replace(/^en:/, "")))];
+    if (!articles.length) continue;
+    const wiki = await wikiJson(`https://${lang}.wikipedia.org/w/api.php?action=query&format=json&redirects=1&prop=pageimages`
+      + `&piprop=thumbnail|name&pithumbsize=400&pilicense=free&titles=${encodeURIComponent(articles.join("|"))}`);
+    for (const n of [...(wiki.query?.normalized ?? []), ...(wiki.query?.redirects ?? [])]) rename.set(`${lang}:${n.from}`, `${lang}:${n.to}`);
+    for (const p of Object.values(wiki.query?.pages ?? {}) as any[]) pages.set(`${lang}:${p.title}`, p);
+  }
   const resolve = (t: string) => {
-    let title = t;
+    let title = t.startsWith("en:") ? t : `fr:${t}`;
     for (let k = 0; k < 3 && rename.has(title); k++) title = rename.get(title)!;
     return title;
   };
-  const pages = new Map<string, any>(Object.values(wiki.query?.pages ?? {}).map((p: any) => [p.title, p]));
   const fileOf = new Map<string, string>();
   for (const [slug, title] of titleOf) {
     const file = title.startsWith("File:") ? title.slice(5) : pages.get(resolve(title))?.pageimage;
@@ -704,12 +713,15 @@ Deno.serve(async (req) => {
         if (!feedback.trim()) throw new HttpError(400, "Indiquez ce qu'il faut changer.");
         const context = await householdContext(user, householdId);
         const { data, model } = await chatJson([system, { role: "user", content:
-          `${context}\nAdapte cette recette selon l'avis du foyer : « ${feedback} ». Garde ce qui plaît, change ce qui est demandé, `
-          + `et respecte l'équilibre (légumes, cuisson saine). Réponds {"recipe": {...}, "change_note": "résumé des changements"}.\n\n`
+          `${context}\nLe foyer vient de cuisiner cette recette et donne son avis : « ${feedback} ». Si l'avis ne demande rien et que la `
+          + `recette est déjà réussie, ne la change pas et réponds {"improvable": false}. Sinon, améliore-la selon l'avis : garde ce qui plaît, `
+          + `corrige ce qui est reproché, respecte l'équilibre (légumes, cuisson saine) et réponds `
+          + `{"improvable": true, "recipe": {...}, "change_note": "résumé des changements"}.\n\n`
           + JSON.stringify(body.recipe ?? {}).slice(0, 8000) }], 0.4);
-        const out = normalizeRecipe(data.recipe ?? data, refs);
         await log(true, model);
-        return json({ ...out, change_note: String(data.change_note ?? feedback).slice(0, 300), model });
+        if (data.improvable === false || !(data.recipe ?? data.steps)) return json({ improvable: false, model });
+        const out = normalizeRecipe(data.recipe ?? data, refs);
+        return json({ improvable: true, ...out, change_note: String(data.change_note ?? feedback).slice(0, 300), model });
       }
       if (body.action === "illustrate") {
         const result = await illustrate(user, String(body.recipe_id ?? ""));

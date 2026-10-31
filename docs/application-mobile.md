@@ -9,7 +9,7 @@ Courses, Paramètres, Connexion, états et planche de composants), reproduit au 
   (`app/assets/fonts`, licence OFL) ;
 - logo en feuilles et icônes : tracés SVG des maquettes (`app/src/components/icons.tsx`, react-native-svg) ;
 - boutons pleine largeur à dégradé vert, puces beiges (vert doux bordé de vert quand elles sont choisies),
-  barre du bas Accueil · Courses · Profil.
+  barre du bas Accueil · Courses · Recettes · Profil.
 
 Code : `app/` (Expo SDK 58, Expo Router, TypeScript). Données : Supabase (projet `avhqhvedgppuieellruz`).
 Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistral reste dans les secrets Supabase).
@@ -33,19 +33,33 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    classées selon l'équilibre et la variété de la semaine. Swipe à droite pour choisir, à gauche pour passer (ou
    boutons). Si aucune ne convient : 3 recettes avec 1 à 3 ingrédients à acheter, puis 3 idées créées par Mistral.
    Les ingrédients manquants des recettes choisies vont sur la liste de courses.
-6. **Fiches recettes** : photo du plat (« Plus d'options » › Photo du plat : appareil photo ou galerie ; la photo du foyer remplace
-   l'image créée par Mistral, qui ne l'écrase jamais), quantités pour le nombre de personnes, étapes « pas à pas »
-   avec un seul minuteur par étape ; la recette faite, « Bon appétit ! » propose de mettre sa propre photo du plat. Chaque minuteur dit ce qu'il minute (« Cuire le riz », étape 6) : on s'y retrouve
-   quand plusieurs tournent. Avis sur 5 étoiles avec un commentaire facultatif (4-5 étoiles comptent comme « aimé »,
-   3 comme « bof », 1-2 comme « pas aimé » pour le choix des menus). Le commentaire peut servir à faire adapter la
-   recette par Mistral ; la version proposée s'ouvre dans un éditeur (nom, temps, ingrédients, étapes) et c'est
-   l'utilisateur qui décide : il la corrige puis la garde, ou garde la recette actuelle.
-7. **Ajout de recettes** : texte collé ou saisie libre, mis en forme par Mistral (durées de cuisson, feu et
+6. **Fiches recettes** : photo du plat (« Plus d'options » › Photo du plat : appareil photo ou galerie ; la photo prise
+   avec le téléphone remplace l'image créée par Mistral, qui ne l'écrase jamais), temps de préparation, de cuisson et
+   total en haut de la fiche, ingrédients avec leur vignette (photo libre de droits de Wikimedia Commons, crédits dans
+   Profil › Crédits des photos), quantités pour le nombre de personnes, étapes « pas à pas » avec un seul minuteur par
+   étape. Chaque minuteur dit ce qu'il minute (« Cuire le riz », étape 6) : on s'y retrouve quand plusieurs tournent ;
+   « C'est prêt » reste grisé tant qu'un minuteur tourne.
+7. **Avis après la recette** : la notation n'apparaît qu'en fin de recette, le jour où elle a été faite : 5 étoiles
+   (elles font référence ; 4-5 comptent comme « aimé », 3 comme « bof », 1-2 comme « pas aimé » pour le choix des
+   menus) et une observation facultative. Une fois l'avis enregistré, Mistral le lit et dit si la recette est
+   améliorable ; si oui, la version proposée s'ouvre dans l'éditeur (nom, temps, ingrédients, étapes) et c'est
+   l'utilisateur qui décide : il la corrige puis la garde, ou garde la recette actuelle. Pas de demande de
+   modification à Mistral en dehors de cet avis. « Bon appétit ! » propose aussi de mettre sa propre photo du plat.
+8. **Recettes** (onglet de la barre du bas) : recherche, filtre Favoris, filtre par note (5 étoiles, 4 et +, 3 et +,
+   non notées), note affichée sur chaque ligne. Les recettes ajoutées par le foyer se modifient ou se suppriment depuis
+   leur fiche (« Plus d'options » › Modifier / Supprimer) ; les recettes de la base commune ne sont pas modifiables.
+9. **Ajout de recettes** : texte collé ou saisie libre, mis en forme par Mistral (durées de cuisson, feu et
    température précisés : chaque étape avec une durée aura son minuteur). L'utilisateur relit et corrige tout dans
    l'éditeur avant d'enregistrer ; photo du plat facultative (appareil photo ou galerie), sinon Mistral crée une
    illustration.
-8. **Favoris** : cœur dans la bande verte de la fiche ; filtre « Favoris » dans la liste des recettes. « Ajouter à ma
+10. **Favoris** : cœur dans la bande verte de la fiche ; filtre « Favoris » dans l'onglet Recettes. « Ajouter à ma
    liste » met sur la liste de courses les ingrédients ni de placard ni achetés ces 7 derniers jours.
+11. **Rappels** (cloche de l'accueil) : panneau qui monte du bas avec le menu du jour (ou le prochain), les minuteurs
+   en cours et le nombre d'articles à acheter.
+
+Produits achetés tels quels : la truite et le thon fumés de Lidl sont des tranches prêtes à manger (« Truite fumée
+(tranches) ») ; Mistral reçoit le nom des produits achetés et la consigne de ne pas les traiter comme du poisson frais
+entier à cuire.
 
 Hors champ : petits-déjeuners, entrées, desserts, plateaux de fromages (seuls les plats principaux sont proposés).
 

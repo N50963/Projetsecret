@@ -57,8 +57,11 @@ export interface GenerateRequest {
 export const generateRecipes = (householdId: string, req: GenerateRequest) =>
   call<{ recipes: Draft[] }>({ action: "generate_recipes", household_id: householdId, ...req });
 
+/** Version améliorée d'après l'avis du foyer, ou `improvable: false` si Mistral ne voit rien à changer. */
+export type Adaptation = { improvable: false } | (Draft & { improvable: true; change_note: string });
+
 export const adaptRecipeDraft = (householdId: string, recipe: unknown, feedback: string) =>
-  call<Draft & { change_note: string }>({ action: "adapt_recipe", household_id: householdId, recipe, feedback });
+  call<Adaptation>({ action: "adapt_recipe", household_id: householdId, recipe, feedback });
 
 export const illustrateRecipe = (householdId: string, recipeId: string) =>
   call<{ path: string }>({ action: "illustrate", household_id: householdId, recipe_id: recipeId });

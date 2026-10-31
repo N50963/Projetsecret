@@ -25,7 +25,7 @@ export default function Credits() {
     <Screen title="Crédits des photos">
       <Muted>
         Les photos des ingrédients viennent de Wikimedia Commons, sous licence libre (domaine public, CC0, Creative Commons, GFDL).
-        Touchez une ligne pour voir l'image d'origine et sa licence. Les photos des plats sont créées par Mistral ou prises par le foyer.
+        Touchez une ligne pour voir l'image d'origine et sa licence. Les photos des plats sont créées par Mistral ou prises avec votre téléphone.
       </Muted>
       <ErrorText>{error}</ErrorText>
       {credits === null && !error ? <Muted>Chargement…</Muted> : null}

@@ -11,11 +11,11 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { CARD_SHADOW, PRIMARY_GRADIENT, PRIMARY_GRADIENT_STOPS, useColors } from "../lib/theme";
 import { Icon, type IconName } from "./icons";
 
-export type NavTab = "accueil" | "courses" | "profil";
+export type NavTab = "accueil" | "courses" | "recettes" | "profil";
 
 /**
  * Écran : fond crème, contenu défilant ; `title` règle la bande verte du haut ; `nav` affiche la barre du bas
- * (Accueil, Courses, Profil) ; `footer` s'affiche juste au-dessus (minuteurs, bouton fixe).
+ * (Accueil, Courses, Recettes, Profil) ; `footer` s'affiche juste au-dessus (minuteurs, bouton fixe).
  */
 export function Screen({ title, headerRight, children, footer, nav, scroll = true, padded = true }: {
   title?: string; headerRight?: () => ReactNode; children: ReactNode; footer?: ReactNode; nav?: NavTab; scroll?: boolean; padded?: boolean;
@@ -35,9 +35,10 @@ export function Screen({ title, headerRight, children, footer, nav, scroll = tru
   );
 }
 
-const TABS: Array<{ tab: NavTab; label: string; path: "/" | "/courses" | "/parametres"; icon: IconName; active: IconName }> = [
+const TABS: Array<{ tab: NavTab; label: string; path: "/" | "/courses" | "/recettes" | "/parametres"; icon: IconName; active: IconName }> = [
   { tab: "accueil", label: "Accueil", path: "/", icon: "home", active: "homeFilled" },
   { tab: "courses", label: "Courses", path: "/courses", icon: "cart", active: "cartFilled" },
+  { tab: "recettes", label: "Recettes", path: "/recettes", icon: "book", active: "bookFilled" },
   { tab: "profil", label: "Profil", path: "/parametres", icon: "profile", active: "profileFilled" },
 ];
 

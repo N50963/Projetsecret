@@ -1,8 +1,9 @@
 import { Image } from "expo-image";
 import { useKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
-import { Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
 
 import { Icon } from "../../components/icons";
 import { Illustration } from "../../components/Illustration";
@@ -12,25 +13,47 @@ import { StepText, TimersBar } from "../../components/Steps";
 import { Body, Button, Card, ErrorText, Field, H1, H2, HeaderIcon, Loading, Muted, Pill, Row, Screen } from "../../components/ui";
 import { minutes, proteinLabel, quantity } from "../../lib/format";
 import { ingredientPicture, ingredientPictureUrls, illustrationUrls, pictureOf, uploadRecipePhoto, type Picture } from "../../lib/images";
-import { adaptRecipeDraft, draftToInput, type Draft } from "../../lib/mistral";
+import { adaptRecipeDraft, draftToInput, type DraftRecipe } from "../../lib/mistral";
 import { pickDishPhoto } from "../../lib/photo";
 import { useHousehold } from "../../lib/session";
 import { clock, stepTimer } from "../../lib/steps";
 import { supabase } from "../../lib/supabase";
+import { toIsoDate } from "../../modules/planning";
 import { useColors } from "../../lib/theme";
 import { startTimer, stopTimer, timerId, useTimers } from "../../lib/timers";
 import {
-  adaptRecipe, addRecipeToShoppingList, getLatestRating, getRecipe, getShoppingNeeds, isFavorite, rateRecipe, scaleIngredients, setFavorite,
-  toPayload, validateRecipe, type Recipe, type RecipeRating, type ShoppingNeed, type Stars,
+  adaptRecipe, addRecipeToShoppingList, addRecipeVersion, archiveRecipe, getLatestRating, getRecipe, getShoppingNeeds, isFavorite, rateRecipe,
+  scaleIngredients, setFavorite, toPayload, validateRecipe, type Recipe, type RecipeRating, type ShoppingNeed, type Stars,
 } from "../../modules/recipes";
 
 type Tab = "ingredients" | "preparation";
 
+/** Brouillon affiché dans l'éditeur : version proposée par Mistral après un avis, ou modification par le foyer. */
+interface Revision {
+  kind: "mistral" | "edit";
+  recipe: DraftRecipe;
+  issues: string[];
+  change_note: string;
+}
+
+/** Jour où la recette a été faite sur ce téléphone (« C'est prêt ») : l'avis ne se donne que ce jour-là. */
+const cookedKey = (recipeId: string) => `recette-faite:${recipeId}`;
+
+function confirm(message: string, action: string, onConfirm: () => void) {
+  if (Platform.OS === "web") {
+    if (window.confirm(message)) onConfirm();
+    return;
+  }
+  Alert.alert(message, undefined, [{ text: "Garder", style: "cancel" }, { text: action, style: "destructive", onPress: onConfirm }]);
+}
+
 /**
- * Fiche recette MenuMalin (ouverte en fondu) : photo, puces (temps, protéine, personnes), onglets Ingrédients (« à
- * acheter », « Ajouter à ma liste ») et Préparation (pas à pas, un minuteur par étape, écran gardé allumé ; la recette
- * faite, on peut mettre sa propre photo du plat), durées, avis sur 5 étoiles avec commentaire, « Plus d'options »
- * (adaptation par Mistral, photo du plat). Favoris et partage dans la bande verte.
+ * Fiche recette MenuMalin (ouverte en fondu) : photo, durées, puces (protéine, personnes), onglets Ingrédients (« à
+ * acheter », « Ajouter à ma liste ») et Préparation (pas à pas, un minuteur par étape, écran gardé allumé). La recette
+ * faite (« C'est prêt »), et ce jour-là seulement : photo du plat et avis sur 5 étoiles avec une remarque ; l'avis
+ * enregistré part à Mistral, qui propose une version améliorée si la recette est améliorable (l'utilisateur la corrige
+ * et la garde, ou garde la recette actuelle). « Plus d'options » : photo du plat ; pour les recettes ajoutées par le
+ * foyer, modifier ou supprimer. Favoris et partage dans la bande verte.
  */
 export default function FicheRecette() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -50,8 +73,8 @@ export default function FicheRecette() {
   const [comment, setComment] = useState("");
   const [saved, setSaved] = useState(false);
   const [more, setMore] = useState(false);
-  const [request, setRequest] = useState("");
-  const [draft, setDraft] = useState<(Draft & { change_note: string }) | null>(null);
+  const [draft, setDraft] = useState<Revision | null>(null);
+  const [cookedOn, setCookedOn] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -69,10 +92,13 @@ export default function FicheRecette() {
       ]);
       setImage(urls[r.id] ?? null);
       setPrevious(rating);
-      setStars(rating?.stars ?? null);
-      setComment(rating?.comment ?? "");
-      setSaved(Boolean(rating?.stars));
+      // L'avis du jour seulement (l'avis se donne le jour où la recette est faite).
+      const ratedToday = rating?.stars && toIsoDate(new Date(rating.ratedAt)) === toIsoDate(new Date());
+      setStars(ratedToday ? rating.stars : null);
+      setComment(ratedToday ? rating.comment ?? "" : "");
+      setSaved(Boolean(ratedToday));
       setFav(fav);
+      AsyncStorage.getItem(cookedKey(r.id)).then(setCookedOn, () => undefined);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -138,23 +164,53 @@ export default function FicheRecette() {
     setImage((await illustrationUrls([recipe.id]))[recipe.id] ?? null);
     setInfo("Votre photo remplace l'image du plat.");
   });
+  const today = toIsoDate(new Date());
+  const cookedToday = cookedOn === today;
+  const own = recipe.householdId === household.id;
+
+  const finish = () => {
+    setCurrent(recipe.steps.length);
+    setCookedOn(today);
+    AsyncStorage.setItem(cookedKey(recipe.id), today).catch(() => undefined);
+  };
+  // Avis enregistré, puis envoyé à Mistral : il propose une version améliorée si la recette est améliorable.
   const saveRating = () => act("rate", async () => {
     if (!stars) return;
     await rateRecipe(supabase, household.id, recipe, stars, comment, previous);
     setPrevious(await getLatestRating(supabase, household.id, recipe.id));
     setSaved(true);
+    if (stars === 5 && !comment.trim()) {
+      setInfo("Merci pour votre avis.");
+      return;
+    }
+    const result = await adaptRecipeDraft(household.id, toPayload(recipe), `Note : ${stars}/5.${comment.trim() ? ` ${comment.trim()}` : ""}`);
+    if (!result.improvable) {
+      setInfo("Merci pour votre avis : Mistral ne voit rien à améliorer dans cette recette.");
+      return;
+    }
+    setDraft({ kind: "mistral", recipe: result.recipe, issues: result.issues, change_note: result.change_note });
   });
-  const askAdaptation = (feedback: string) => act("adapt", async () => {
-    setDraft(await adaptRecipeDraft(household.id, toPayload(recipe), feedback));
-  });
-  const saveAdaptation = () => act("save", async () => {
+  const editRecipe = () => {
+    setMore(false);
+    setDraft({ kind: "edit", recipe: toPayload(recipe) as unknown as DraftRecipe, issues: [], change_note: "" });
+  };
+  const deleteRecipe = () => confirm(`Supprimer « ${recipe.name} » ?`, "Supprimer", () => act("delete", async () => {
+    await archiveRecipe(supabase, recipe.id);
+    router.back();
+  }));
+  const saveRevision = () => act("save", async () => {
     if (!draft) return;
-    const input = draftToInput(cleanDraft(draft.recipe), "mistral");
+    const input = draftToInput(cleanDraft(draft.recipe), draft.kind === "edit" ? recipe.source : "mistral");
     const issues = validateRecipe(input);
     if (issues.length) throw new Error(`À corriger : ${issues.map((i) => i.message).join(" ; ")}`);
-    const newId = await adaptRecipe(supabase, household.id, recipe, input, draft.change_note || "Adaptée avec Mistral");
+    if (draft.kind === "edit") {
+      await addRecipeVersion(supabase, recipe.id, input, "Modifiée à la main");
+      setDraft(null);
+      await load();
+      return;
+    }
+    const newId = await adaptRecipe(supabase, household.id, recipe, input, draft.change_note || "Améliorée par Mistral après un avis");
     setDraft(null);
-    setRequest("");
     setCurrent(0);
     if (newId && recipe.householdId !== household.id) router.replace(`/recette/${newId}`);
     else await load();
@@ -269,7 +325,7 @@ export default function FicheRecette() {
                       {n > 0 && <Button title="Précédente" kind="secondary" onPress={() => setCurrent(n - 1)} style={{ flex: 1 }} />}
                       {n < recipe.steps.length - 1
                         ? <Button title="Étape suivante" onPress={() => setCurrent(n + 1)} style={{ flex: 1 }} />
-                        : <Button title={cooking.length ? "Minuteurs en cours" : "C'est prêt"} onPress={() => setCurrent(n + 1)} disabled={cooking.length > 0}
+                        : <Button title={cooking.length ? "Minuteurs en cours" : "C'est prêt"} onPress={finish} disabled={cooking.length > 0}
                           style={{ flex: 1 }} />}
                     </Row>
                   )}
@@ -291,33 +347,33 @@ export default function FicheRecette() {
                 <Button title="Prendre une photo" kind="secondary" icon="camera" onPress={() => changePhoto(true)} busy={busy === "photo"} style={{ flex: 1.6 }} />
                 <Button title="Galerie" kind="secondary" icon="gallery" onPress={() => changePhoto(false)} style={{ flex: 1 }} />
               </View>
-              {info ? <Body style={{ color: c.greenInk }}>{info}</Body> : null}
               <Button title="Reprendre depuis le début" kind="secondary" onPress={() => setCurrent(0)} />
             </Card>
           )}
         </View>
       )}
 
+      {cookedToday && (
+        <View style={[styles.section, { gap: 9 }]}>
+          <H2>Votre avis sur le plat d'aujourd'hui</H2>
+          <StarRating value={stars} onChange={(n) => {
+            setStars(n);
+            setSaved(false);
+          }} />
+          <Muted>{stars ? starsLabel(stars) : "Touchez les étoiles pour noter le plat."}</Muted>
+          <Field multiline value={comment} maxLength={1000} placeholder="Une remarque pour améliorer la recette ? (un peu fade, trop de crème…)"
+            onChangeText={(t) => {
+              setComment(t);
+              setSaved(false);
+            }} />
+          <Button title={saved ? "Avis enregistré" : "Enregistrer mon avis"} onPress={saveRating} busy={busy === "rate"} disabled={!stars || saved} />
+          {busy === "rate" ? <Muted>Mistral relit la recette avec votre avis…</Muted> : null}
+        </View>
+      )}
 
       <View style={[styles.section, { gap: 9 }]}>
         {info ? <Body style={{ color: c.greenInk }}>{info}</Body> : null}
         <ErrorText>{error}</ErrorText>
-        <H2>Votre avis</H2>
-        <StarRating value={stars} onChange={(n) => {
-          setStars(n);
-          setSaved(false);
-        }} />
-        <Muted>{stars ? starsLabel(stars) : "Touchez les étoiles pour noter le plat."}</Muted>
-        <Field multiline value={comment} maxLength={1000} placeholder="Un commentaire ? (un peu fade, trop de crème, les enfants ont adoré…)"
-          onChangeText={(t) => {
-            setComment(t);
-            setSaved(false);
-          }} />
-        <Button title={saved ? "Avis enregistré" : "Enregistrer mon avis"} onPress={saveRating} busy={busy === "rate"} disabled={!stars || saved} />
-        {saved && comment.trim() && !draft ? (
-          <Button title="Adapter la recette selon mon avis" kind="secondary" icon="sparkle" busy={busy === "adapt"}
-            onPress={() => askAdaptation(`Note du foyer : ${stars ?? "?"}/5. ${comment.trim()}`)} />
-        ) : null}
       </View>
 
       <View style={styles.section}>
@@ -328,16 +384,22 @@ export default function FicheRecette() {
         </Pressable>
         {more && (
           <Card>
-            <H2>Adapter avec Mistral</H2>
-            <Field multiline value={request} onChangeText={setRequest} placeholder="Exemple : sans oignons, plus de légumes" style={{ backgroundColor: c.background }} />
-            <Button title="Adapter la recette" onPress={() => askAdaptation(request)} busy={busy === "adapt"} disabled={!request.trim()} />
-            <View style={{ height: 1, backgroundColor: c.border, marginVertical: 4 }} />
             <H2>Photo du plat</H2>
             <Muted>Votre photo remplace l'image créée par Mistral.</Muted>
             <View style={{ flexDirection: "row", gap: 8 }}>
               <Button title="Prendre une photo" kind="secondary" icon="camera" onPress={() => changePhoto(true)} busy={busy === "photo"} style={{ flex: 1.6 }} />
               <Button title="Galerie" kind="secondary" icon="gallery" onPress={() => changePhoto(false)} style={{ flex: 1 }} />
             </View>
+            {own && (
+              <>
+                <View style={{ height: 1, backgroundColor: c.border, marginVertical: 4 }} />
+                <H2>Votre recette</H2>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <Button title="Modifier" kind="secondary" onPress={editRecipe} style={{ flex: 1 }} />
+                  <Button title="Supprimer" kind="danger" icon="trash" onPress={deleteRecipe} busy={busy === "delete"} style={{ flex: 1 }} />
+                </View>
+              </>
+            )}
           </Card>
         )}
       </View>
@@ -345,14 +407,18 @@ export default function FicheRecette() {
       {draft && (
         <View style={[styles.section, { gap: 12 }]}>
           <Card>
-            <H2>Version proposée par Mistral</H2>
+            <H2>{draft.kind === "edit" ? "Modifier la recette" : "Version améliorée par Mistral"}</H2>
             {draft.change_note ? <Body>{draft.change_note}</Body> : null}
-            <Muted>Vous avez le dernier mot : corrigez ce que vous voulez avant de garder cette version. L'ancienne version reste dans l'historique.</Muted>
+            <Muted>
+              {draft.kind === "edit"
+                ? "Corrigez le nom, les temps, les ingrédients ou les étapes. L'ancienne version reste dans l'historique."
+                : "D'après votre avis. Vous avez le dernier mot : corrigez ce que vous voulez avant de garder cette version ; l'ancienne reste dans l'historique."}
+            </Muted>
             {draft.issues.length ? <Muted>Remarques de Mistral : {draft.issues.join(" ; ")}</Muted> : null}
           </Card>
           <RecipeEditor value={draft.recipe} onChange={(r) => setDraft({ ...draft, recipe: r })} />
-          <Button title="Garder ma version" onPress={saveAdaptation} busy={busy === "save"} />
-          <Button title="Garder la recette actuelle" kind="secondary" onPress={() => setDraft(null)} />
+          <Button title={draft.kind === "edit" ? "Enregistrer les modifications" : "Garder ma version"} onPress={saveRevision} busy={busy === "save"} />
+          <Button title={draft.kind === "edit" ? "Annuler" : "Garder la recette actuelle"} kind="secondary" onPress={() => setDraft(null)} />
         </View>
       )}
     </Screen>
