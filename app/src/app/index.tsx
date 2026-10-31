@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Alert, LayoutAnimation, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Illustration } from "../components/Illustration";
+import { TimersBar } from "../components/Steps";
 import { TimeWheel } from "../components/TimeWheel";
 import { Body, Button, Card, Chip, ErrorText, H2, HeaderIcon, Muted, Row, Screen } from "../components/ui";
 import { dayLabel, mealLabel } from "../lib/format";
@@ -121,7 +122,7 @@ export default function Accueil() {
   };
 
   return (
-    <Screen title={household.name}
+    <Screen title={household.name} footer={<TimersBar />}
       headerRight={() => <HeaderIcon name="settings-outline" label="Paramètres" onPress={() => router.push("/parametres")} />}>
       <ErrorText>{error}</ErrorText>
 

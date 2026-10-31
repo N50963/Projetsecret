@@ -8,8 +8,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useColors } from "../lib/theme";
 
-export function Screen({ title, headerRight, children, scroll = true }: {
-  title?: string; headerRight?: () => ReactNode; children: ReactNode; scroll?: boolean;
+export function Screen({ title, headerRight, children, footer, scroll = true }: {
+  title?: string; headerRight?: () => ReactNode; children: ReactNode; footer?: ReactNode; scroll?: boolean;
 }) {
   const c = useColors();
   const body = scroll
@@ -19,6 +19,7 @@ export function Screen({ title, headerRight, children, scroll = true }: {
     <SafeAreaView edges={["bottom", "left", "right"]} style={{ flex: 1, backgroundColor: c.background }}>
       {title !== undefined && <Stack.Screen options={{ title, headerRight }} />}
       {body}
+      {footer}
     </SafeAreaView>
   );
 }

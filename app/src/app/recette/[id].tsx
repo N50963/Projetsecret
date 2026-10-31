@@ -1,16 +1,21 @@
+import Ionicons from "@expo/vector-icons/Ionicons";
 import * as ImagePicker from "expo-image-picker";
+import { useKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { Illustration } from "../../components/Illustration";
+import { StepText, TimersBar } from "../../components/Steps";
 import { Body, Button, Card, Chip, ErrorText, H1, H2, Loading, Muted, Row, Screen } from "../../components/ui";
 import { minutes, PROTEIN_LABEL, quantity } from "../../lib/format";
 import { illustrationUrls, uploadRecipePhoto, type Picture } from "../../lib/images";
 import { adaptRecipeDraft, draftToInput, type Draft } from "../../lib/mistral";
 import { useHousehold } from "../../lib/session";
+import { stepTimers } from "../../lib/steps";
 import { supabase } from "../../lib/supabase";
 import { useColors } from "../../lib/theme";
+import { startTimer } from "../../lib/timers";
 import { adaptRecipe, getRecipe, rateRecipe, scaleIngredients, toPayload, type Rating, type Recipe } from "../../modules/recipes";
 
 const ALLERGEN: Record<string, string> = {
@@ -18,7 +23,10 @@ const ALLERGEN: Record<string, string> = {
   soja: "soja", moutarde: "moutarde", celeri: "céleri", sesame: "sésame",
 };
 
-/** Fiche recette : photo, quantités pour le nombre de personnes, étapes, avis ; adaptation et photo dans « Plus d'options ». */
+/**
+ * Fiche recette : photo, quantités pour le nombre de personnes, étapes « pas à pas » (étape en cours mise en avant, minuteurs,
+ * écran gardé allumé), avis ; adaptation et photo dans « Plus d'options ».
+ */
 export default function FicheRecette() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -34,6 +42,10 @@ export default function FicheRecette() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [more, setMore] = useState(false);
+  /** Étape en cours (toutes faites quand elle vaut le nombre d'étapes). */
+  const [current, setCurrent] = useState(0);
+  // En cuisine, l'écran ne s'éteint pas tant que la fiche est ouverte.
+  useKeepAwake();
 
   const load = useCallback(async () => {
     try {
@@ -93,7 +105,7 @@ export default function FicheRecette() {
   });
 
   return (
-    <Screen title={recipe.name}>
+    <Screen title={recipe.name} footer={<TimersBar />}>
       <Illustration picture={image} height={240} />
       <H1>{recipe.name}</H1>
       {recipe.description ? <Body>{recipe.description}</Body> : null}
@@ -120,13 +132,51 @@ export default function FicheRecette() {
       </Card>
 
       <Card>
-        <H2>Étapes</H2>
-        {recipe.steps.map((s, n) => (
-          <View key={n} style={styles.step}>
-            <Body style={{ fontWeight: "700", color: c.primary }}>{n + 1}.</Body>
-            <Body style={{ flex: 1 }}>{s}</Body>
+        <H2>Pas à pas</H2>
+        <Muted>Touchez une étape pour la suivre ; les minuteurs sonnent et vibrent à la fin.</Muted>
+        {recipe.steps.map((s, n) => {
+          const isCurrent = n === current;
+          const done = n < current;
+          const timers = stepTimers(s);
+          return (
+            <Pressable key={n} onPress={() => setCurrent(n)} accessibilityRole="button" accessibilityState={{ selected: isCurrent }}
+              accessibilityLabel={`Étape ${n + 1}${done ? ", faite" : ""}`}
+              style={[styles.step, isCurrent && { borderColor: c.primary, backgroundColor: c.overlay, borderWidth: 2 }]}>
+              <View style={[styles.badge, { backgroundColor: isCurrent ? c.primary : c.chip }]}>
+                {done
+                  ? <Ionicons name="checkmark" size={18} color={c.muted} />
+                  : <Text style={{ fontWeight: "700", color: isCurrent ? c.primaryText : c.text }}>{n + 1}</Text>}
+              </View>
+              <View style={{ flex: 1, gap: 10 }}>
+                <StepText text={s} current={isCurrent} done={done} />
+                {timers.length > 0 && (
+                  <Row>
+                    {timers.map((t) => (
+                      <Pressable key={t.seconds} accessibilityRole="button" accessibilityLabel={`Lancer un minuteur de ${t.label}`}
+                        onPress={() => startTimer(recipe.id, `Étape ${n + 1} · ${t.label}`, s, t.seconds)}
+                        style={({ pressed }) => [styles.timer, { borderColor: c.primary, opacity: pressed ? 0.6 : 1 }]}>
+                        <Ionicons name="timer-outline" size={18} color={c.primary} />
+                        <Text style={{ color: c.primary, fontWeight: "600" }}>{t.label}</Text>
+                      </Pressable>
+                    ))}
+                  </Row>
+                )}
+                {isCurrent && (
+                  <Row>
+                    {n > 0 && <Button title="Précédente" kind="secondary" onPress={() => setCurrent(n - 1)} style={{ flex: 1 }} />}
+                    <Button title={n < recipe.steps.length - 1 ? "Étape suivante" : "C'est prêt"} onPress={() => setCurrent(n + 1)} style={{ flex: 1 }} />
+                  </Row>
+                )}
+              </View>
+            </Pressable>
+          );
+        })}
+        {current >= recipe.steps.length && (
+          <View style={{ gap: 8 }}>
+            <Body style={{ fontWeight: "700" }}>Bon appétit !</Body>
+            <Button title="Reprendre depuis le début" kind="secondary" onPress={() => setCurrent(0)} />
           </View>
-        ))}
+        )}
       </Card>
 
       <Card>
@@ -176,6 +226,8 @@ export default function FicheRecette() {
 
 const styles = StyleSheet.create({
   line: { flexDirection: "row", gap: 12, paddingVertical: 4 },
-  step: { flexDirection: "row", gap: 10 },
+  step: { flexDirection: "row", gap: 12, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: "transparent", padding: 10 },
+  badge: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  timer: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   input: { minHeight: 70, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 12, fontSize: 16, textAlignVertical: "top" },
 });

@@ -120,7 +120,10 @@ const RECIPE_FORMAT = `Format JSON d'une recette :
 Règles : plat principal uniquement (pas d'entrée, de dessert, de fromage ni de petit-déjeuner) ; meal_types parmi "diner" et "dejeuner" ;
 difficulty de 1 à 3 ; quantités pour le nombre de portions ; base_quantity = quantité en g, ml ou pièces quand la conversion est sûre
 (sinon null) ; cuillères (cs, cc) et pincées : base_quantity null sauf liquides (1 cs = 15 ml, 1 cc = 5 ml) ; épices et herbes en "sublinear" ;
-au moins 3 ingrédients et 2 étapes ; étapes courtes, à l'impératif. Portions généreuses par personne : 120 à 150 g de viande ou de poisson,
+au moins 3 ingrédients et 2 étapes ; étapes détaillées, à l'impératif, une action principale par étape : chaque cuisson donne sa durée
+en chiffres (« 5 min », « 8 à 10 min », « 1 h 30 »), l'intensité du feu (feu doux, moyen ou vif) ou la température du four (« 200 °C »)
+et un repère de cuisson (« jusqu'à ce que l'oignon soit translucide ») ; riz et pâtes avec leur temps de cuisson, jamais « selon le
+paquet ». Portions généreuses par personne : 120 à 150 g de viande ou de poisson,
 150 à 250 g de légumes, 70 à 80 g de féculent cru (pâtes, riz, semoule) ou 250 g de pommes de terre.`;
 
 function referentialText(refs: Ref[]) {
