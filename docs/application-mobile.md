@@ -19,9 +19,17 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    classées selon l'équilibre et la variété de la semaine. Swipe à droite pour choisir, à gauche pour passer (ou
    boutons). Si aucune ne convient : 3 recettes avec 1 à 3 ingrédients à acheter, puis 3 idées créées par Mistral.
    Les ingrédients manquants des recettes choisies vont sur la liste de courses.
-6. **Fiches recettes** : illustration, quantités pour le nombre de personnes, étapes, avis commun (j'aime / bof /
-   pas aimé), adaptation par Mistral (« moins de crème », « sans champignons »…), photo du plat.
-7. **Ajout de recettes** : texte collé ou saisie libre, mis en forme par Mistral, vérifié avant enregistrement.
+6. **Fiches recettes** : photo du plat (bouton « Ma photo » : appareil photo ou galerie ; la photo du foyer remplace
+   l'image créée par Mistral, qui ne l'écrase jamais), quantités pour le nombre de personnes, étapes « pas à pas »
+   avec un seul minuteur par étape. Chaque minuteur dit ce qu'il minute (« Cuire le riz », étape 6) : on s'y retrouve
+   quand plusieurs tournent. Avis sur 5 étoiles avec un commentaire facultatif (4-5 étoiles comptent comme « aimé »,
+   3 comme « bof », 1-2 comme « pas aimé » pour le choix des menus). Le commentaire peut servir à faire adapter la
+   recette par Mistral ; la version proposée s'ouvre dans un éditeur (nom, temps, ingrédients, étapes) et c'est
+   l'utilisateur qui décide : il la corrige puis la garde, ou garde la recette actuelle.
+7. **Ajout de recettes** : texte collé ou saisie libre, mis en forme par Mistral (durées de cuisson, feu et
+   température précisés : chaque étape avec une durée aura son minuteur). L'utilisateur relit et corrige tout dans
+   l'éditeur avant d'enregistrer ; photo du plat facultative (appareil photo ou galerie), sinon Mistral crée une
+   illustration.
 
 Hors champ : petits-déjeuners, entrées, desserts, plateaux de fromages (seuls les plats principaux sont proposés).
 

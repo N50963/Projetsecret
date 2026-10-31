@@ -4,7 +4,7 @@
  *  - status            : la clé est-elle configurée et quels modèles répondent (sans compte : modèles listés seulement) ;
  *  - import_recipe     : met en forme une recette collée en texte (ingrédients rattachés au référentiel) ;
  *  - generate_recipes  : propose de nouvelles recettes selon les notes du foyer, l'équilibre demandé et les achats récents ;
- *  - adapt_recipe      : adapte une recette d'après un avis (« trop sec », « sans champignons »...) ;
+ *  - adapt_recipe      : adapte une recette d'après un avis (étoiles et commentaire : « trop sec », « sans champignons »...) ;
  *  - illustrate        : crée l'illustration d'une recette (génération d'image Mistral) et l'enregistre en JPEG ;
  *  - illustrate_missing: tâche planifiée (pg_cron, jeton x-cron-token) qui crée les illustrations manquantes (et remplace
  *                        celles de l'essai Pollinations), quelques-unes par passage, selon le quota gratuit de Mistral.
@@ -122,8 +122,9 @@ difficulty de 1 à 3 ; quantités pour le nombre de portions ; base_quantity = q
 (sinon null) ; cuillères (cs, cc) et pincées : base_quantity null sauf liquides (1 cs = 15 ml, 1 cc = 5 ml) ; épices et herbes en "sublinear" ;
 au moins 3 ingrédients et 2 étapes ; étapes détaillées, à l'impératif, une action principale par étape : chaque cuisson donne sa durée
 en chiffres (« 5 min », « 8 à 10 min », « 1 h 30 »), l'intensité du feu (feu doux, moyen ou vif) ou la température du four (« 200 °C »)
-et un repère de cuisson (« jusqu'à ce que l'oignon soit translucide ») ; riz et pâtes avec leur temps de cuisson, jamais « selon le
-paquet ». Portions généreuses par personne : 120 à 150 g de viande ou de poisson,
+et un repère de cuisson (« jusqu'à ce que l'oignon soit translucide ») ; une seule durée de cuisson par étape, juste après l'action et
+l'ingrédient qu'elle concerne (« Cuire le riz 11 min ») : l'application en fait un minuteur, donc deux cuissons font deux étapes ;
+riz et pâtes avec leur temps de cuisson, jamais « selon le paquet » ; texte simple, sans Markdown ni gras. Portions généreuses par personne : 120 à 150 g de viande ou de poisson,
 150 à 250 g de légumes, 70 à 80 g de féculent cru (pâtes, riz, semoule) ou 250 g de pommes de terre.`;
 
 function referentialText(refs: Ref[]) {
@@ -153,7 +154,9 @@ function normalizeRecipe(raw: any, refs: Ref[]): { recipe: any; issues: string[]
     cuisine: raw?.cuisine ? String(raw.cuisine).slice(0, 40) : null,
     seasons: (Array.isArray(raw?.seasons) ? raw.seasons : SEASONS).filter((s: string) => SEASONS.includes(s)),
     tags: (Array.isArray(raw?.tags) ? raw.tags : []).map(String).slice(0, 10),
-    steps: (Array.isArray(raw?.steps) ? raw.steps : []).map((s: unknown) => String(s).trim()).filter(Boolean).slice(0, 20),
+    // Sans mise en forme Markdown ni numérotation : l'application affiche et numérote les étapes elle-même.
+    steps: (Array.isArray(raw?.steps) ? raw.steps : []).map((s: unknown) => String(s).replace(/\*\*|__|`/g, "").replace(/^\s*(?:\d+[.)]|[-•])\s*/, "")
+      .replace(/\s{2,}/g, " ").trim()).filter(Boolean).slice(0, 20),
     ingredients: [] as any[],
   };
   if (!r.meal_types.length) r.meal_types = ["diner"];
@@ -193,13 +196,15 @@ async function householdContext(db: SupabaseClient, householdId: string) {
   const since = new Date(Date.now() - 10 * 86_400_000).toISOString();
   const [prefs, ratings, bought] = await Promise.all([
     db.from("household_preferences").select("*").eq("household_id", householdId).maybeSingle(),
-    db.from("recipe_ratings").select("rating, recipe_id").eq("household_id", householdId).order("rated_at", { ascending: false }).limit(60),
+    db.from("recipe_ratings").select("rating, recipe_id, stars, comment").eq("household_id", householdId).order("rated_at", { ascending: false }).limit(60),
     db.from("purchased_ingredients").select("ingredient_name").eq("household_id", householdId).gte("purchased_at", since).limit(500),
   ]);
   const ids = [...new Set((ratings.data ?? []).map((r: any) => r.recipe_id))];
   const names = ids.length ? (await db.from("recipe_catalog").select("id, name").in("id", ids)).data ?? [] : [];
   const nameOf = new Map(names.map((n: any) => [n.id, n.name]));
   const rated = (kind: string) => [...new Set((ratings.data ?? []).filter((r: any) => r.rating === kind).map((r: any) => nameOf.get(r.recipe_id)).filter(Boolean))];
+  const comments = (ratings.data ?? []).filter((r: any) => r.comment && nameOf.get(r.recipe_id)).slice(0, 8)
+    .map((r: any) => `${nameOf.get(r.recipe_id)}${r.stars ? ` (${r.stars}/5)` : ""} : « ${String(r.comment).slice(0, 160)} »`);
   const p = prefs.data;
   const lines = [
     p ? `Foyer : ${p.adults} adultes, ${p.teens} adolescent(s), ${p.children} enfant(s).` : "Foyer de 4 personnes.",
@@ -209,6 +214,7 @@ async function householdContext(db: SupabaseClient, householdId: string) {
     p?.disliked_ingredients?.length ? `Ingrédients non appréciés : ${p.disliked_ingredients.join(", ")}.` : "",
     rated("like").length ? `Plats aimés : ${rated("like").slice(0, 15).join(", ")}.` : "",
     rated("dislike").length ? `Plats pas aimés : ${rated("dislike").slice(0, 15).join(", ")}.` : "",
+    comments.length ? `Commentaires du foyer : ${comments.join(" ; ")}.` : "",
     (bought.data ?? []).length ? `Achats des 10 derniers jours : ${[...new Set((bought.data ?? []).map((b: any) => b.ingredient_name))].join(", ")}.` : "",
   ];
   return lines.filter(Boolean).join("\n");
@@ -306,12 +312,21 @@ function asJpeg(bytes: Uint8Array): Uint8Array {
   return jpeg.encode({ data: rgba, width, height }, JPEG_QUALITY).data;
 }
 
+/** Le foyer a mis sa propre photo du plat (recette du foyer) : elle prime sur toute image créée. */
+async function hasHouseholdPhoto(db: SupabaseClient, recipeId: string, owner: string | null): Promise<boolean> {
+  if (!owner) return false;
+  const { data } = await db.from("recipe_images").select("source").eq("recipe_id", recipeId).eq("household_id", owner).eq("source", "photo").limit(1);
+  return Boolean(data?.length);
+}
+
 async function illustrate(reader: SupabaseClient, recipeId: string): Promise<{ path: string }> {
   const db = admin();
   const { data: recipe, error } = await reader.from("recipe_catalog").select("id, household_id, name, description, version_id").eq("id", recipeId).maybeSingle();
   if (error || !recipe) throw new HttpError(404, "Recette introuvable.");
   const { data: ings } = await reader.from("recipe_ingredients").select("label, optional").eq("version_id", recipe.version_id).order("position");
   const ingredients = (ings ?? []).filter((i: any) => !i.optional).map((i: any) => i.label).join(", ");
+  const owner = recipe.household_id ?? null;
+  if (await hasHouseholdPhoto(db, recipe.id, owner)) return { path: "" };
   const prompt = `Génère une image avec l'outil de génération d'images. Photographie culinaire réaliste, vue de trois-quarts, lumière naturelle, assiette familiale simple : « ${recipe.name} ». `
     + `${recipe.description ?? ""} Ingrédients : ${ingredients}. Pas de texte.`;
   const bytes = asJpeg(await mistralImage(db, prompt));
@@ -319,7 +334,8 @@ async function illustrate(reader: SupabaseClient, recipeId: string): Promise<{ p
   // Format réel d'après les premiers octets (l'en-tête HTTP du lien n'est pas fiable).
   const contentType = bytes[0] === 0xff && bytes[1] === 0xd8 ? "image/jpeg"
     : bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[8] === 0x57 && bytes[9] === 0x45 ? "image/webp" : "image/png";
-  const owner = recipe.household_id ?? null;
+  // Une photo du foyer n'est jamais remplacée par une image créée (elle a pu être ajoutée pendant la génération).
+  if (await hasHouseholdPhoto(db, recipe.id, owner)) return { path: "" };
   const path = `${owner ?? "common"}/${recipe.id}.${contentType === "image/jpeg" ? "jpg" : contentType.slice(6)}`;
   const up = await db.storage.from("recipe-images").upload(path, bytes, { contentType, upsert: true });
   if (up.error) throw new HttpError(500, `Image non enregistrée : ${up.error.message}`);
@@ -423,7 +439,9 @@ Deno.serve(async (req) => {
         const text = String(body.text ?? "").slice(0, 12000);
         if (text.trim().length < 40) throw new HttpError(400, "Collez le texte complet de la recette.");
         const { data, model } = await chatJson([system, { role: "user", content:
-          `Mets en forme cette recette pour ${body.servings ?? 4} personnes, en gardant ses quantités et ses étapes (traduis en français si besoin). `
+          `Mets en forme cette recette pour ${body.servings ?? 4} personnes (traduis en français si besoin). Garde ses ingrédients, ses quantités `
+          + `et le déroulé de ses étapes ; ne change pas le plat. Rédige les étapes selon les règles : quand le texte ne donne pas la durée d'une `
+          + `cuisson, le feu ou la température du four, ajoute les valeurs habituelles ; découpe une étape qui enchaîne deux cuissons. `
           + `Rattache chaque ingrédient au slug le plus proche du référentiel, ou null. Réponds {"recipe": {...}}.\n\n${text}` }], 0.2);
         const out = normalizeRecipe(data.recipe ?? data, refs);
         await log(true, model);

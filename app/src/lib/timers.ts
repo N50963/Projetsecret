@@ -7,11 +7,15 @@ import { useSyncExternalStore } from "react";
 import { Alert, Vibration } from "react-native";
 
 export interface CookingTimer {
+  /** Un seul minuteur par étape : « recette:étape ». */
   id: string;
   recipeId: string;
-  /** Texte court affiché dans la barre des minuteurs (« Étape 3 · 8 min »). */
-  label: string;
-  /** Rappel de l'étape, montré quand le minuteur sonne. */
+  recipeName: string;
+  /** Numéro de l'étape (à partir de 1). */
+  step: number;
+  /** Ce que l'on minute (« Cuire le riz »), pour distinguer les minuteurs qui tournent en même temps. */
+  subject: string;
+  /** Texte complet de l'étape, rappelé quand le minuteur sonne. */
   detail: string;
   endsAt: number;
   done: boolean;
@@ -33,7 +37,7 @@ function publish(timers: CookingTimer[]) {
 
 function ring(t: CookingTimer) {
   Vibration.vibrate([0, 700, 400, 700, 400, 700]);
-  Alert.alert("Minuteur terminé", `${t.label}\n\n${t.detail}`);
+  Alert.alert(`${t.subject} : c'est l'heure`, `${t.recipeName}, étape ${t.step}\n\n${t.detail}`);
 }
 
 function tick() {
@@ -50,8 +54,12 @@ function tick() {
   }
 }
 
-export function startTimer(recipeId: string, label: string, detail: string, seconds: number) {
-  publish([...snapshot.timers, { id: `${Date.now()}-${snapshot.timers.length}`, recipeId, label, detail, endsAt: Date.now() + seconds * 1000, done: false }]);
+export const timerId = (recipeId: string, step: number) => `${recipeId}:${step}`;
+
+/** Lance (ou relance) le minuteur d'une étape : une étape n'a jamais deux minuteurs. */
+export function startTimer(t: Omit<CookingTimer, "id" | "endsAt" | "done">, seconds: number) {
+  const id = timerId(t.recipeId, t.step);
+  publish([...snapshot.timers.filter((x) => x.id !== id), { ...t, id, endsAt: Date.now() + seconds * 1000, done: false }]);
   ticker ??= setInterval(tick, 1000);
 }
 

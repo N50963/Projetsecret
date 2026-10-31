@@ -1,22 +1,26 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import * as ImagePicker from "expo-image-picker";
 import { useKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { Illustration } from "../../components/Illustration";
+import { cleanDraft, RecipeEditor } from "../../components/RecipeEditor";
+import { StarRating, starsLabel } from "../../components/StarRating";
 import { StepText, TimersBar } from "../../components/Steps";
 import { Body, Button, Card, Chip, ErrorText, H1, H2, Loading, Muted, Row, Screen } from "../../components/ui";
 import { minutes, PROTEIN_LABEL, quantity } from "../../lib/format";
 import { illustrationUrls, uploadRecipePhoto, type Picture } from "../../lib/images";
 import { adaptRecipeDraft, draftToInput, type Draft } from "../../lib/mistral";
+import { chooseDishPhoto } from "../../lib/photo";
 import { useHousehold } from "../../lib/session";
-import { stepTimers } from "../../lib/steps";
+import { clock, stepTimer } from "../../lib/steps";
 import { supabase } from "../../lib/supabase";
 import { useColors } from "../../lib/theme";
-import { startTimer } from "../../lib/timers";
-import { adaptRecipe, getRecipe, rateRecipe, scaleIngredients, toPayload, type Rating, type Recipe } from "../../modules/recipes";
+import { startTimer, stopTimer, timerId, useTimers } from "../../lib/timers";
+import {
+  adaptRecipe, getLatestRating, getRecipe, rateRecipe, scaleIngredients, toPayload, validateRecipe, type Recipe, type RecipeRating, type Stars,
+} from "../../modules/recipes";
 
 const ALLERGEN: Record<string, string> = {
   gluten: "gluten", lait: "lait", oeuf: "œuf", poisson: "poisson", crustaces: "crustacés", fruits_a_coque: "fruits à coque",
@@ -24,24 +28,26 @@ const ALLERGEN: Record<string, string> = {
 };
 
 /**
- * Fiche recette : photo, quantités pour le nombre de personnes, étapes « pas à pas » (étape en cours mise en avant, minuteurs,
- * écran gardé allumé), avis ; adaptation et photo dans « Plus d'options ».
+ * Fiche recette : photo (remplaçable par la photo du foyer), quantités pour le nombre de personnes, étapes « pas à pas »
+ * (étape en cours mise en avant, un minuteur par étape, écran gardé allumé), avis sur 5 étoiles avec commentaire, qui peut
+ * servir à faire adapter la recette par Mistral ; l'utilisateur relit et corrige la version proposée avant de la garder.
  */
 export default function FicheRecette() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const household = useHousehold();
   const c = useColors();
+  const { timers, now } = useTimers();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [image, setImage] = useState<Picture | null>(null);
   const [servings, setServings] = useState(household.defaultServings);
-  const [rated, setRated] = useState<Rating | null>(null);
-  const [feedback, setFeedback] = useState("");
+  const [previous, setPrevious] = useState<RecipeRating | null>(null);
+  const [stars, setStars] = useState<Stars | null>(null);
+  const [comment, setComment] = useState("");
+  const [saved, setSaved] = useState(false);
   const [draft, setDraft] = useState<(Draft & { change_note: string }) | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [info, setInfo] = useState("");
-  const [more, setMore] = useState(false);
   /** Étape en cours (toutes faites quand elle vaut le nombre d'étapes). */
   const [current, setCurrent] = useState(0);
   // En cuisine, l'écran ne s'éteint pas tant que la fiche est ouverte.
@@ -51,12 +57,16 @@ export default function FicheRecette() {
     try {
       const r = await getRecipe(supabase, id);
       setRecipe(r);
-      const urls = await illustrationUrls([r.id]);
+      const [urls, rating] = await Promise.all([illustrationUrls([r.id]), getLatestRating(supabase, household.id, r.id)]);
       setImage(urls[r.id] ?? null);
+      setPrevious(rating);
+      setStars(rating?.stars ?? null);
+      setComment(rating?.comment ?? "");
+      setSaved(Boolean(rating?.stars));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [id]);
+  }, [id, household.id]);
 
   useEffect(() => {
     load();
@@ -65,7 +75,6 @@ export default function FicheRecette() {
   const act = async (name: string, fn: () => Promise<void>) => {
     setBusy(name);
     setError("");
-    setInfo("");
     try {
       await fn();
     } catch (e) {
@@ -78,35 +87,44 @@ export default function FicheRecette() {
   if (!recipe) return error ? <Screen title="Recette"><ErrorText>{error}</ErrorText></Screen> : <Loading />;
   const ingredients = scaleIngredients(recipe.ingredients, recipe.servings, servings);
 
-  const rate = (r: Rating) => act("rate", async () => {
-    await rateRecipe(supabase, household.id, recipe, r);
-    setRated(r);
-    setInfo(r === "dislike" ? "Noté. Vous pouvez demander à Mistral une version qui plaira davantage." : "Merci, c'est noté.");
-  });
-  const pickPhoto = (camera: boolean) => act("photo", async () => {
-    const options: ImagePicker.ImagePickerOptions = { mediaTypes: ["images"], allowsEditing: true, aspect: [4, 3], quality: 0.7 };
-    if (camera && !(await ImagePicker.requestCameraPermissionsAsync()).granted) throw new Error("Accès à l'appareil photo refusé.");
-    const result = camera ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
-    const asset = result.canceled ? null : result.assets[0];
-    if (!asset) return;
-    await uploadRecipePhoto(household.id, recipe.id, asset.uri, asset.width);
+  const changePhoto = () => act("photo", async () => {
+    const photo = await chooseDishPhoto();
+    if (!photo) return;
+    await uploadRecipePhoto(household.id, recipe.id, photo.uri, photo.width);
     setImage((await illustrationUrls([recipe.id]))[recipe.id] ?? null);
   });
+  const saveRating = () => act("rate", async () => {
+    if (!stars) return;
+    await rateRecipe(supabase, household.id, recipe, stars, comment, previous);
+    setPrevious(await getLatestRating(supabase, household.id, recipe.id));
+    setSaved(true);
+  });
   const askAdaptation = () => act("adapt", async () => {
+    const feedback = `Note du foyer : ${stars ?? "?"}/5. ${comment.trim()}`;
     setDraft(await adaptRecipeDraft(household.id, toPayload(recipe), feedback));
   });
   const saveAdaptation = () => act("save", async () => {
     if (!draft) return;
-    const newId = await adaptRecipe(supabase, household.id, recipe, draftToInput(draft.recipe, "mistral"), draft.change_note);
+    const input = draftToInput(cleanDraft(draft.recipe), "mistral");
+    const issues = validateRecipe(input);
+    if (issues.length) throw new Error(`À corriger : ${issues.map((i) => i.message).join(" ; ")}`);
+    const newId = await adaptRecipe(supabase, household.id, recipe, input, draft.change_note || `Adaptée selon l'avis : ${comment.trim()}`);
     setDraft(null);
-    setFeedback("");
+    setCurrent(0);
     if (newId && recipe.householdId !== household.id) router.replace(`/recette/${newId}`);
     else await load();
   });
 
   return (
     <Screen title={recipe.name} footer={<TimersBar />}>
-      <Illustration picture={image} height={240} />
+      <View>
+        <Illustration picture={image} height={240} />
+        <Pressable onPress={changePhoto} disabled={busy === "photo"} accessibilityRole="button" accessibilityLabel="Mettre ma photo du plat"
+          style={({ pressed }) => [styles.photoButton, { backgroundColor: c.card, opacity: pressed || busy === "photo" ? 0.7 : 0.95 }]}>
+          <Ionicons name={busy === "photo" ? "hourglass-outline" : "camera"} size={20} color={c.text} />
+          <Text style={{ color: c.text, fontWeight: "600" }}>{busy === "photo" ? "Envoi…" : "Ma photo"}</Text>
+        </Pressable>
+      </View>
       <H1>{recipe.name}</H1>
       {recipe.description ? <Body>{recipe.description}</Body> : null}
       <Muted>
@@ -133,11 +151,12 @@ export default function FicheRecette() {
 
       <Card>
         <H2>Pas à pas</H2>
-        <Muted>Touchez une étape pour la suivre ; les minuteurs sonnent et vibrent à la fin.</Muted>
+        <Muted>Touchez une étape pour la suivre ; chaque minuteur sonne et vibre à la fin.</Muted>
         {recipe.steps.map((s, n) => {
           const isCurrent = n === current;
           const done = n < current;
-          const timers = stepTimers(s);
+          const timer = stepTimer(s, recipe.steps.slice(0, n));
+          const running = timers.find((t) => t.id === timerId(recipe.id, n + 1));
           return (
             <Pressable key={n} onPress={() => setCurrent(n)} accessibilityRole="button" accessibilityState={{ selected: isCurrent }}
               accessibilityLabel={`Étape ${n + 1}${done ? ", faite" : ""}`}
@@ -149,17 +168,24 @@ export default function FicheRecette() {
               </View>
               <View style={{ flex: 1, gap: 10 }}>
                 <StepText text={s} current={isCurrent} done={done} />
-                {timers.length > 0 && (
-                  <Row>
-                    {timers.map((t) => (
-                      <Pressable key={t.seconds} accessibilityRole="button" accessibilityLabel={`Lancer un minuteur de ${t.label}`}
-                        onPress={() => startTimer(recipe.id, `Étape ${n + 1} · ${t.label}`, s, t.seconds)}
-                        style={({ pressed }) => [styles.timer, { borderColor: c.primary, opacity: pressed ? 0.6 : 1 }]}>
-                        <Ionicons name="timer-outline" size={18} color={c.primary} />
-                        <Text style={{ color: c.primary, fontWeight: "600" }}>{t.label}</Text>
-                      </Pressable>
-                    ))}
-                  </Row>
+                {timer && (
+                  running ? (
+                    <Pressable onPress={() => stopTimer(running.id)} accessibilityRole="button"
+                      accessibilityLabel={running.done ? "Fermer le minuteur" : `Arrêter le minuteur, ${clock((running.endsAt - now) / 1000)} restantes`}
+                      style={({ pressed }) => [styles.timer, { borderColor: running.done ? c.danger : c.primary, backgroundColor: running.done ? c.danger : c.primary, opacity: pressed ? 0.7 : 1 }]}>
+                      <Ionicons name={running.done ? "alarm" : "stop-circle-outline"} size={18} color={c.primaryText} />
+                      <Text style={{ color: c.primaryText, fontWeight: "700", fontVariant: ["tabular-nums"] }}>
+                        {running.done ? "Terminé" : clock((running.endsAt - now) / 1000)}
+                      </Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable accessibilityRole="button" accessibilityLabel={`Lancer le minuteur : ${timer.subject}, ${timer.label}`}
+                      onPress={() => startTimer({ recipeId: recipe.id, recipeName: recipe.name, step: n + 1, subject: timer.subject, detail: s }, timer.seconds)}
+                      style={({ pressed }) => [styles.timer, { borderColor: c.primary, opacity: pressed ? 0.6 : 1 }]}>
+                      <Ionicons name="timer-outline" size={18} color={c.primary} />
+                      <Text style={{ color: c.primary, fontWeight: "600" }}>Minuteur {timer.label}</Text>
+                    </Pressable>
+                  )
                 )}
                 {isCurrent && (
                   <Row>
@@ -181,44 +207,42 @@ export default function FicheRecette() {
 
       <Card>
         <H2>Votre avis</H2>
-        <Row>
-          <Chip label="J'aime" active={rated === "like"} onPress={() => rate("like")} />
-          <Chip label="Bof" active={rated === "neutral"} onPress={() => rate("neutral")} />
-          <Chip label="Pas aimé" active={rated === "dislike"} onPress={() => rate("dislike")} />
-        </Row>
-        {info ? <Body>{info}</Body> : null}
+        <StarRating value={stars} onChange={(n) => {
+          setStars(n);
+          setSaved(false);
+        }} />
+        {stars ? <Muted>{starsLabel(stars)}</Muted> : <Muted>Touchez les étoiles pour noter le plat.</Muted>}
+        <TextInput multiline value={comment} onChangeText={(t) => {
+          setComment(t);
+          setSaved(false);
+        }} maxLength={1000} placeholderTextColor={c.muted}
+          placeholder="Un commentaire ? (ex. un peu fade, trop de crème, les enfants ont adoré)"
+          style={[styles.input, { borderColor: c.border, color: c.text, backgroundColor: c.background }]} />
+        <Button title={saved ? "Avis enregistré" : "Enregistrer mon avis"} onPress={saveRating} busy={busy === "rate"} disabled={!stars || saved} />
+        {saved && comment.trim() && !draft ? (
+          <>
+            <Muted>Mistral peut proposer une version de la recette qui tient compte de votre commentaire ; vous la relirez avant de la garder.</Muted>
+            <Button title="Adapter la recette selon mon avis" kind="secondary" onPress={askAdaptation} busy={busy === "adapt"} />
+          </>
+        ) : null}
+        {saved && !comment.trim() && stars !== null && stars <= 3 ? (
+          <Muted>Dites ce qui n'a pas plu : Mistral pourra adapter la recette.</Muted>
+        ) : null}
       </Card>
 
-      <Button title={more ? "Moins d'options" : "Plus d'options"} kind="secondary" onPress={() => setMore((m) => !m)} />
-      {more && <Card>
-        <H2>Adapter avec Mistral</H2>
-        <TextInput multiline value={feedback} onChangeText={setFeedback} placeholderTextColor={c.muted}
-          placeholder="Ex. : plus de légumes, sans champignons, plus rapide…"
-          style={[styles.input, { borderColor: c.border, color: c.text, backgroundColor: c.background }]} />
-        <Button title="Proposer une version adaptée" onPress={askAdaptation} busy={busy === "adapt"} disabled={!feedback.trim()} />
-        {draft && (
-          <View style={{ gap: 6 }}>
-            <Body style={{ fontWeight: "700" }}>{draft.recipe.name}</Body>
-            <Muted>{draft.change_note}</Muted>
-            {draft.recipe.ingredients.map((i, n) => <Muted key={n}>• {i.label} {quantity(i.quantity, i.unit)}</Muted>)}
-            {draft.recipe.steps.map((s, n) => <Muted key={`s${n}`}>{n + 1}. {s}</Muted>)}
-            {draft.issues.length ? <Muted>À vérifier : {draft.issues.join(" ; ")}</Muted> : null}
-            <Row>
-              <Button title="Garder cette version" onPress={saveAdaptation} busy={busy === "save"} style={{ flex: 1 }} />
-              <Button title="Annuler" kind="secondary" onPress={() => setDraft(null)} style={{ flex: 1 }} />
-            </Row>
-          </View>
-        )}
-      </Card>}
-
-      {more && <Card>
-        <H2>Photo du plat</H2>
-        <Muted>Remplace l'image par votre propre photo.</Muted>
-        <Row>
-          <Button title="Prendre une photo" kind="secondary" onPress={() => pickPhoto(true)} busy={busy === "photo"} style={{ flex: 1 }} />
-          <Button title="Galerie" kind="secondary" onPress={() => pickPhoto(false)} style={{ flex: 1 }} />
-        </Row>
-      </Card>}
+      {draft && (
+        <>
+          <Card>
+            <H2>Version proposée par Mistral</H2>
+            {draft.change_note ? <Body>{draft.change_note}</Body> : null}
+            <Muted>Vous avez le dernier mot : corrigez ce que vous voulez avant de garder cette version. L'ancienne version reste dans l'historique.</Muted>
+            {draft.issues.length ? <Muted>Remarques de Mistral : {draft.issues.join(" ; ")}</Muted> : null}
+          </Card>
+          <RecipeEditor value={draft.recipe} onChange={(r) => setDraft({ ...draft, recipe: r })} />
+          <Button title="Garder ma version" onPress={saveAdaptation} busy={busy === "save"} />
+          <Button title="Garder la recette actuelle" kind="secondary" onPress={() => setDraft(null)} />
+        </>
+      )}
       <ErrorText>{error}</ErrorText>
     </Screen>
   );
@@ -228,6 +252,13 @@ const styles = StyleSheet.create({
   line: { flexDirection: "row", gap: 12, paddingVertical: 4 },
   step: { flexDirection: "row", gap: 12, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: "transparent", padding: 10 },
   badge: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
-  timer: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  timer: {
+    flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8,
+    alignSelf: "flex-start",
+  },
   input: { minHeight: 70, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 12, fontSize: 16, textAlignVertical: "top" },
+  photoButton: {
+    position: "absolute", right: 10, bottom: 10, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999,
+    paddingHorizontal: 12, paddingVertical: 8, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 3,
+  },
 });

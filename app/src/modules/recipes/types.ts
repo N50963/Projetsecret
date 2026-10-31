@@ -8,6 +8,8 @@ export type BaseUnit = "g" | "ml" | "piece";
 export type ScaleMode = "linear" | "sublinear" | "fixed";
 export type RecipeSource = "seed" | "manual" | "import_text" | "import_url" | "import_photo" | "mistral";
 export type Rating = "like" | "neutral" | "dislike";
+/** Note de 1 à 5 étoiles. */
+export type Stars = 1 | 2 | 3 | 4 | 5;
 /** Niveau d'épice : 0 aucun, 1 épicé mais doux (curry, chorizo doux), 2 piquant (piment). */
 export type Spiciness = 0 | 1 | 2;
 
@@ -77,4 +79,15 @@ export interface RecipeCandidate {
   unmapped: string[];
   likes: number;
   dislikes: number;
+}
+
+/** Dernier avis du foyer sur une recette : étoiles et commentaire facultatif. */
+export interface RecipeRating {
+  id: string;
+  userId: string;
+  versionId: string | null;
+  stars: Stars | null;
+  rating: Rating;
+  comment: string | null;
+  ratedAt: string;
 }

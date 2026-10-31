@@ -19,7 +19,10 @@ export function StepText({ text, current, done }: { text: string; current?: bool
   );
 }
 
-/** Minuteurs en cours, toujours visibles en bas de l'écran ; un minuteur terminé reste affiché jusqu'à ce qu'on le ferme. */
+/**
+ * Minuteurs en cours, toujours visibles en bas de l'écran ; chacun dit ce qu'il minute et à quelle étape. Un minuteur
+ * terminé reste affiché jusqu'à ce qu'on le ferme.
+ */
 export function TimersBar() {
   const { timers, now } = useTimers();
   const c = useColors();
@@ -29,7 +32,10 @@ export function TimersBar() {
       {timers.map((t) => (
         <View key={t.id} style={styles.item}>
           <Ionicons name={t.done ? "alarm" : "timer-outline"} size={22} color={t.done ? c.danger : c.primary} />
-          <Text style={[styles.label, { color: c.text }]} numberOfLines={1}>{t.label}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.label, { color: c.text }]} numberOfLines={1}>{t.subject}</Text>
+            <Text style={[styles.detail, { color: c.muted }]} numberOfLines={1}>Étape {t.step} · {t.recipeName}</Text>
+          </View>
           <Text style={[styles.clock, { color: t.done ? c.danger : c.text }]}>{t.done ? "Terminé" : clock((t.endsAt - now) / 1000)}</Text>
           <Pressable onPress={() => stopTimer(t.id)} hitSlop={10} accessibilityRole="button"
             accessibilityLabel={t.done ? "Fermer le minuteur" : "Arrêter le minuteur"}>
@@ -44,6 +50,7 @@ export function TimersBar() {
 const styles = StyleSheet.create({
   bar: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 16, paddingVertical: 8, gap: 6 },
   item: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 40 },
-  label: { flex: 1, fontSize: 15 },
+  label: { fontSize: 15, fontWeight: "600" },
+  detail: { fontSize: 13 },
   clock: { fontSize: 20, fontWeight: "700", fontVariant: ["tabular-nums"] },
 });

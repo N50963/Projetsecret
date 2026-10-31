@@ -6,7 +6,9 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { MainProtein, MealType, Rating, Recipe, RecipeCandidate, RecipeIngredient, RecipeInput, Season, Spiciness } from "./types";
+import type {
+  MainProtein, MealType, Rating, Recipe, RecipeCandidate, RecipeIngredient, RecipeInput, RecipeRating, Season, Spiciness, Stars,
+} from "./types";
 import { validateRecipe } from "./validate";
 
 export class RecipeValidationError extends Error {
@@ -158,11 +160,32 @@ export async function archiveRecipe(supabase: SupabaseClient, recipeId: string, 
   check(error, "Archivage refusé");
 }
 
-/** Avis après un repas : j'aime / neutre / je n'aime pas, rattaché à la version cuisinée. */
-export async function rateRecipe(supabase: SupabaseClient, householdId: string, recipe: Pick<Recipe, "id" | "versionId">, rating: Rating, comment?: string): Promise<void> {
-  const { error } = await supabase.from("recipe_ratings").insert({
-    household_id: householdId, recipe_id: recipe.id, version_id: recipe.versionId, rating, comment: comment ?? null,
-  });
+/** Étoiles ramenées à l'avis utilisé par le planificateur (4-5 : aimé, 3 : bof, 1-2 : pas aimé), comme le fait la base. */
+export const starsToRating = (stars: Stars): Rating => (stars >= 4 ? "like" : stars === 3 ? "neutral" : "dislike");
+
+/** Dernier avis du foyer sur la recette (null s'il n'y en a pas). */
+export async function getLatestRating(supabase: SupabaseClient, householdId: string, recipeId: string): Promise<RecipeRating | null> {
+  const { data, error } = await supabase.from("recipe_ratings").select("id, user_id, version_id, stars, rating, comment, rated_at")
+    .eq("household_id", householdId).eq("recipe_id", recipeId).order("rated_at", { ascending: false }).limit(1);
+  check(error, "Avis illisible");
+  const r = (data ?? [])[0] as Row | undefined;
+  return r ? { id: r.id, userId: r.user_id, versionId: r.version_id, stars: r.stars, rating: r.rating, comment: r.comment, ratedAt: r.rated_at } : null;
+}
+
+/**
+ * Avis sur 5 étoiles, avec un commentaire facultatif, rattaché à la version cuisinée. Un nouvel avis sur la même version
+ * remplace le précédent du même utilisateur (pas de doublon dans les statistiques du planificateur).
+ */
+export async function rateRecipe(
+  supabase: SupabaseClient, householdId: string, recipe: Pick<Recipe, "id" | "versionId">, stars: Stars, comment?: string | null,
+  previous?: RecipeRating | null,
+): Promise<void> {
+  const fields = { stars, rating: starsToRating(stars), comment: comment?.trim() || null, rated_at: new Date().toISOString() };
+  const { data: auth } = await supabase.auth.getUser();
+  const replace = previous && previous.versionId === recipe.versionId && previous.userId === auth.user?.id;
+  const { error } = replace
+    ? await supabase.from("recipe_ratings").update(fields).eq("id", previous.id)
+    : await supabase.from("recipe_ratings").insert({ household_id: householdId, recipe_id: recipe.id, version_id: recipe.versionId, ...fields });
   check(error, "Avis non enregistré");
 }
 
