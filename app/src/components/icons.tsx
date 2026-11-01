@@ -66,6 +66,16 @@ const ICONS = {
     </>,
   },
   check: { viewBox: "0 0 24 24", draw: ({ color }) => <Path d="M5.5 12.5l4.5 4.5 8.5-9.5" {...stroke(color, 2.2)} /> },
+  /** Coche et croix fines des cartes de la semaine (maquette « Ruban de la semaine »). */
+  tick: { viewBox: "0 0 16 16", draw: ({ color }) => <Path d="M3.2 8.4l3.2 3.2 6.4-7" {...stroke(color, 2.4)} /> },
+  cross: { viewBox: "0 0 16 16", draw: ({ color }) => <Path d="M3 3l10 10M13 3L3 13" {...stroke(color)} /> },
+  sun: {
+    viewBox: "0 0 24 24", draw: ({ color }) => <>
+      <Circle cx={12} cy={12} r={4.2} {...stroke(color)} />
+      <Path d="M12 2.5v2.3M12 19.2v2.3M2.5 12h2.3M19.2 12h2.3M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" {...stroke(color)} />
+    </>,
+  },
+  moon: { viewBox: "0 0 24 24", draw: ({ color }) => <Path d="M20.5 14.3A8.7 8.7 0 1 1 9.7 3.5a7 7 0 0 0 10.8 10.8z" {...stroke(color)} /> },
   close: { viewBox: "0 0 24 24", draw: ({ color }) => <><Path d="M6.5 6.5l11 11" {...stroke(color, 2.2)} /><Path d="M17.5 6.5l-11 11" {...stroke(color, 2.2)} /></> },
   image: {
     viewBox: "0 0 24 24", draw: ({ color }) => <>

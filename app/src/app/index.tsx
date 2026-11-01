@@ -1,15 +1,15 @@
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon, Logo } from "../components/icons";
 import { IngredientMenu, type IngredientMenuRequest } from "../components/IngredientMenu";
-import { PlanningGrid } from "../components/PlanningGrid";
 import { ReminderSheet } from "../components/ReminderSheet";
 import { TimersBar } from "../components/Steps";
+import { WeekRibbon } from "../components/WeekRibbon";
 import { BottomNav, Button, ErrorText, SectionTitle, TextLink } from "../components/ui";
 import { dayLabel, mealLabel, minutes } from "../lib/format";
 import { illustrationUrls, pictureOf, preloadPictures, sourceOf, type Picture } from "../lib/images";
@@ -51,8 +51,9 @@ function confirm(message: string, action: string, onConfirm: () => void) {
 
 /**
  * Accueil MenuBily : en-tête au logo ; en grand, le menu du jour ou, s'il n'y en a pas, le prochain ; les menus de la
- * semaine empilés en lignes (photo en fondu, nom, jour en entier) ; les repas encore à prévoir, masqués derrière un
- * raccourci dès que des menus sont choisis ; liste de courses ; barre de navigation.
+ * semaine empilés en lignes (photo en fondu, nom, jour en entier) ; les repas de la semaine en ruban (7 jours, puis la
+ * carte du jour choisi : menus choisis et repas à cocher avec leur temps), section repliable ; liste de courses ; barre de
+ * navigation.
  */
 export default function Accueil() {
   const router = useRouter();
@@ -60,8 +61,6 @@ export default function Accueil() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { timers } = useTimers();
-  const scroll = useRef<ScrollViewInstance>(null);
-  const planningY = useRef(0);
   const today = toIsoDate(new Date());
   const days = useMemo(() => weekDates(today), [today]);
   const [slots, setSlots] = useState<Record<string, WeekSlot>>({});
@@ -69,7 +68,7 @@ export default function Accueil() {
   const [images, setImages] = useState<Record<string, Picture | null>>({});
   const [shopping, setShopping] = useState<ShoppingItem[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [planning, setPlanning] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const [reminders, setReminders] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -120,8 +119,7 @@ export default function Accueil() {
   const menus = days.flatMap((d) => MEALS.map((m) => slots[`${d}:${m}`]).filter((s): s is WeekSlot => s?.status === "accepted"));
   const hero = menus[0];
   const others = menus.slice(1);
-  const showPlanning = loaded && (planning || menus.length === 0);
-  const toPlan = days.filter((d) => MEALS.some((m) => !isChosen(d, m)));
+  const showPlanning = loaded && !hidden;
 
   const requests: SlotRequest[] = days.flatMap((d) => MEALS
     .filter((m) => choiceOf(d)[m] && !isChosen(d, m))
@@ -132,7 +130,6 @@ export default function Accueil() {
     setError("");
     try {
       const { planId } = await savePlan(supabase, household.id, today, addDays(today, 6), requests);
-      setPlanning(false);
       router.push({ pathname: "/propositions", params: { plan: planId, start: today } });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -170,11 +167,6 @@ export default function Accueil() {
     }
   });
 
-  const openPlanning = () => {
-    setPlanning(true);
-    setTimeout(() => scroll.current?.scrollTo({ y: Math.max(0, planningY.current - 8), animated: true }), 80);
-  };
-
   const toBuy = shopping.filter((i) => i.active && !i.boughtAt && !i.checkedAt);
   const open = (s: WeekSlot) => router.push(`/recette/${s.recipeId}`);
 
@@ -185,7 +177,7 @@ export default function Accueil() {
   return (
     <View style={{ flex: 1, backgroundColor: c.background }}>
       <View style={{ height: insets.top, backgroundColor: c.statusBar }} />
-      <ScrollView ref={scroll} contentContainerStyle={{ paddingBottom: 12 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 12 }}>
         <LinearGradient colors={["#FEF8EE", c.background]} style={styles.header}>
           <View style={styles.logo}><Logo /></View>
           <View style={{ flex: 1 }}>
@@ -277,15 +269,16 @@ export default function Accueil() {
           })}
         </View>
 
-        {showPlanning && toPlan.length > 0 && (
-          <View onLayout={(e) => {
-            planningY.current = e.nativeEvent.layout.y;
-          }}>
+        {loaded && (
+          <View>
             <View style={styles.planningHead}>
               <View style={{ flex: 1 }}><SectionTitle icon="calendar" title="Autre repas possible" /></View>
-              {menus.length > 0 && <TextLink title="Masquer" onPress={() => setPlanning(false)} />}
+              <TextLink title={hidden ? "Afficher" : "Masquer"} onPress={() => setHidden((h) => !h)} />
             </View>
-            <PlanningGrid days={toPlan} today={today} planOf={choiceOf} isChosen={isChosen} onChange={update} />
+            {showPlanning && (
+              <WeekRibbon days={days} today={today} planOf={choiceOf} slotOf={(d, m) => slots[`${d}:${m}`]} picture={picture}
+                busy={busy !== null} onChange={update} onOpen={open} onCancel={cancel} />
+            )}
           </View>
         )}
 
@@ -304,10 +297,8 @@ export default function Accueil() {
 
       {loaded && (
         <View style={styles.cta}>
-          {showPlanning
-            ? <Button icon="wand" title={requests.length ? `Proposer les menus (${requests.length} repas)` : "Cochez les repas"}
-              onPress={propose} busy={busy === "plan"} disabled={!requests.length} />
-            : toPlan.length > 0 ? <Button icon="calendar" kind="secondary" title="Prévoir d'autres repas" onPress={openPlanning} /> : null}
+          <Button icon="wand" title={requests.length ? `Proposer les menus (${requests.length} repas)` : "Cochez les repas"}
+            onPress={propose} busy={busy === "plan"} disabled={!requests.length} />
         </View>
       )}
       <TimersBar />
@@ -355,7 +346,7 @@ const styles = StyleSheet.create({
   rowDay: { fontSize: 13.5, lineHeight: 17, fontWeight: "600" },
   rowName: { fontSize: 15.5, lineHeight: 19, fontWeight: "700", marginTop: 1 },
   rowMeta: { fontSize: 14.2, lineHeight: 18 },
-  planningHead: { flexDirection: "row", alignItems: "center", paddingLeft: 13, paddingRight: 13, marginTop: 6 },
+  planningHead: { flexDirection: "row", alignItems: "center", paddingLeft: 13, paddingRight: 7.5, marginTop: 6 },
   shopping: {
     flexDirection: "row", alignItems: "center", gap: 12, minHeight: 66, marginTop: 12, marginLeft: 12.8, marginRight: 9.2,
     paddingVertical: 8, paddingLeft: 12, paddingRight: 9, borderRadius: 12, borderWidth: 1,
