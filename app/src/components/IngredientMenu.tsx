@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { mealLabel } from "../lib/format";
-import { ingredientPicture } from "../lib/images";
+import { ingredientSource } from "../lib/images";
 import { fold } from "../lib/products";
 import { supabase } from "../lib/supabase";
 import { CARD_SHADOW, useColors } from "../lib/theme";
@@ -28,9 +28,9 @@ export interface IngredientMenuRequest {
 
 function Thumb({ slug, size = 26 }: { slug: string; size?: number }) {
   const c = useColors();
-  const uri = ingredientPicture(slug);
-  return uri
-    ? <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} contentFit="cover" transition={0} />
+  const source = ingredientSource(slug);
+  return source
+    ? <Image source={source} style={{ width: size, height: size, borderRadius: size / 2 }} contentFit="cover" transition={0} />
     : <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: c.chipActive }} />;
 }
 

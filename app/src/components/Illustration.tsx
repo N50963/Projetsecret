@@ -6,7 +6,7 @@
 import { Image } from "expo-image";
 import { StyleSheet, Text, View } from "react-native";
 
-import type { Picture } from "../lib/images";
+import { sourceOf, type Picture } from "../lib/images";
 import { useColors } from "../lib/theme";
 import { Icon } from "./icons";
 
@@ -16,7 +16,7 @@ export function Illustration({ picture, height = 180, rounded = 16, width = "100
   const c = useColors();
   if (picture) {
     // Image déjà téléchargée en avance (lib/images) : affichée depuis le cache du téléphone, sans fondu.
-    return <Image source={{ uri: picture.uri, cacheKey: picture.cacheKey }} cachePolicy="memory-disk"
+    return <Image source={sourceOf(picture)} cachePolicy="memory-disk"
       style={{ height, borderRadius: rounded, width, backgroundColor: c.chip }} contentFit="cover" transition={0}
       accessibilityLabel="Photo du plat" />;
   }

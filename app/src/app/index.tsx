@@ -12,7 +12,7 @@ import { TimersBar } from "../components/Steps";
 import { TimeWheel } from "../components/TimeWheel";
 import { BottomNav, Button, ErrorText, SectionTitle, TextLink } from "../components/ui";
 import { dayLabel, mealLabel, minutes } from "../lib/format";
-import { illustrationUrls, pictureOf, preloadPictures, type Picture } from "../lib/images";
+import { illustrationUrls, pictureOf, preloadPictures, sourceOf, type Picture } from "../lib/images";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { BRAND_FONT, CARD_SHADOW, useColors } from "../lib/theme";
@@ -206,7 +206,7 @@ export default function Accueil() {
               <Pressable onPress={() => open(hero)} accessibilityRole="button"
                 accessibilityLabel={`${dayLabel(hero.date, today)}, ${mealLabel(hero.mealType)} : ${hero.name}`}>
                 {heroPicture
-                  ? <Image source={{ uri: heroPicture.uri, cacheKey: heroPicture.cacheKey }} cachePolicy="memory-disk" priority="high"
+                  ? <Image source={sourceOf(heroPicture)} cachePolicy="memory-disk" priority="high"
                     style={styles.heroImage} contentFit="cover" transition={0} />
                   : <View style={[styles.heroImage, styles.heroWaiting]}><Icon name="image" size={44} color={c.muted} /></View>}
                 <LinearGradient colors={["rgba(20,24,12,0.66)", "rgba(20,24,12,0.34)", "rgba(20,24,12,0.08)"]} locations={[0, 0.58, 1]}
@@ -248,7 +248,7 @@ export default function Accueil() {
                 style={({ pressed }) => [styles.row, { backgroundColor: c.card, borderColor: c.cardLine, opacity: pressed ? 0.85 : 1 }, CARD_SHADOW]}>
                 <View style={styles.rowPhoto}>
                   {pic
-                    ? <Image source={{ uri: pic.uri, cacheKey: pic.cacheKey }} cachePolicy="memory-disk" style={StyleSheet.absoluteFill} contentFit="cover" transition={0} />
+                    ? <Image source={sourceOf(pic)} cachePolicy="memory-disk" style={StyleSheet.absoluteFill} contentFit="cover" transition={0} />
                     : <View style={[StyleSheet.absoluteFill, styles.rowWaiting, { backgroundColor: c.chip }]}><Icon name="image" size={28} color={c.muted} /></View>}
                   <LinearGradient colors={FADE} locations={[0, 0.55, 1]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.rowFade} />
                 </View>

@@ -12,7 +12,7 @@ import { StarRating, starsLabel } from "../../components/StarRating";
 import { StepText, TimersBar } from "../../components/Steps";
 import { Body, Button, Card, ErrorText, Field, H1, H2, HeaderIcon, Loading, Muted, Pill, Row, Screen } from "../../components/ui";
 import { minutes, proteinLabel, quantity } from "../../lib/format";
-import { ingredientPicture, ingredientPictureUrls, illustrationUrls, pictureOf, uploadRecipePhoto, type Picture } from "../../lib/images";
+import { ingredientPictureUrls, ingredientSource, illustrationUrls, pictureOf, uploadRecipePhoto, type Picture } from "../../lib/images";
 import { adaptRecipeDraft, draftToInput, type DraftRecipe } from "../../lib/mistral";
 import { pickDishPhoto } from "../../lib/photo";
 import { useHousehold } from "../../lib/session";
@@ -267,8 +267,8 @@ export default function FicheRecette() {
           <View>
             {ingredients.map((i, n) => (
               <View key={n} style={[styles.ingredient, n < ingredients.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.border }]}>
-                {ingredientPicture(i.slug)
-                  ? <Image source={{ uri: ingredientPicture(i.slug)! }} cachePolicy="memory-disk" style={styles.thumb} contentFit="cover" transition={0}
+                {ingredientSource(i.slug)
+                  ? <Image source={ingredientSource(i.slug)!} cachePolicy="memory-disk" style={styles.thumb} contentFit="cover" transition={0}
                     accessibilityIgnoresInvertColors />
                   : <View style={[styles.thumb, { backgroundColor: c.chip, alignItems: "center", justifyContent: "center" }]}>
                     <Icon name="cutlery" size={18} color={c.muted} />
@@ -434,7 +434,8 @@ const styles = StyleSheet.create({
   tab: { flex: 1, height: 42, alignItems: "center", justifyContent: "center" },
   section: { marginHorizontal: 17, marginTop: 12, gap: 10 },
   ingredient: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 52, paddingVertical: 6 },
-  thumb: { width: 40, height: 40, borderRadius: 10, overflow: "hidden" },
+  // Vignette d'ingrédient sur fond blanc, bordée pour se détacher du fond crème de la fiche.
+  thumb: { width: 42, height: 42, borderRadius: 10, overflow: "hidden", backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E9DCC6" },
   step: { flexDirection: "row", gap: 12, borderRadius: 13, borderWidth: 1.5, borderColor: "transparent", padding: 8 },
   badge: { width: 32, height: 32, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   timer: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, alignSelf: "flex-start" },

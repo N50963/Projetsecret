@@ -4,19 +4,19 @@ import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ErrorText, Muted, Screen, SectionTitle } from "../components/ui";
 import {
-  dishCredits, illustrationUrls, ingredientCredit, ingredientCredits, ingredientPictureUrls, type DishCredit, type IngredientCredit,
-  type Picture,
+  dishCredits, illustrationUrls, ingredientCredit, ingredientCredits, ingredientPictureUrls, ingredientSource, sourceOf, type DishCredit,
+  type IngredientCredit, type Picture,
 } from "../lib/images";
 import { CARD_SHADOW, useColors } from "../lib/theme";
 
 const credit = (c: { author: string | null; license: string }) => `Photo : ${c.author ? `${c.author} · ` : ""}${c.license} · Wikimedia Commons`;
 
-function CreditRow({ name, text, uri, url }: { name: string; text: string; uri: string | null; url: string }) {
+function CreditRow({ name, text, source, url }: { name: string; text: string; source: number | { uri: string } | null; url: string }) {
   const c = useColors();
   return (
     <Pressable onPress={() => Linking.openURL(url).catch(() => undefined)} accessibilityRole="link" accessibilityLabel={`${name} : ${text}`}
       style={({ pressed }) => [styles.row, { backgroundColor: c.card, borderColor: c.cardLine, opacity: pressed ? 0.8 : 1 }, CARD_SHADOW]}>
-      {uri ? <Image source={{ uri }} style={styles.thumb} contentFit="cover" transition={0} /> : <View style={[styles.thumb, { backgroundColor: c.chip }]} />}
+      {source ? <Image source={source} style={styles.thumb} contentFit="cover" transition={0} /> : <View style={[styles.thumb, { backgroundColor: c.chip }]} />}
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>{name}</Text>
         <Text style={{ color: c.muted, fontSize: 13.5, lineHeight: 17 }} numberOfLines={2}>{text}</Text>
@@ -33,7 +33,8 @@ export default function Credits() {
   const [dishes, setDishes] = useState<DishCredit[] | null>(null);
   const [dishPictures, setDishPictures] = useState<Record<string, Picture | null>>({});
   const [credits, setCredits] = useState<IngredientCredit[] | null>(null);
-  const [pictures, setPictures] = useState<Map<string, string>>(new Map());
+  // Vignettes en ligne des ingrédients sans image embarquée : un nouveau rendu quand la liste arrive.
+  const [, setPictures] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -50,20 +51,21 @@ export default function Credits() {
     <Screen title="Crédits des photos">
       <Muted>
         Photos libres de Wikimedia Commons (domaine public, CC0, Creative Commons, GFDL) : touchez une ligne pour voir l'image
-        d'origine et sa licence. Les autres photos des plats sont créées par Mistral ou prises avec votre téléphone.
+        d'origine et sa licence. Les photos des ingrédients ont été modifiées : détourées et posées sur fond blanc (ou en
+        pastille ronde). Les autres photos des plats sont créées par Mistral ou prises avec votre téléphone.
       </Muted>
       <ErrorText>{error}</ErrorText>
       {dishes?.length ? (
         <View style={{ gap: 7 }}>
           <SectionTitle icon="cutlery" title="Photos des plats" />
-          {dishes.map((d) => <CreditRow key={d.recipeId} name={d.name} text={credit(d)} uri={dishPictures[d.recipeId]?.uri ?? null} url={d.sourceUrl} />)}
+          {dishes.map((d) => <CreditRow key={d.recipeId} name={d.name} text={credit(d)} source={dishPictures[d.recipeId] ? sourceOf(dishPictures[d.recipeId]!) : null} url={d.sourceUrl} />)}
         </View>
       ) : null}
       <View style={{ gap: 7 }}>
         <SectionTitle icon="image" title="Photos des ingrédients" />
         {credits === null && !error ? <Muted>Chargement…</Muted> : null}
         {(credits ?? []).map((c) => (
-          <CreditRow key={c.slug} name={c.name} text={ingredientCredit(c)} uri={pictures.get(c.slug) ?? null} url={c.sourceUrl} />
+          <CreditRow key={c.slug} name={c.name} text={ingredientCredit(c)} source={ingredientSource(c.slug)} url={c.sourceUrl} />
         ))}
       </View>
     </Screen>

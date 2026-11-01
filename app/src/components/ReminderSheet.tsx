@@ -9,7 +9,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { dayLabel, mealLabel, minutes } from "../lib/format";
-import { pictureOf } from "../lib/images";
+import { pictureOf, sourceOf } from "../lib/images";
 import { clock } from "../lib/steps";
 import { CARD_SHADOW, useColors } from "../lib/theme";
 import { stopTimer, useTimers } from "../lib/timers";
@@ -72,7 +72,7 @@ export function ReminderSheet({ visible, onClose, today, menus, toBuy, onOpenRec
                   accessibilityLabel={`${mealLabel(s.mealType)} : ${s.name}`}
                   style={({ pressed }) => [styles.card, { backgroundColor: c.card, borderColor: c.cardLine, opacity: pressed ? 0.85 : 1 }, CARD_SHADOW]}>
                   {pic
-                    ? <Image source={{ uri: pic.uri, cacheKey: pic.cacheKey }} cachePolicy="memory-disk" style={styles.photo} contentFit="cover" transition={0} />
+                    ? <Image source={sourceOf(pic)} cachePolicy="memory-disk" style={styles.photo} contentFit="cover" transition={0} />
                     : <View style={[styles.photo, styles.center, { backgroundColor: c.chip }]}><Icon name="image" size={24} color={c.muted} /></View>}
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={{ color: c.primary, fontSize: 13.5, fontWeight: "600" }}>
