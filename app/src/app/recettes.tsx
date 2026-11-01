@@ -100,7 +100,7 @@ export default function Recettes() {
               <View style={styles.text}>
                 <Text style={[styles.name, { color: c.text }]} numberOfLines={2}>{r.name}</Text>
                 <View style={styles.meta}>
-                  <Text style={[styles.metaText, { color: c.muted }]}>{[proteinLabel(r.mainProtein), minutes(r.totalMin)].filter(Boolean).join(" • ")}</Text>
+                  <Text style={[styles.metaText, { color: c.muted }]}>{[proteinLabel(r.mainProtein, r.name), minutes(r.totalMin)].filter(Boolean).join(" • ")}</Text>
                   {note !== undefined ? <SmallStars value={note} /> : null}
                 </View>
               </View>

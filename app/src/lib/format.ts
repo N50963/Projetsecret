@@ -26,8 +26,12 @@ export const PROTEIN_LABEL: Record<string, string> = {
   legumineuse: "Légumineuses", vegetarien: "Végétarien",
 };
 
-/** Protéine affichée sur les fiches et les cartes ; les plats végétariens ne sont pas signalés (chaîne vide). */
-export const proteinLabel = (protein: string) => (protein === "vegetarien" ? "" : PROTEIN_LABEL[protein] ?? "");
+/**
+ * Protéine affichée sur les fiches et les cartes ; les plats végétariens ne sont pas signalés (chaîne vide). Le veau est
+ * classé avec le bœuf pour l'équilibre de la semaine (viande de boucherie) mais s'affiche « Veau ».
+ */
+export const proteinLabel = (protein: string, name = "") =>
+  protein === "vegetarien" ? "" : protein === "boeuf" && /\bveau\b/i.test(name) ? "Veau" : PROTEIN_LABEL[protein] ?? "";
 
 export const mealLabel = (mealType: string) => (mealType === "dejeuner" ? "Déjeuner" : "Dîner");
 

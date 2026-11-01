@@ -133,6 +133,7 @@ INGREDIENTS = [
     ("dinde", "Dinde (escalope, filet)", "volaille", "g", False),
     ("canard_magret", "Magret de canard", "volaille", "g", False),
     ("canard_aiguillette", "Aiguillettes de canard", "volaille", "g", False),
+    ("cordon_bleu", "Cordon bleu", "volaille", "piece", False),
     # Viande
     ("boeuf_hache", "Bœuf haché / steak haché", "viande", "g", False),
     ("boeuf_a_mijoter", "Bœuf à mijoter", "viande", "g", False),
@@ -197,7 +198,7 @@ INGREDIENTS = [
     ("brebis", "Fromage de brebis", "fromage", "g", False),
     ("fromage_frais", "Fromage frais à tartiner", "fromage", "g", False),
     ("fromage_bleu", "Fromage bleu (gorgonzola, roquefort...)", "fromage", "g", False),
-    ("fromage_croute", "Fromage à croûte (brie, saint-marcellin...)", "fromage", "g", False),
+    ("fromage_croute", "Fromage à croûte (brie, reblochon...)", "fromage", "g", False),
     ("fromage_portion", "Fromage en portions", "fromage", "piece", False),
     # Féculents
     ("pates", "Pâtes sèches", "feculent", "g", False),
@@ -280,11 +281,12 @@ _ALLERGENS_BY_GROUP = {
     "gluten": ["pates", "pates_fraiches", "pates_farcies", "lasagne", "gnocchi", "couscous", "cereale_cuisson", "nouilles",
                "farine", "flocons_avoine", "tortilla_wrap", "galette_sarrasin", "chapelure", "pain", "pain_de_mie",
                "pain_burger_pita", "pate_feuilletee", "pate_brisee", "pate_pizza", "feuille_brick", "sauce_soja",
-               "poisson_blanc_pane", "proteine_vegetale", "falafel"],
+               "poisson_blanc_pane", "proteine_vegetale", "falafel", "cordon_bleu"],
     "lait": ["lait", "creme_epaisse", "creme_liquide", "beurre", "yaourt_nature", "yaourt_grec", "fromage_blanc", "ricotta",
              "mascarpone", "mozzarella", "burrata", "feta", "halloumi", "emmental", "emmental_rape", "comte", "parmesan",
              "gouda_cheddar", "tomme", "raclette", "chevre", "brebis", "fromage_frais", "fromage_bleu", "fromage_croute",
-             "fromage_portion", "pate_feuilletee", "pate_brisee", "poisson_blanc_pane", "sauce_pesto", "gnocchi"],
+             "fromage_portion", "pate_feuilletee", "pate_brisee", "poisson_blanc_pane", "sauce_pesto", "gnocchi",
+             "cordon_bleu"],
     "oeuf": ["oeuf", "pates_fraiches", "pates_farcies", "lasagne", "mayonnaise", "surimi", "poisson_blanc_pane"],
     "poisson": ["saumon", "truite", "truite_fumee", "poisson_blanc", "poisson_blanc_pane", "thon_conserve", "thon_frais",
                 "thon_fume", "sardine_conserve", "surimi", "anchois"],
@@ -344,7 +346,9 @@ rule(r" (salade saison) ", "ingredient", "salade_verte")
 rule(r"^ (chocolat dessert|chocolat noir sup|pepites de chocolat|vahine pepites|fairtrade pepites) ", "ingredient", "chocolat_patissier")
 # --- Produits non culinaires ou consommés tels quels (placés avant les ingrédients qu'ils contiennent) ---
 rule(r" (pizza|tarte flambee|bruschetta pizza|barchetta) ", "prepared_meal")
-rule(r" (cordons? bleu|nems?|gyo[sz]as?|sushis?|tielles|banh bao|raviolis vapeur|yakitori|parmentier|pastilla|samboussek|borek|boeuf bourguignon|blanquette|axoa|osso bucco|buddha|wraps poulet|maxi hot dog|aubergines au parm|pates en pot|lustucru banz|nouilles instantanees|soupe nouilles|ramen|yum yum|calamar a la romaine|carpaccio de poulpes|cake mozza|plateau raclette|plateau fromages|kit a cuisiner|kit pour potee|assortiment libanais|beignets de crevettes|chips de crevettes|feuilles de vignes|piperade|tomates pelees arrabbiata|epinards a la creme|chinois a la creme) ", "prepared_meal")
+# Cordons bleus : cuisinés comme une viande (recette « Cordon bleu et haricots verts »), pas un plat tout prêt.
+rule(r" (cordons? bleus?) ", "ingredient", "cordon_bleu")
+rule(r" (nems?|gyo[sz]as?|sushis?|tielles|banh bao|raviolis vapeur|yakitori|parmentier|pastilla|samboussek|borek|boeuf bourguignon|blanquette|axoa|osso bucco|buddha|wraps poulet|maxi hot dog|aubergines au parm|pates en pot|lustucru banz|nouilles instantanees|soupe nouilles|ramen|yum yum|calamar a la romaine|carpaccio de poulpes|cake mozza|plateau fromages|kit a cuisiner|kit pour potee|assortiment libanais|beignets de crevettes|chips de crevettes|feuilles de vignes|piperade|tomates pelees arrabbiata|epinards a la creme|chinois a la creme) ", "prepared_meal")
 rule(r" (gazpacho|soupe|nestle p tit soup|knorr douceur|knorr soupe) ", "prepared_meal")
 rule(r" (houmous|tzatziki|caviar d aubergine|tartinable|artichonade|riste d aubergine|babaganusch|pate d artichaut|blini|crackers|cracker|chips|rustichips|pringles|tuc|doritos|monster munch|curly|lay s|cruspies|apericube|aperivrais|tuiles|mix aperitif|snack|gressins|mini sables aperitif|sticks de saucisson|mini saucissons|cacahuetes grillees|amandes grillees salees|noix de cajou|pistaches|croustillants|petits coraya|bretzel|wasa|galettes de riz|galettes au beurre) ", "snack")
 rule(r" (biscuit|cookie|madeleine|palet|doomino|gateau|brownie|cake|canele|caneles|financiers|gaufre|gaufrette|petit beurre|bn|belin|prince|oreo|nutella biscuits|barre|kinder|milka|ferrero|raffaello|toblerone|cote d or|suchard|mars|haribo|chupa|confiserie|mallow|party mix|lunettes|crocos|choco sticks|smarties|petits oeufs|rochers|deco choco|chocolat au lait|chocolat noir|chocolat lait|chocolat degustation|chocolat degus|tablette|way to go|st michel|soft cake|pancakes|muffin|mini roules|choudou|mini gateaux|mini viennoiseries|neo roll|jumbo neo|mariette|snack 4 friends|tam tam|doonuts|pain d epice|galette ronde|barre bretonne|choco duo|choco crush|choco surprise|oeufs surprise|mon p tit panda|nestle recettes|nestle smarties|poulain) ", "snack")
@@ -452,7 +456,7 @@ rule(r" (brebis|ossau iraty|perail) ", "ingredient", "brebis")
 rule(r" (st moret|saint moret|fromage frais|kiri|mousse fromage frais|labneh) ", "ingredient", "fromage_frais")
 rule(r" (gorgonzola|roquefort|saint agur|bleu|fromage bleu) ", "ingredient", "fromage_bleu")
 rule(r" (tomme|morbier|cantal|saint nectaire|coeur de savoie|fromage ovale|tranche de fromage|carre de est|fromage noisettes) ", "ingredient", "tomme")
-rule(r" (brie|chaource|saint felicien|saint marcellin|caprice des anges|petit brie|petits fromages) ", "ingredient", "fromage_croute")
+rule(r" (reblochon|fromage a tartiflette|brie|chaource|saint felicien|saint marcellin|caprice des anges|petit brie|petits fromages) ", "ingredient", "fromage_croute")
 rule(r" (vache qui rit|babybel|fromage fondu) ", "ingredient", "fromage_portion")
 
 # --- Féculents, légumineuses, pâtes ---

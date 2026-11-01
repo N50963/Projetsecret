@@ -7,10 +7,10 @@ import collections
 import json
 from pathlib import Path
 
-from services.recipes import seed_poissons_oeufs, seed_vegetarien, seed_viandes
+from services.recipes import seed_poissons_oeufs, seed_quotidien, seed_vegetarien, seed_viandes
 from services.recipes.model import validate
 
-RECIPES = seed_viandes.RECIPES + seed_poissons_oeufs.RECIPES + seed_vegetarien.RECIPES
+RECIPES = seed_viandes.RECIPES + seed_poissons_oeufs.RECIPES + seed_vegetarien.RECIPES + seed_quotidien.RECIPES
 SEED_PATH = Path(__file__).resolve().parents[2] / "data" / "recipes" / "seed.json"
 
 

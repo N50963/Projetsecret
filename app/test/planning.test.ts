@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { planMeals, shortagesAfter } from "../src/modules/planning/engine";
-import { addDays, dayDiff, Stock } from "../src/modules/planning/stock";
+import { addDays, dayDiff, purchaseQuantity, Stock } from "../src/modules/planning/stock";
 import type { MealSlot, PlannerContext, PlannerIngredient, PlannerRecipe, Purchase } from "../src/modules/planning/types";
 import { DEFAULT_PREFERENCES } from "../src/modules/recipes/preferences";
 
@@ -42,6 +42,15 @@ describe("stock estimé d'après les tickets", () => {
     expect(frozen.available("saumon", "2026-11-10").present).toBe(true);
   });
 
+  it("compte le contenu d'un paquet vendu à l'unité (boîte d'œufs, jambon en tranches)", () => {
+    expect(purchaseQuantity("oeuf", "piece", 1, "unit_sale")).toBe(6);
+    expect(purchaseQuantity("jambon_cuit", "piece", 2, "unit_sale")).toBe(8);
+    // Contenance lue sur l'étiquette, ou ingrédient vendu à la pièce : inchangé.
+    expect(purchaseQuantity("oeuf", "piece", 12, "label")).toBe(12);
+    expect(purchaseQuantity("citron", "piece", 1, "unit_sale")).toBe(1);
+    expect(purchaseQuantity("surimi", "piece", null, null)).toBeNull();
+  });
+
   it("consomme les lots qui périment le plus tôt et garde une barquette de contenance inconnue pour un seul repas", () => {
     const stock = Stock.fromPurchases([buy("riz", "2026-10-01", 1000), buy("riz", SHOP, 500), buy("poulet_filet", SHOP, null)], { freezes: false });
     stock.consume("riz", 1200, "2026-10-27");
@@ -69,6 +78,26 @@ describe("propositions de menus", () => {
     expect(second!.proposals[0]!.missing).toEqual([
       { slug: "boeuf_hache", label: "boeuf_hache", quantity: 300, unit: "g" }, { slug: "poivron", label: "poivron", quantity: 300, unit: "g" },
     ]);
+  });
+
+  it("tour 1 : jusqu'à 5 plats avec les achats, ceux qui équilibrent la semaine d'abord, avant tout plat à acheter", () => {
+    const stockOnly = ["a", "b", "c", "d", "e", "f"].map((k) => recipe(`poulet-${k}`, "volaille", ["poulet_filet", "riz", "courgette"]));
+    const steak = recipe("steak", "boeuf", ["boeuf_hache", "riz", "courgette"]);
+    const ctx = context([...stockOnly, steak, chili], [...purchases, buy("boeuf_hache", SHOP)], {
+      accepted: [
+        { recipeId: "chili", date: "2026-10-28", servings: 4, slotId: "mer", mealType: "diner" },
+        { recipeId: "chili", date: "2026-10-29", servings: 4, slotId: "jeu", mealType: "diner" },
+      ],
+    });
+    const [first] = planMeals(ctx, [slot("lun", "2026-10-26")], { mealsInPlan: 7 });
+    expect(first!.round).toBe(1);
+    expect(first!.proposals).toHaveLength(5);
+    expect(first!.proposals.every((p) => p.missing.length === 0)).toBe(true);
+    // Le steak (3e viande rouge de la semaine) n'est proposé qu'après les plats équilibrés.
+    expect(first!.proposals.map((p) => p.recipeId)).not.toContain("steak");
+    const [few] = planMeals(context([stockOnly[0]!, steak, chili], [...purchases, buy("boeuf_hache", SHOP)], { accepted: ctx.accepted }), [slot("lun", "2026-10-26")], { mealsInPlan: 7 });
+    expect(few!.proposals.map((p) => p.recipeId)).toEqual(["poulet-a", "steak"]);
+    expect(few!.round).toBe(1);
   });
 
   it("propose le poisson frais en premier, avant qu'il ne soit plus consommable", () => {
@@ -164,14 +193,14 @@ describe("menu du jour d'après un ingrédient", () => {
     expect(today!.proposals.map((p) => p.recipeId)).toEqual(["curry-poulet"]);
   });
 
-  it("avec un ingrédient imposé, le tour 2 reprend les recettes écartées pour l'équilibre de la semaine", () => {
+  it("avec un ingrédient imposé, les recettes sans achat qui déséquilibrent la semaine restent au tour 1", () => {
     const omelette = recipe("omelette", "oeuf", ["oeuf", "epinard"]);
     const ctx = context([omelette, dahl], ["oeuf", "epinard", "lentilles", "tomate_conserve", "carotte", "riz"].map((s) => buy(s, SHOP)), {
       prefs: { ...DEFAULT_PREFERENCES, meatlessDinnersMin: 0, meatlessDinnersMax: 1 },
       accepted: [{ recipeId: "dahl", date: "2026-10-28", servings: 4, slotId: "mer", mealType: "diner" }],
     });
     const options = { mustInclude: { mar: "oeuf" }, mealsInPlan: 7, todayFirst: true };
-    expect(planMeals(ctx, [slot("mar", "2026-10-27")], options)[0]!.round).toBe(2);
+    expect(planMeals(ctx, [slot("mar", "2026-10-27")], options)[0]!.round).toBe(1);
     expect(planMeals(ctx, [slot("mar", "2026-10-27")], options)[0]!.proposals.map((p) => p.recipeId)).toEqual(["omelette"]);
   });
 });

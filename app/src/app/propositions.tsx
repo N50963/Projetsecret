@@ -515,14 +515,14 @@ export default function Propositions() {
         {top && !exhausted && (
           <SwipeCard key={`${current.id}-${top.recipeId}`} swipeRef={swipe} onSwipe={(d) => onSwipe(top, d)} style={StyleSheet.absoluteFill}
             onPress={() => router.push(`/recette/${top.recipeId}`)}>
-            {card(top.name, images[top.recipeId] ?? pictureOf(top.recipeId), top.totalMin, proteinLabel(top.mainProtein),
+            {card(top.name, images[top.recipeId] ?? pictureOf(top.recipeId), top.totalMin, proteinLabel(top.mainProtein, top.name),
               ctx.recipes.find((r) => r.id === top.recipeId)?.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", ") ?? "",
               toBuyLabels.length ? toBuyLabels.join(", ") : undefined)}
           </SwipeCard>
         )}
         {draft && (
           <SwipeCard key={`draft-${seen}-${draft.recipe.name}`} swipeRef={swipe} onSwipe={(d) => onDraftSwipe(draft, d)} style={StyleSheet.absoluteFill}>
-            {card(draft.recipe.name, null, draft.recipe.prep_min + draft.recipe.cook_min, proteinLabel(draft.recipe.main_protein),
+            {card(draft.recipe.name, null, draft.recipe.prep_min + draft.recipe.cook_min, proteinLabel(draft.recipe.main_protein, draft.recipe.name),
               draft.recipe.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", "))}
           </SwipeCard>
         )}

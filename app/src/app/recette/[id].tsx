@@ -276,7 +276,7 @@ export default function FicheRecette() {
         ))}
       </View>
       <View style={styles.pills}>
-        {proteinLabel(recipe.mainProtein) ? <Pill icon="cutlery">{proteinLabel(recipe.mainProtein)}</Pill> : null}
+        {proteinLabel(recipe.mainProtein, recipe.name) ? <Pill icon="cutlery">{proteinLabel(recipe.mainProtein, recipe.name)}</Pill> : null}
         <View style={[styles.stepper, { backgroundColor: c.chip }]} accessibilityLabel="Nombre de personnes">
           <Pressable onPress={() => setServings((s) => Math.max(1, s - 1))} accessibilityRole="button" accessibilityLabel="Une personne de moins" style={styles.stepperButton}>
             <Icon name="minus" size={20} color={c.text} />

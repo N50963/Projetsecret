@@ -9,8 +9,12 @@ import json
 from services.recipes.seed import SEED_PATH
 
 
-def recipes_seed_sql():
+def recipes_seed_sql(slugs=None):
+    """Toutes les recettes du jeu initial, ou seulement celles de `slugs` (recettes ajoutées après coup)."""
     recipes = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    if slugs is not None:
+        recipes = [r for r in recipes if r["slug"] in set(slugs)]
+        assert len(recipes) == len(set(slugs)), "recette absente du jeu initial"
     payload = json.dumps(recipes, ensure_ascii=False).replace("$seed$", "")
     return f"""-- Généré par services/recipes/sql.py à partir de data/recipes/seed.json : ne pas modifier à la main.
 do $do$

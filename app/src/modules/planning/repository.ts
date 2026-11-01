@@ -7,7 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getHouseholdPreferences } from "../recipes/preferences";
 import type { MealType } from "../recipes/types";
-import { addDays, PURCHASE_WINDOW_DAYS } from "./stock";
+import { addDays, PURCHASE_WINDOW_DAYS, purchaseQuantity } from "./stock";
 import type {
   IsoDate, MealSlot, MissingIngredient, PlannerContext, PlannerIngredient, PlannerRecipe, Proposal, Purchase, ServedMeal,
 } from "./types";
@@ -60,10 +60,11 @@ export async function loadRecipesForPlanning(supabase: SupabaseClient, household
 
 export async function loadPurchases(supabase: SupabaseClient, householdId: string, since: IsoDate): Promise<Purchase[]> {
   const rows = await fetchAll((a, b) => supabase.from("purchased_ingredients")
-    .select("receipt_item_id, ingredient_slug, category, quantity, unit, purchased_at")
+    .select("receipt_item_id, ingredient_slug, category, quantity, unit, quantity_source, purchased_at")
     .eq("household_id", householdId).gte("purchased_at", since).order("receipt_item_id").range(a, b), "Achats illisibles");
   return rows.map((p) => ({
-    slug: p.ingredient_slug, category: p.category, quantity: p.quantity === null ? null : Number(p.quantity), unit: p.unit,
+    slug: p.ingredient_slug, category: p.category, unit: p.unit,
+    quantity: purchaseQuantity(p.ingredient_slug, p.unit, p.quantity === null ? null : Number(p.quantity), p.quantity_source ?? null),
     purchasedAt: String(p.purchased_at).slice(0, 10),
   }));
 }

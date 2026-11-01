@@ -1,7 +1,7 @@
 /**
- * Moteur de menus : pour chaque repas demandé, propose des recettes réalisables avec les achats (tour 1) ou avec
- * 1 à 3 ingrédients à acheter (tour 2), en respectant les préférences du foyer et en visant l'équilibre et la variété
- * de la semaine. Fonctions pures, testées sans base.
+ * Moteur de menus : pour chaque repas demandé, propose d'abord jusqu'à 5 recettes réalisables avec les achats (tour 1),
+ * puis des recettes avec 1 à 3 ingrédients à acheter (tour 2), en respectant les préférences du foyer et en visant
+ * l'équilibre et la variété de la semaine. Fonctions pures, testées sans base.
  */
 
 import { maxSpicinessFor } from "../recipes/preferences";
@@ -14,6 +14,9 @@ import type {
 
 /** Repères pour 7 repas : poisson 2 fois, viande rouge 2 fois au plus, légumineuses au moins une fois. */
 export const DEFAULT_TARGETS: BalanceTargets = { fishMin: 2, redMeatMax: 2, poultryMax: 3, legumesMin: 1, repeatDays: 21 };
+/** Tour 1 : jusqu'à 5 plats réalisables avec les achats, avant tout plat qui demande des courses. */
+export const PROPOSALS_FROM_STOCK = 5;
+/** Tour 2 : plats avec quelques ingrédients à acheter. */
 export const PROPOSALS_PER_ROUND = 3;
 /** Au tour 2, nombre maximal d'ingrédients à acheter. */
 export const MAX_MISSING = 3;
@@ -205,12 +208,15 @@ function score(ctx: PlannerContext, e: Evaluation, slot: MealSlot, week: WeekSta
   return { score: Math.round(s * 10) / 10, reasons };
 }
 
-/** Choisit les propositions en évitant d'en montrer plusieurs avec la même protéine principale. */
-function pickDiverse<T extends { recipe: PlannerRecipe }>(ranked: T[], count: number): T[] {
+/**
+ * Choisit les propositions en évitant d'en montrer plusieurs avec la même protéine principale. La variété se cherche
+ * parmi les recettes retenues en premier (`first`) : une recette qui déséquilibre la semaine ne passe pas devant.
+ */
+function pickDiverse<T extends { recipe: PlannerRecipe }>(ranked: T[], count: number, first: (c: T) => boolean = () => true): T[] {
   const picked: T[] = [];
   for (const c of ranked) {
     if (picked.length >= count) break;
-    if (!picked.some((p) => p.recipe.mainProtein === c.recipe.mainProtein)) picked.push(c);
+    if (first(c) && !picked.some((p) => p.recipe.mainProtein === c.recipe.mainProtein)) picked.push(c);
   }
   for (const c of ranked) {
     if (picked.length >= count) break;
@@ -224,7 +230,6 @@ function pickDiverse<T extends { recipe: PlannerRecipe }>(ranked: T[], count: nu
  * pour les autres, la première proposition est retenue provisoirement pour équilibrer la suite de la semaine.
  */
 export function planMeals(ctx: PlannerContext, slots: MealSlot[], options: PlanOptions = {}): SlotPlan[] {
-  const count = options.count ?? PROPOSALS_PER_ROUND;
   const byId = new Map(ctx.recipes.map((r) => [r.id, r]));
   const t = { ...DEFAULT_TARGETS, ...ctx.targets };
   const ordered = [...slots].sort((a, b) => a.date.localeCompare(b.date) || (a.mealType === "dejeuner" ? -1 : 1));
@@ -262,11 +267,9 @@ export function planMeals(ctx: PlannerContext, slots: MealSlot[], options: PlanO
       .filter((r) => !must || r.ingredients.some((i) => !i.optional && i.slug === must))
       .map((r) => evaluate(r, slot, stock))
       .map((e) => ({ ...e, ...score(ctx, e, slot, week, mealsInPlan) }))
-      // Au tour 1, une recette qui déséquilibre la semaine laisse plutôt la place au tour 2 (quelques achats). Avec un
-      // ingrédient imposé, le tour 2 reprend ces recettes sans achat : elles valent mieux qu'une idée de Mistral.
-      .filter((c) => (round === 1
-        ? c.missing.length === 0 && c.score >= 0
-        : (c.missing.length >= 1 && c.missing.length <= MAX_MISSING) || (must !== undefined && c.missing.length === 0 && c.score < 0)))
+      // Tour 1 : tout ce qui se cuisine avec les achats, les recettes qui équilibrent la semaine en tête (celles qui la
+      // déséquilibrent passent après, mais avant tout plat qui demande des courses). Tour 2 : 1 à 3 ingrédients à acheter.
+      .filter((c) => (round === 1 ? c.missing.length === 0 : c.missing.length >= 1 && c.missing.length <= MAX_MISSING))
       .sort((a, b) => b.score - a.score || a.recipe.totalMin - b.recipe.totalMin);
 
     let round: 1 | 2 = requested;
@@ -275,7 +278,8 @@ export function planMeals(ctx: PlannerContext, slots: MealSlot[], options: PlanO
       round = 2;
       ranked = candidates(2);
     }
-    const proposals: Proposal[] = pickDiverse(ranked, count).map((c) => ({
+    const count = options.count ?? (round === 1 ? PROPOSALS_FROM_STOCK : PROPOSALS_PER_ROUND);
+    const proposals: Proposal[] = pickDiverse(ranked, count, round === 1 ? (c) => c.score >= 0 : undefined).map((c) => ({
       recipeId: c.recipe.id, versionId: c.recipe.versionId, name: c.recipe.name, totalMin: c.recipe.totalMin,
       mainProtein: c.recipe.mainProtein, round, score: c.score, missing: c.missing, usesPurchased: c.usesPurchased, reasons: c.reasons,
     }));

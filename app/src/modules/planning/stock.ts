@@ -19,12 +19,29 @@ export const SHELF_DAYS_BY_INGREDIENT: Record<string, number> = {
   pomme_de_terre: 30, oignon: 30, oignon_rouge: 30, echalote: 30, ail: 60, carotte: 21, courge_butternut: 60, potimarron: 60,
   patate_douce: 21, betterave: 14, celeri_rave: 30, chou_blanc: 21, chou_rouge: 21, radis_noir: 21, topinambour: 14, salsifis: 14,
   gingembre: 21, champignon: 5, salade_verte: 5, mache: 4, roquette: 4, lait: 30, lait_vegetal: 30, lait_coco: 365,
+  cordon_bleu: 10, boudin_blanc: 10,
 };
 const DEFAULT_SHELF_DAYS = 30;
 const FROZEN_SHELF_DAYS = 60;
 const FREEZABLE = new Set(["poisson", "viande", "volaille"]);
 /** Une barquette de viande ou de poisson de contenance inconnue sert pour un seul repas. */
 const SINGLE_USE = new Set(["poisson", "viande", "volaille"]);
+
+/**
+ * Contenance habituelle d'un paquet, pour les ingrédients vendus par lot : quand le ticket ne donne que le nombre de
+ * paquets (vente à l'unité), une boîte d'œufs compte pour 6 œufs et non pour un seul.
+ */
+export const PACK_COUNT: Record<string, number> = {
+  oeuf: 6, jambon_cuit: 4, blanc_volaille_tranche: 4, saucisse: 6, saucisse_cocktail: 6, boudin_blanc: 4, surimi: 12,
+  tortilla_wrap: 6, fromage_portion: 8, pain_burger_pita: 6, cordon_bleu: 2, galette_sarrasin: 6, feuille_riz: 20,
+  feuille_brick: 10, falafel: 12, pain_de_mie: 20, radis: 15, oignon_nouveau: 5,
+};
+
+/** Quantité d'un achat dans l'unité de référence, en comptant le contenu des paquets vendus à l'unité. */
+export function purchaseQuantity(slug: string, unit: string | null, quantity: number | null, source: string | null): number | null {
+  const pack = PACK_COUNT[slug];
+  return quantity !== null && pack && unit === "piece" && source === "unit_sale" ? quantity * pack : quantity;
+}
 
 /** Achats pris en compte pour le stock. */
 export const PURCHASE_WINDOW_DAYS = 30;
