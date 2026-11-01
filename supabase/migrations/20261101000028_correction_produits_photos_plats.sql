@@ -1,4 +1,6 @@
--- Module de correction des produits Lidl : à l'import des tickets, les nouveaux produits sont à vérifier (ce que MenuMalin
+-- Module de correction des produits Lidl, et photos libres des plats sans illustration.
+--
+-- Correction des produits : à l'import des tickets, les nouveaux produits sont à vérifier (ce que MenuMalin
 -- a compris : rôle et ingrédients) ; le foyer corrige ce qui est mal compris ou inconnu. Une correction vaut pour tous les
 -- achats du produit, passés et futurs, et prime sur les règles de classement.
 
@@ -74,3 +76,21 @@ as $$
 $$;
 revoke all on function public.confirm_products(uuid[]) from public, anon;
 grant execute on function public.confirm_products(uuid[]) to authenticated;
+
+-- Photos libres pour les plats sans illustration : photos de Wikimedia Commons sous licence libre (domaine public, CC0,
+-- Creative Commons, GFDL), réduites à 800 px, avec l'auteur, la licence et le lien de la page d'origine pour les crédits.
+alter table public.recipe_images drop constraint recipe_images_source_check;
+alter table public.recipe_images add constraint recipe_images_source_check
+  check (source in ('gemini', 'mistral', 'pollinations', 'photo', 'commons'));
+alter table public.recipe_images
+  add column author text,
+  add column license text,
+  add column license_url text,
+  add column source_url text;
+
+create view public.dish_photo_credits with (security_invoker = true) as
+select ri.recipe_id, rc.name, ri.author, ri.license, ri.license_url, ri.source_url
+from public.recipe_images ri
+join public.recipe_catalog rc on rc.id = ri.recipe_id
+where ri.source = 'commons';
+revoke all on public.dish_photo_credits from anon;

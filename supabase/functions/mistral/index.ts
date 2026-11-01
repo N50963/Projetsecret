@@ -11,7 +11,9 @@
  *                        celles de l'essai Pollinations), quelques-unes par passage, selon le quota gratuit de Mistral ;
  *  - shrink_images     : (jeton x-cron-token) réduit à 800 px les images enregistrées avant cette limite ;
  *  - ingredient_images : (jeton x-cron-token) vignettes des ingrédients, images libres de Wikimedia Commons.
- *  - ingredient_candidates : (jeton x-cron-token) photos libres candidates de Commons pour remplacer une vignette.
+ *  - ingredient_candidates : (jeton x-cron-token) photos libres candidates de Commons pour remplacer une vignette ;
+ *  - dish_photos       : (jeton x-cron-token) photos libres de Commons pour les plats sans illustration, avec crédits ;
+ *  - suggest_products  : lecture des produits de tickets Lidl non reconnus (nom, rôle, ingrédients) pour le module de correction.
  * Les recettes renvoyées sont des brouillons : l'application les vérifie et les fait confirmer avant de les enregistrer.
  */
 
@@ -563,6 +565,75 @@ async function ingredientImages(db: SupabaseClient, offset: number, limit: numbe
   return { added, missing, remaining: pending.length - added.length };
 }
 
+/** Mots trop courants pour dire si le titre d'une photo correspond au plat cherché. */
+const COMMON_WORDS = new Set(["with", "and", "the", "avec", "aux", "des", "les", "sauce", "food", "dish", "plat", "maison", "style"]);
+const foldText = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+/**
+ * Photos libres pour les plats sans illustration : photo de Wikimedia Commons (licence libre) trouvée d'après le nom du
+ * plat (ou une recherche, ou un fichier précis), réduite à 800 px, enregistrée avec ses crédits. Quelques plats par appel.
+ */
+async function dishPhotos(db: SupabaseClient, limit: number, files: Record<string, string>, queries: Record<string, string>, redo: string[]) {
+  if (redo.length) await db.from("recipe_images").delete().eq("source", "commons").in("recipe_id", redo);
+  const [recipes, images] = await Promise.all([
+    db.from("recipe_catalog").select("id, name, household_id").order("name"),
+    db.from("recipe_images").select("recipe_id, source"),
+  ]);
+  const have = new Set((images.data ?? []).filter((i: any) => i.source !== "pollinations").map((i: any) => i.recipe_id));
+  const missing = (recipes.data ?? []).filter((r: any) => !have.has(r.id));
+  // Plats désignés (fichier ou recherche) d'abord, puis les autres dans l'ordre.
+  const wanted = (r: any) => Boolean(files[r.id] ?? files[r.name] ?? queries[r.id] ?? queries[r.name]);
+  const todo = [...missing.filter(wanted), ...missing.filter((r: any) => !wanted(r))].slice(0, limit);
+  const added: string[] = [];
+  const skipped: string[] = [];
+  for (const recipe of todo) {
+    try {
+      const file = files[recipe.id] ?? files[recipe.name];
+      const query = queries[recipe.id] ?? queries[recipe.name] ?? recipe.name;
+      const url = file
+        ? `https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo&iiprop=url|extmetadata|size&iiurlwidth=800`
+          + `&titles=${encodeURIComponent(file.startsWith("File:") ? file : `File:${file}`)}`
+        : `https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search&gsrnamespace=6&gsrlimit=12`
+          + `&gsrsearch=${encodeURIComponent(`${query} filetype:bitmap`)}&prop=imageinfo&iiprop=url|extmetadata|size&iiurlwidth=800`;
+      const data = await wikiJson(url);
+      const words = foldText(query).split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !COMMON_WORDS.has(w));
+      const pages = (Object.values(data.query?.pages ?? {}) as any[]).sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+      const pick = pages.find((p) => {
+        const info = p.imageinfo?.[0];
+        const license = stripHtml(info?.extmetadata?.LicenseShortName?.value);
+        const title = foldText(String(p.title));
+        return info?.thumburl && FREE_LICENSE.test(license) && /\.jpe?g$/i.test(String(p.title)) && (info.width ?? 0) >= 500
+          && (file || words.some((w) => title.includes(w)));
+      });
+      if (!pick) {
+        skipped.push(`${recipe.name} (${file ?? query})`);
+        continue;
+      }
+      const info = pick.imageinfo[0];
+      const meta = info.extmetadata ?? {};
+      const r = await fetch(info.thumburl, { headers: WIKI_HEADERS, signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+      if (!r.ok) throw new Error(`image ${r.status}`);
+      let bytes: Uint8Array = new Uint8Array(await r.arrayBuffer());
+      // Miniature JPEG de Commons utilisée telle quelle ; réencodée seulement si elle est lourde.
+      if (!(bytes[0] === 0xff && bytes[1] === 0xd8) || bytes.length > 260_000) bytes = asJpeg(bytes);
+      const owner = recipe.household_id ?? null;
+      const path = `${owner ?? "common"}/${recipe.id}.jpg`;
+      const up = await db.storage.from("recipe-images").upload(path, bytes, { contentType: "image/jpeg", upsert: true });
+      if (up.error) throw new Error(up.error.message);
+      const ins = await db.from("recipe_images").upsert({
+        recipe_id: recipe.id, household_id: owner, storage_path: path, source: "commons", created_at: new Date().toISOString(),
+        author: stripHtml(meta.Artist?.value).slice(0, 200) || null, license: stripHtml(meta.LicenseShortName?.value).slice(0, 80),
+        license_url: meta.LicenseUrl?.value ?? null, source_url: info.descriptionurl ?? null,
+      }, { onConflict: "recipe_id,household_id" });
+      if (ins.error) throw new Error(ins.error.message);
+      added.push(`${recipe.name} ← ${String(pick.title).replace(/^File:/, "")} (${Math.round(bytes.length / 1024)} Ko)`);
+    } catch (e) {
+      skipped.push(`${recipe.name} : ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return { added, skipped, remaining: missing.length - added.length };
+}
+
 /** Le foyer a mis sa propre photo du plat (recette du foyer) : elle prime sur toute image créée. */
 async function hasHouseholdPhoto(db: SupabaseClient, recipeId: string, owner: string | null): Promise<boolean> {
   if (!owner) return false;
@@ -639,7 +710,7 @@ Deno.serve(async (req) => {
     return json({ error: "Corps JSON attendu" }, 400);
   }
 
-  if (["illustrate_missing", "shrink_images", "ingredient_images", "ingredient_candidates"].includes(String(body.action))) {
+  if (["illustrate_missing", "shrink_images", "ingredient_images", "ingredient_candidates", "dish_photos"].includes(String(body.action))) {
     try {
       const db = admin();
       const expected = (await db.from("app_settings").select("value").eq("key", "cron_token").maybeSingle()).data?.value;
@@ -649,6 +720,12 @@ Deno.serve(async (req) => {
         const queries = Object.fromEntries(Object.entries(body.queries && typeof body.queries === "object" ? body.queries : {}).slice(0, 50)
           .map(([k, v]) => [k, String(v)]));
         return json(await ingredientCandidates(queries, Math.min(8, Math.max(1, Number(body.per ?? 6)))));
+      }
+      if (body.action === "dish_photos") {
+        const asMap = (v: unknown) => Object.fromEntries(Object.entries(v && typeof v === "object" ? v : {}).slice(0, 80)
+          .map(([k, x]) => [k, String(x)])) as Record<string, string>;
+        const redo = Array.isArray(body.redo) ? (body.redo as unknown[]).map(String).slice(0, 40) : [];
+        return json(await dishPhotos(db, Math.min(12, Math.max(1, Number(body.limit ?? 8))), asMap(body.files), asMap(body.queries), redo));
       }
       if (body.action === "ingredient_images") {
         const overrides = body.articles && typeof body.articles === "object" ? body.articles as Record<string, string> : {};
@@ -752,6 +829,36 @@ Deno.serve(async (req) => {
         if (data.improvable === false || !(data.recipe ?? data.steps)) return json({ improvable: false, model });
         const out = normalizeRecipe(data.recipe ?? data, refs);
         return json({ improvable: true, ...out, change_note: String(data.change_note ?? feedback).slice(0, 300), model });
+      }
+      if (body.action === "suggest_products") {
+        // Module de correction des tickets : lecture des produits non reconnus (le foyer valide ou corrige).
+        const ids = (Array.isArray(body.product_ids) ? body.product_ids : []).map(String).slice(0, 25);
+        const { data: products } = ids.length
+          ? await user.from("products").select("id, label_raw").eq("household_id", householdId).in("id", ids) : { data: [] };
+        if (!products?.length) return json({ suggestions: [] });
+        const { data, model } = await chatJson([
+          { role: "system", content: `Tu classes des produits achetés chez Lidl (France) pour une application de menus. Tu réponds uniquement en JSON.\nRéférentiel d'ingrédients (slug, nom, unité) : ${referentialText(refs)}` },
+          { role: "user", content: `Libellés de tickets de caisse Lidl, parfois abrégés ou tronqués. Pour chacun, donne : le nom lisible en français ; `
+            + `le rôle : ingredient (sert à cuisiner un plat), prepared_meal (plat tout prêt), dessert, snack (grignotage, apéritif, tartinable), `
+            + `breakfast (céréales, confiture, brioche), beverage (boisson), bread (pain), non_food (hygiène, entretien, maison) ; `
+            + `pour un ingrédient, 1 à 3 slugs du référentiel, au plus près de la nature du produit : un produit fumé, cuit, en tranches ou en `
+            + `conserve prend son propre slug quand il existe (truite fumée → truite_fumee, jamais truite). `
+            + `Réponds {"products": [{"id": "...", "name": "...", "role": "...", "ingredients": ["slug"]}]}.\n\n`
+            + products.map((p: any) => `${p.id} | ${p.label_raw}`).join("\n") },
+        ], 0.1);
+        const known = new Set(refs.map((r) => r.slug));
+        const asked = new Set(products.map((p: any) => p.id));
+        const roles = ["ingredient", "prepared_meal", "dessert", "snack", "breakfast", "beverage", "bread", "non_food"];
+        const suggestions = (Array.isArray(data.products) ? data.products : [])
+          .filter((s: any) => asked.has(String(s?.id)) && roles.includes(s?.role))
+          .map((s: any) => ({
+            id: String(s.id), name: String(s.name ?? "").trim().slice(0, 120), role: s.role,
+            ingredients: s.role === "ingredient"
+              ? [...new Set((Array.isArray(s.ingredients) ? s.ingredients : []).map(String).filter((x: string) => known.has(x)))].slice(0, 3) : [],
+          }))
+          .filter((s: any) => s.name && (s.role !== "ingredient" || s.ingredients.length));
+        await log(true, model);
+        return json({ suggestions, model });
       }
       if (body.action === "illustrate") {
         const result = await illustrate(user, String(body.recipe_id ?? ""));

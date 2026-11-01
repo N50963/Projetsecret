@@ -6,6 +6,7 @@ import { Icon } from "../components/icons";
 import { Body, Button, ErrorText, Muted, Screen, SectionTitle } from "../components/ui";
 import { dateTime, dayLabel } from "../lib/format";
 import { isLidlConnected, syncLidl } from "../lib/lidl";
+import { countToReview } from "../lib/products";
 import { useHousehold, useSession } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { CARD_SHADOW, useColors } from "../lib/theme";
@@ -41,18 +42,21 @@ export default function Parametres() {
   const c = useColors();
   const [lidl, setLidl] = useState<LidlStatus | null>(null);
   const [prefs, setPrefs] = useState<HouseholdPreferences | null>(null);
+  const [toReview, setToReview] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const [connected, receipt, sync, preferences] = await Promise.all([
+      const [connected, receipt, sync, preferences, review] = await Promise.all([
         isLidlConnected(),
         supabase.from("receipts").select("purchased_at").eq("household_id", home.id).order("purchased_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("last_sync").select("finished_at, status").eq("household_id", home.id).maybeSingle(),
         getHouseholdPreferences(supabase, home.id),
+        countToReview(home.id),
       ]);
+      setToReview(review);
       setLidl({ connected, lastReceipt: receipt.data?.purchased_at ?? null, lastSync: sync.data?.finished_at ?? null });
       setPrefs(preferences);
     } catch (e) {
@@ -81,6 +85,8 @@ export default function Parametres() {
       else setMessage(result.newReceipts ? `${result.newReceipts} nouveau${result.newReceipts > 1 ? "x" : ""} ticket${result.newReceipts > 1 ? "s" : ""} enregistré${result.newReceipts > 1 ? "s" : ""}.`
         : "Aucun nouveau ticket.");
       await load();
+      // Import terminé : les nouveaux produits non vérifiés s'ouvrent dans le module de correction.
+      if (result.status !== "error" && result.status !== "reauth_required" && (await countToReview(home.id)) > 0) router.push("/produits");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -109,6 +115,8 @@ export default function Parametres() {
         {message ? <Body style={{ color: c.greenInk }}>{message}</Body> : null}
         <Button title={syncing ? "Récupération en cours…" : lidl && !lidl.connected ? "Connecter Lidl Plus" : "Récupérer les nouveaux tickets"}
           onPress={sync} disabled={syncing} />
+        <Button title={toReview ? `Vérifier ${toReview} nouveau${toReview > 1 ? "x" : ""} produit${toReview > 1 ? "s" : ""}` : "Corriger un produit acheté"}
+          kind="secondary" icon={toReview ? "alert" : "search"} onPress={() => router.push("/produits")} />
       </View>
 
       <View style={[styles.head, { marginTop: 2 }]}><SectionTitle icon="sliders" title="Préférences" /></View>
@@ -130,7 +138,7 @@ export default function Parametres() {
         <View style={styles.row}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.rowName, { color: c.text }]}>Crédits des photos</Text>
-            <Text style={[styles.rowValue, { color: c.muted }]}>Photos des ingrédients : Wikimedia Commons, licences libres</Text>
+            <Text style={[styles.rowValue, { color: c.muted }]}>Photos des plats et des ingrédients : Wikimedia Commons, licences libres</Text>
           </View>
           <Icon name="chevronRight" width={9} height={15} color={c.text} />
         </View>

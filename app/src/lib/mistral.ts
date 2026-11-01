@@ -77,3 +77,14 @@ export function draftToInput(d: DraftRecipe, source: RecipeSource): RecipeInput 
     })),
   };
 }
+
+/** Ce que Mistral comprend de produits de tickets Lidl (nom lisible, rôle, ingrédients du référentiel). */
+export interface ProductSuggestion {
+  id: string;
+  name: string;
+  role: "ingredient" | "prepared_meal" | "dessert" | "snack" | "breakfast" | "beverage" | "bread" | "non_food";
+  ingredients: string[];
+}
+
+export const suggestProducts = (householdId: string, productIds: string[]) =>
+  call<{ suggestions: ProductSuggestion[] }>({ action: "suggest_products", household_id: householdId, product_ids: productIds.slice(0, 25) });

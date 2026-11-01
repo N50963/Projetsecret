@@ -32,7 +32,7 @@ interface ImageRow {
   recipe_id: string;
   household_id: string | null;
   storage_path: string;
-  source: "mistral" | "photo";
+  source: "mistral" | "photo" | "commons" | "gemini" | "pollinations";
   created_at: string;
 }
 
@@ -215,4 +215,19 @@ export async function ingredientCredits(): Promise<IngredientCredit[]> {
 }
 
 /** Ligne de crédit : « Photo : auteur · licence ». */
+/** Photos libres des plats (Wikimedia Commons), avec leurs crédits. */
+export interface DishCredit {
+  recipeId: string;
+  name: string;
+  author: string | null;
+  license: string;
+  sourceUrl: string;
+}
+
+export async function dishCredits(): Promise<DishCredit[]> {
+  const { data, error } = await supabase.from("dish_photo_credits").select("recipe_id, name, author, license, source_url").order("name");
+  if (error) throw new Error(`Crédits illisibles : ${error.message}`);
+  return (data ?? []).map((d: any) => ({ recipeId: d.recipe_id, name: d.name, author: d.author, license: d.license ?? "", sourceUrl: d.source_url ?? "" }));
+}
+
 export const ingredientCredit = (c: IngredientCredit) => `Photo : ${c.author ? `${c.author} · ` : ""}${c.license} · Wikimedia Commons`;

@@ -2,46 +2,68 @@ import { Image } from "expo-image";
 import { useEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { ErrorText, Muted, Screen } from "../components/ui";
-import { ingredientCredit, ingredientCredits, ingredientPictureUrls, type IngredientCredit } from "../lib/images";
+import { ErrorText, Muted, Screen, SectionTitle } from "../components/ui";
+import {
+  dishCredits, illustrationUrls, ingredientCredit, ingredientCredits, ingredientPictureUrls, type DishCredit, type IngredientCredit,
+  type Picture,
+} from "../lib/images";
 import { CARD_SHADOW, useColors } from "../lib/theme";
 
+const credit = (c: { author: string | null; license: string }) => `Photo : ${c.author ? `${c.author} · ` : ""}${c.license} · Wikimedia Commons`;
+
+function CreditRow({ name, text, uri, url }: { name: string; text: string; uri: string | null; url: string }) {
+  const c = useColors();
+  return (
+    <Pressable onPress={() => Linking.openURL(url).catch(() => undefined)} accessibilityRole="link" accessibilityLabel={`${name} : ${text}`}
+      style={({ pressed }) => [styles.row, { backgroundColor: c.card, borderColor: c.cardLine, opacity: pressed ? 0.8 : 1 }, CARD_SHADOW]}>
+      {uri ? <Image source={{ uri }} style={styles.thumb} contentFit="cover" transition={0} /> : <View style={[styles.thumb, { backgroundColor: c.chip }]} />}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>{name}</Text>
+        <Text style={{ color: c.muted, fontSize: 13.5, lineHeight: 17 }} numberOfLines={2}>{text}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 /**
- * Crédits des photos d'ingrédients : images sous licence libre de Wikimedia Commons (auteur, licence, lien vers la
- * page de l'image), comme le demandent les licences Creative Commons.
+ * Crédits des photos libres de Wikimedia Commons (plats sans illustration, ingrédients) : auteur, licence, lien vers la
+ * page de l'image, comme le demandent les licences Creative Commons.
  */
 export default function Credits() {
-  const c = useColors();
+  const [dishes, setDishes] = useState<DishCredit[] | null>(null);
+  const [dishPictures, setDishPictures] = useState<Record<string, Picture | null>>({});
   const [credits, setCredits] = useState<IngredientCredit[] | null>(null);
   const [pictures, setPictures] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState("");
 
   useEffect(() => {
-    ingredientCredits().then(setCredits, (e) => setError(e instanceof Error ? e.message : String(e)));
+    const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
+    dishCredits().then((list) => {
+      setDishes(list);
+      illustrationUrls(list.map((d) => d.recipeId)).then(setDishPictures, () => undefined);
+    }, fail);
+    ingredientCredits().then(setCredits, fail);
     ingredientPictureUrls().then(setPictures, () => undefined);
   }, []);
 
   return (
     <Screen title="Crédits des photos">
       <Muted>
-        Les photos des ingrédients viennent de Wikimedia Commons, sous licence libre (domaine public, CC0, Creative Commons, GFDL).
-        Touchez une ligne pour voir l'image d'origine et sa licence. Les photos des plats sont créées par Mistral ou prises avec votre téléphone.
+        Photos libres de Wikimedia Commons (domaine public, CC0, Creative Commons, GFDL) : touchez une ligne pour voir l'image
+        d'origine et sa licence. Les autres photos des plats sont créées par Mistral ou prises avec votre téléphone.
       </Muted>
       <ErrorText>{error}</ErrorText>
-      {credits === null && !error ? <Muted>Chargement…</Muted> : null}
+      {dishes?.length ? (
+        <View style={{ gap: 7 }}>
+          <SectionTitle icon="cutlery" title="Photos des plats" />
+          {dishes.map((d) => <CreditRow key={d.recipeId} name={d.name} text={credit(d)} uri={dishPictures[d.recipeId]?.uri ?? null} url={d.sourceUrl} />)}
+        </View>
+      ) : null}
       <View style={{ gap: 7 }}>
-        {(credits ?? []).map((credit) => (
-          <Pressable key={credit.slug} onPress={() => Linking.openURL(credit.sourceUrl).catch(() => undefined)} accessibilityRole="link"
-            accessibilityLabel={`${credit.name} : ${ingredientCredit(credit)}`}
-            style={({ pressed }) => [styles.row, { backgroundColor: c.card, borderColor: c.cardLine, opacity: pressed ? 0.8 : 1 }, CARD_SHADOW]}>
-            {pictures.get(credit.slug)
-              ? <Image source={{ uri: pictures.get(credit.slug)! }} style={styles.thumb} contentFit="cover" transition={0} />
-              : <View style={[styles.thumb, { backgroundColor: c.chip }]} />}
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>{credit.name}</Text>
-              <Text style={{ color: c.muted, fontSize: 13.5, lineHeight: 17 }} numberOfLines={2}>{ingredientCredit(credit)}</Text>
-            </View>
-          </Pressable>
+        <SectionTitle icon="image" title="Photos des ingrédients" />
+        {credits === null && !error ? <Muted>Chargement…</Muted> : null}
+        {(credits ?? []).map((c) => (
+          <CreditRow key={c.slug} name={c.name} text={ingredientCredit(c)} uri={pictures.get(c.slug) ?? null} url={c.sourceUrl} />
         ))}
       </View>
     </Screen>
