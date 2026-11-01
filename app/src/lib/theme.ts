@@ -1,5 +1,5 @@
 /**
- * Charte MenuMalin (canevas Claude Design « MenuMalin ») : fond crème, cartes beige clair, vert profond, texte orange
+ * Charte MenuBily (canevas Claude Design « MenuBily ») : fond crème, cartes beige clair, vert profond, texte orange
  * pour ce qui est à acheter. L'application garde cette charte claire quel que soit le réglage du téléphone, comme
  * dans les maquettes.
  */

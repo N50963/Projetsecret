@@ -1,5 +1,5 @@
 /**
- * Fenêtre de rappel de l'accueil (cloche) : panneau qui monte du bas de l'écran, au style MenuMalin. Menus du jour (ou
+ * Fenêtre de rappel de l'accueil (cloche) : panneau qui monte du bas de l'écran, au style MenuBily. Menus du jour (ou
  * prochain menu), minuteurs en cours, liste de courses ; chaque ligne mène à l'écran concerné.
  */
 

@@ -8,7 +8,7 @@ import { Button, ErrorText, Field, Muted } from "../components/ui";
 import { useSession } from "../lib/session";
 import { BRAND_FONT, useColors } from "../lib/theme";
 
-/** Connexion MenuMalin : photo d'un plat en haut, panneau crème avec le logo, l'e-mail et le mot de passe du compte du foyer. */
+/** Connexion MenuBily : photo d'un plat en haut, panneau crème avec le logo, l'e-mail et le mot de passe du compte du foyer. */
 export default function Connexion() {
   const { signIn } = useSession();
   const c = useColors();
@@ -44,8 +44,8 @@ export default function Connexion() {
           <View style={styles.brand}>
             <Logo />
             <View>
-              <Text style={[styles.name, { color: c.primary, fontFamily: BRAND_FONT }]}>MenuMalin</Text>
-              <Text style={[styles.slogan, { color: c.muted }]}>Bien manger, sans gaspiller</Text>
+              <Text style={[styles.name, { color: c.primary, fontFamily: BRAND_FONT }]}>MenuBily</Text>
+              <Text style={[styles.slogan, { color: c.muted }]}>Bien manger, même sans idée</Text>
             </View>
           </View>
           <ErrorText>{error}</ErrorText>

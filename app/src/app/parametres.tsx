@@ -34,7 +34,7 @@ function household(p: HouseholdPreferences) {
     .filter(Boolean).join(", ");
 }
 
-/** Profil MenuMalin : tickets Lidl Plus, préférences du foyer (résumé ligne par ligne), déconnexion. */
+/** Profil MenuBily : tickets Lidl Plus, préférences du foyer (résumé ligne par ligne), déconnexion. */
 export default function Parametres() {
   const router = useRouter();
   const home = useHousehold();

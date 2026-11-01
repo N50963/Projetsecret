@@ -1,6 +1,6 @@
 /**
  * Fonction principale de l'accueil : le menu du jour choisi d'après un ingrédient que le foyer a acheté ou compte acheter.
- * Le foyer indique l'ingrédient (achats récents proposés), le repas et le temps disponible ; les propositions suivent
+ * Le foyer tape l'ingrédient (recherche parmi ceux des recettes), le repas et le temps disponible ; les propositions suivent
  * ensuite les mêmes règles que les menus de la semaine.
  */
 
@@ -50,21 +50,17 @@ export function IngredientMenu({ householdId, today, todaySlots, busy, onFind }:
 
   useEffect(() => {
     ingredientsInRecipes(supabase).then(setOptions, (e) => setError(e instanceof Error ? e.message : String(e)));
-    // Achats des 7 derniers jours, du plus récent au plus ancien : les premières suggestions.
+    // Achats des 7 derniers jours : un ingrédient acheté récemment est proposé comme « déjà acheté ».
     loadPurchases(supabase, householdId, addDays(today, -7))
       .then((list) => setRecent([...new Set(list.sort((a, b) => b.purchasedAt.localeCompare(a.purchasedAt)).map((p) => p.slug))]))
       .catch(() => undefined);
   }, [householdId, today]);
 
-  const suggestions = useMemo(() => {
+  // Pas de suggestion avant la saisie : seuls les ingrédients qui correspondent à ce qui est tapé s'affichent.
+  const matches = useMemo(() => {
     const q = fold(query.trim());
-    if (q.length >= 2) return options.filter((o) => fold(o.name).includes(q)).slice(0, 8);
-    const bySlug = new Map(options.map((o) => [o.slug, o]));
-    // Achats récents utilisés par des recettes (hors condiments et produits de base), sinon les plus cuisinés.
-    const bought = recent.map((s) => bySlug.get(s)).filter((o): o is RecipeIngredientOption => Boolean(o))
-      .filter((o) => !["condiment", "herbe_epice", "matiere_grasse", "epicerie_sucree"].includes(o.category));
-    return (bought.length ? bought : options).slice(0, 8);
-  }, [query, options, recent]);
+    return q.length >= 2 ? options.filter((o) => fold(o.name).includes(q)).slice(0, 8) : [];
+  }, [query, options]);
 
   const pick = (o: RecipeIngredientOption) => {
     setPicked(o);
@@ -80,7 +76,7 @@ export function IngredientMenu({ householdId, today, todaySlots, busy, onFind }:
         <View style={[styles.badge, { backgroundColor: c.greenSoft }]}><Icon name="wand" size={22} color={c.greenInk} /></View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: c.text }]} accessibilityRole="header">Menu du jour avec un ingrédient</Text>
-          <Text style={{ color: c.muted, fontSize: 14.2, lineHeight: 18 }}>Acheté ou à acheter : MenuMalin vous propose quoi cuisiner.</Text>
+          <Text style={{ color: c.muted, fontSize: 14.2, lineHeight: 18 }}>Acheté ou à acheter : MenuBily vous propose quoi cuisiner.</Text>
         </View>
       </View>
       <ErrorText>{error}</ErrorText>
@@ -102,16 +98,15 @@ export function IngredientMenu({ householdId, today, todaySlots, busy, onFind }:
               accessibilityLabel="Ingrédient du menu du jour" />
             <View style={styles.searchIcon} pointerEvents="none"><Icon name="search" size={20} color={c.muted} /></View>
           </View>
-          {!query.trim() && recent.length > 0 ? <Text style={{ color: c.muted, fontSize: 13.5 }}>Achetés ces derniers jours :</Text> : null}
           <View style={styles.wrap}>
-            {suggestions.map((o) => (
+            {matches.map((o) => (
               <Pressable key={o.slug} onPress={() => pick(o)} accessibilityRole="button" accessibilityLabel={o.name}
                 style={({ pressed }) => [styles.option, { backgroundColor: c.chip, opacity: pressed ? 0.8 : 1 }]}>
                 <Thumb slug={o.slug} />
                 <Text style={{ color: c.text, fontSize: 15, fontWeight: "500" }}>{o.name}</Text>
               </Pressable>
             ))}
-            {query.trim().length >= 2 && !suggestions.length ? <Text style={{ color: c.muted }}>Aucune recette avec cet ingrédient.</Text> : null}
+            {query.trim().length >= 2 && !matches.length ? <Text style={{ color: c.muted }}>Aucune recette avec cet ingrédient.</Text> : null}
           </View>
         </View>
       )}

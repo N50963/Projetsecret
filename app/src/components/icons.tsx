@@ -1,4 +1,4 @@
-/** Icônes et logo MenuMalin, repris tels quels des maquettes Claude Design (tracés SVG). */
+/** Icônes et logo MenuBily, repris tels quels des maquettes Claude Design (tracés SVG). */
 
 import type { ReactNode } from "react";
 import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from "react-native-svg";
@@ -202,10 +202,10 @@ export function Icon({ name, size = 22, color, width, height }: { name: IconName
   );
 }
 
-/** Logo MenuMalin : deux feuilles et leurs nervures. */
+/** Logo MenuBily : deux feuilles et leurs nervures. */
 export function Logo({ width = 57.3, height = 54.7 }: { width?: number; height?: number }) {
   return (
-    <Svg width={width} height={height} viewBox="0 0 44 42" accessibilityLabel="Logo MenuMalin">
+    <Svg width={width} height={height} viewBox="0 0 44 42" accessibilityLabel="Logo MenuBily">
       <Defs>
         <LinearGradient id="feuille-g" x1="0.3" y1="0" x2="0.6" y2="1">
           <Stop offset="0" stopColor="#5F8634" /><Stop offset="0.5" stopColor="#7F9F3D" /><Stop offset="1" stopColor="#4E7A2E" />

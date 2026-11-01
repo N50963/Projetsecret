@@ -12,7 +12,7 @@ import { BRAND_FONT, useColors } from "../lib/theme";
 /**
  * Écrans accessibles selon l'état du compte : connexion, puis code du foyer, puis l'application. Un écran dont la
  * condition est fausse n'est pas déclaré dans la pile ; Expo Router redirige alors vers `redirectTo`.
- * En-têtes : bande verte avec titre blanc (maquettes MenuMalin) ; l'accueil et la connexion ont leur propre en-tête.
+ * En-têtes : bande verte avec titre blanc (maquettes MenuBily) ; l'accueil et la connexion ont leur propre en-tête.
  */
 function Gate() {
   const { ready, session, household, householdError, refreshHousehold } = useSession();
@@ -64,7 +64,7 @@ function Gate() {
 }
 
 export default function RootLayout() {
-  // Police du nom MenuMalin ; le reste du texte utilise Roboto, la police du système Android.
+  // Police du nom MenuBily ; le reste du texte utilise Roboto, la police du système Android.
   useFonts({ [BRAND_FONT]: require("../../assets/fonts/Cabin-BoldItalic.ttf") });
   return (
     <SafeAreaProvider>

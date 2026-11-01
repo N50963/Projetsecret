@@ -19,7 +19,7 @@ export interface ShopProduct {
   name: string;
   role: ProductRole | null;
   ingredients: string[];
-  /** Rôle ou ingrédient non trouvé par MenuMalin. */
+  /** Rôle ou ingrédient non trouvé par MenuBily. */
   unknown: boolean;
   lastSeen: string | null;
   timesBought: number;
@@ -48,7 +48,7 @@ export async function countToReview(householdId: string): Promise<number> {
   return count ?? 0;
 }
 
-/** Recherche d'un produit déjà acheté, pour corriger ce que MenuMalin en a compris. */
+/** Recherche d'un produit déjà acheté, pour corriger ce que MenuBily en a compris. */
 export async function searchProducts(householdId: string, text: string): Promise<ShopProduct[]> {
   const q = text.trim().replace(/[%_,()]/g, " ");
   if (q.length < 2) return [];

@@ -1,11 +1,11 @@
-# Application mobile « MenuMalin »
+# Application mobile « MenuBily »
 
-Charte graphique : canevas Claude Design « MenuMalin » (claude.ai, artboards Accueil, Fiche recette, Propositions,
+Charte graphique : canevas Claude Design « MenuMalin » (ancien nom de l'application) (claude.ai, artboards Accueil, Fiche recette, Propositions,
 Courses, Paramètres, Connexion, états et planche de composants), reproduit au plus près :
 
 - couleurs (`app/src/lib/theme.ts`) : fond crème #FEF3E3, cartes #FDF4E9, vert #2C5A27, vert doux #E7E3BE, texte
   orange #8A4B12 pour « à acheter », bande verte #445A33 en tête des écrans ;
-- typographie : Roboto (police du système Android), nom « MenuMalin » en Cabin gras italique
+- typographie : Roboto (police du système Android), nom « MenuBily » en Cabin gras italique
   (`app/assets/fonts`, licence OFL) ;
 - logo en feuilles et icônes : tracés SVG des maquettes (`app/src/components/icons.tsx`, react-native-svg) ;
 - boutons pleine largeur à dégradé vert, puces beiges (vert doux bordé de vert quand elles sont choisies),
@@ -23,7 +23,7 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    à Supabase. Chaque téléphone se connecte une fois. Les tickets sont ensuite lus directement chez Lidl par le
    téléphone, puis enregistrés dans Supabase.
 3. **Correction des produits** (module ouvert après la récupération des tickets, ou Profil › Vérifier / Corriger un
-   produit) : chaque nouveau produit Lidl apparaît avec ce que MenuMalin en a compris (rôle et ingrédients), les non
+   produit) : chaque nouveau produit Lidl apparaît avec ce que MenuBily en a compris (rôle et ingrédients), les non
    reconnus d'abord, lus par Mistral qui propose un nom, un rôle et les ingrédients. Le foyer valide (« C'est juste »,
    « Tout valider ») ou corrige : nom, rôle (ingrédient, plat tout prêt, dessert, grignotage, petit-déjeuner, boisson,
    pain, non alimentaire) et ingrédients du référentiel. Une correction vaut pour tous les achats du produit, passés et
@@ -36,8 +36,8 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    entier, croix en haut à droite pour annuler le menu ; un toucher ouvre la recette en fondu). Les repas à prévoir (déjeuners et dîners à cocher, temps disponible :
    30 min, 1 h ou sans limite) sont masqués dès que des menus sont choisis, derrière le raccourci « Prévoir d'autres
    repas ».
-6. **Menu du jour avec un ingrédient** (carte principale de l'accueil) : le foyer indique un ingrédient (les achats des
-   7 derniers jours sont proposés, puis une recherche parmi les ingrédients des recettes), s'il l'a acheté ou va
+6. **Menu du jour avec un ingrédient** (carte principale de l'accueil) : le foyer tape un ingrédient (recherche parmi
+   les ingrédients des recettes, sans suggestion avant la saisie), s'il l'a acheté ou va
    l'acheter, le repas (déjeuner ou dîner) et le temps disponible. Les propositions suivent les mêmes règles que les
    menus de la semaine (swipe, recettes avec les courses, puis avec 1 à 3 achats, puis idées de Mistral autour de
    l'ingrédient), limitées aux recettes qui l'utilisent. Le menu du jour puise d'abord dans ce qui est à la maison,

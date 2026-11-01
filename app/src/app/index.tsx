@@ -48,7 +48,7 @@ function confirm(message: string, action: string, onConfirm: () => void) {
 }
 
 /**
- * Accueil MenuMalin : en-tête au logo ; en grand, le menu du jour ou, s'il n'y en a pas, le prochain ; les menus de la
+ * Accueil MenuBily : en-tête au logo ; en grand, le menu du jour ou, s'il n'y en a pas, le prochain ; les menus de la
  * semaine empilés en lignes (photo en fondu, nom, jour en entier) ; les repas encore à prévoir, masqués derrière un
  * raccourci dès que des menus sont choisis ; liste de courses ; barre de navigation.
  */
@@ -183,8 +183,8 @@ export default function Accueil() {
         <LinearGradient colors={["#FEF8EE", c.background]} style={styles.header}>
           <View style={styles.logo}><Logo /></View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.brand, { color: c.primary, fontFamily: BRAND_FONT }]}>MenuMalin</Text>
-            <Text style={[styles.slogan, { color: c.muted }]}>Bien manger, sans gaspiller</Text>
+            <Text style={[styles.brand, { color: c.primary, fontFamily: BRAND_FONT }]}>MenuBily</Text>
+            <Text style={[styles.slogan, { color: c.muted }]}>Bien manger, même sans idée</Text>
           </View>
           <Pressable onPress={notifications} accessibilityRole="button" accessibilityLabel="Notifications" hitSlop={4}
             style={({ pressed }) => [styles.round, { opacity: pressed ? 0.6 : 1 }]}>

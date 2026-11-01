@@ -20,7 +20,7 @@ interface Edit {
 
 const editOf = (p: ShopProduct): Edit => ({ name: p.name, role: p.role, ingredients: p.ingredients, suggested: false });
 
-/** Carte d'un produit : ce que MenuMalin a compris, et la correction (nom, rôle, ingrédients). */
+/** Carte d'un produit : ce que MenuBily a compris, et la correction (nom, rôle, ingrédients). */
 function ProductCard({ product, edit, names, options, open, busy, onToggle, onChange, onSave, onConfirm }: {
   product: ShopProduct; edit: Edit; names: Map<string, string>; options: IngredientOption[]; open: boolean; busy: boolean;
   onToggle: () => void; onChange: (e: Edit) => void; onSave: () => void; onConfirm?: () => void;
@@ -94,7 +94,7 @@ function ProductCard({ product, edit, names, options, open, busy, onToggle, onCh
 
 /**
  * Module de correction des produits : après l'import des tickets Lidl, les nouveaux produits (les non reconnus d'abord)
- * avec ce que MenuMalin en a compris ; Mistral propose une lecture des non reconnus ; le foyer valide ou corrige.
+ * avec ce que MenuBily en a compris ; Mistral propose une lecture des non reconnus ; le foyer valide ou corrige.
  */
 export default function Produits() {
   const household = useHousehold();
@@ -204,7 +204,7 @@ export default function Produits() {
   return (
     <Screen title="Produits à vérifier">
       <Muted>
-        Nouveaux produits de vos tickets Lidl. Vérifiez ce que MenuMalin a compris : c'est ce qui lui dit ce que vous avez à la
+        Nouveaux produits de vos tickets Lidl. Vérifiez ce que MenuBily a compris : c'est ce qui lui dit ce que vous avez à la
         maison (la truite fumée en tranches n'est pas de la truite fraîche). Une correction vaut pour tous les achats du produit.
       </Muted>
       <ErrorText>{error}</ErrorText>

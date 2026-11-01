@@ -1,4 +1,4 @@
-/** Éléments d'interface communs, au style MenuMalin (maquettes Claude Design). */
+/** Éléments d'interface communs, au style MenuBily (maquettes Claude Design). */
 
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, usePathname, useRouter } from "expo-router";

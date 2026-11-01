@@ -60,7 +60,7 @@ export function TimeWheel({ value, onChange }: { value: number | null; onChange:
   );
 }
 
-/** Roue de la maquette MenuMalin : 112 × 104, fond beige, valeur retenue dans un bandeau clair. */
+/** Roue de la maquette MenuBily : 112 × 104, fond beige, valeur retenue dans un bandeau clair. */
 const styles = StyleSheet.create({
   wheel: { width: 112, height: ITEM * 3 + 2, paddingVertical: 1, borderRadius: 13, overflow: "hidden" },
   band: { position: "absolute", left: 5, right: 5, top: ITEM + 1, height: ITEM, borderRadius: 10, borderWidth: 1 },

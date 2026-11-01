@@ -49,7 +49,7 @@ function confirm(message: string, action: string, onConfirm: () => void) {
 }
 
 /**
- * Fiche recette MenuMalin (ouverte en fondu) : photo, durées, puces (protéine, personnes), onglets Ingrédients (« à
+ * Fiche recette MenuBily (ouverte en fondu) : photo, durées, puces (protéine, personnes), onglets Ingrédients (« à
  * acheter », « Ajouter à ma liste ») et Préparation (pas à pas, un minuteur par étape, écran gardé allumé). La recette
  * faite (« C'est prêt »), et ce jour-là seulement : photo du plat et avis sur 5 étoiles avec une remarque ; l'avis
  * enregistré part à Mistral, qui propose une version améliorée si la recette est améliorable (l'utilisateur la corrige
@@ -147,7 +147,7 @@ export default function FicheRecette() {
     const text = [
       recipe.name, `${minutes(recipe.totalMin)} · ${servings} personnes`, "",
       "Ingrédients :", ...ingredients.map((i) => `- ${i.label}${i.quantity !== null ? ` : ${quantity(i.quantity, i.unit)}` : ""}`), "",
-      "Préparation :", ...recipe.steps.map((s, n) => `${n + 1}. ${s}`), "", "Recette MenuMalin",
+      "Préparation :", ...recipe.steps.map((s, n) => `${n + 1}. ${s}`), "", "Recette MenuBily",
     ].join("\n");
     if (Platform.OS === "web") navigator.clipboard?.writeText(text).then(() => setInfo("Recette copiée."), () => undefined);
     else Share.share({ title: recipe.name, message: text }).catch(() => undefined);

@@ -13,7 +13,7 @@ import { CARD_SHADOW, useColors } from "../lib/theme";
 import { getShoppingList, setShoppingItemChecked, type ShoppingItem } from "../modules/planning";
 
 /**
- * Liste de courses MenuMalin : « À acheter » (article, plat concerné et sa photo, quantité) et « Trouvés sur vos tickets »
+ * Liste de courses MenuBily : « À acheter » (article, plat concerné et sa photo, quantité) et « Trouvés sur vos tickets »
  * (cochés tout seuls quand ils apparaissent sur un nouveau ticket, ou à la main).
  */
 export default function Courses() {
