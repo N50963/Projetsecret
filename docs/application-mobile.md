@@ -33,12 +33,12 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    postérieur à son ajout (vue `shopping_list_status`).
 5. **Accueil** : en grand, bord à bord avec un fondu à droite, le prochain repas (menu du jour ou, s'il n'y en a pas, le
    prochain menu de la semaine ; croix pour l'annuler, toucher pour la fiche). Les autres menus choisis se retrouvent jour
-   par jour dans le ruban de la semaine (plus de liste séparée). « Autre repas possible »
+   par jour dans le ruban de la semaine (plus de liste séparée, pas de titre de section). Le ruban
    reprend la maquette Claude Design « Ruban de la semaine » (`components/WeekRibbon.tsx`) : les 7 jours en pastilles
    (jour abrégé, numéro, deux barrettes pour le déjeuner et le dîner : vert = menu choisi, vert clair = à proposer,
    beige = libre), puis la carte du jour touché. Un menu choisi y apparaît avec sa photo (toucher : fiche ; croix :
    annuler) ; un repas libre se coche (« À proposer ») et reçoit son temps disponible (30 min, 1 h ou sans limite).
-   La section se replie avec « Masquer » / « Afficher » ; « Proposer les menus (n repas) » lance les propositions.
+   Il se replie avec « Masquer » / « Afficher la semaine » ; « Proposer les menus (n repas) » lance les propositions.
 6. **Menu du jour avec un ingrédient** (carte principale de l'accueil) : le foyer tape un ingrédient (recherche parmi
    les ingrédients des recettes, sans suggestion avant la saisie), s'il l'a acheté ou va
    l'acheter, le repas (déjeuner ou dîner) et le temps disponible. Les propositions suivent les mêmes règles que les

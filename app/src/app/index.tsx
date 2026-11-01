@@ -10,7 +10,7 @@ import { IngredientMenu, type IngredientMenuRequest } from "../components/Ingred
 import { ReminderSheet } from "../components/ReminderSheet";
 import { TimersBar } from "../components/Steps";
 import { WeekRibbon } from "../components/WeekRibbon";
-import { BottomNav, Button, ErrorText, SectionTitle, TextLink } from "../components/ui";
+import { BottomNav, Button, ErrorText, TextLink } from "../components/ui";
 import { dayLabel, mealLabel, minutes } from "../lib/format";
 import { illustrationUrls, pictureOf, preloadPictures, sourceOf, type Picture } from "../lib/images";
 import { useHousehold } from "../lib/session";
@@ -233,9 +233,9 @@ export default function Accueil() {
 
         {loaded && (
           <View>
+            {/* Pas de titre : le ruban de la semaine se suffit ; seul le lien pour le replier reste, à droite. */}
             <View style={styles.planningHead}>
-              <View style={{ flex: 1 }}><SectionTitle icon="calendar" title="Autre repas possible" /></View>
-              <TextLink title={hidden ? "Afficher" : "Masquer"} onPress={() => setHidden((h) => !h)} />
+              <TextLink title={hidden ? "Afficher la semaine" : "Masquer"} onPress={() => setHidden((h) => !h)} />
             </View>
             {showPlanning && (
               <WeekRibbon days={days} today={today} planOf={choiceOf} slotOf={(d, m) => slots[`${d}:${m}`]} picture={picture}
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   },
   rowName: { fontSize: 15.5, lineHeight: 19, fontWeight: "700", marginTop: 1 },
   rowMeta: { fontSize: 14.2, lineHeight: 18 },
-  planningHead: { flexDirection: "row", alignItems: "center", paddingLeft: 13, paddingRight: 7.5, marginTop: 6 },
+  planningHead: { flexDirection: "row", justifyContent: "flex-end", paddingRight: 7.5 },
   shopping: {
     flexDirection: "row", alignItems: "center", gap: 12, minHeight: 66, marginTop: 12, marginLeft: 12.8, marginRight: 9.2,
     paddingVertical: 8, paddingLeft: 12, paddingRight: 9, borderRadius: 12, borderWidth: 1,
