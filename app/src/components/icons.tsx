@@ -1,7 +1,8 @@
-/** Icônes et logo MenuBily, repris tels quels des maquettes Claude Design (tracés SVG). */
+/** Icônes MenuBily, reprises telles quelles des maquettes Claude Design (tracés SVG), et logo (image de la marmite). */
 
+import { Image } from "expo-image";
 import type { ReactNode } from "react";
-import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from "react-native-svg";
+import Svg, { Circle, Path, Rect } from "react-native-svg";
 
 type Paint = { color: string };
 type Drawing = { viewBox: string; draw: (p: Paint) => ReactNode };
@@ -212,25 +213,10 @@ export function Icon({ name, size = 22, color, width, height }: { name: IconName
   );
 }
 
-/** Logo MenuBily : deux feuilles et leurs nervures. */
-export function Logo({ width = 57.3, height = 54.7 }: { width?: number; height?: number }) {
+/** Logo MenuBily : la marmite (même image que l'icône de l'application, assets/logo-marmite.png). */
+export function Logo({ width = 60, height = 54 }: { width?: number; height?: number }) {
   return (
-    <Svg width={width} height={height} viewBox="0 0 44 42" accessibilityLabel="Logo MenuBily">
-      <Defs>
-        <LinearGradient id="feuille-g" x1="0.3" y1="0" x2="0.6" y2="1">
-          <Stop offset="0" stopColor="#5F8634" /><Stop offset="0.5" stopColor="#7F9F3D" /><Stop offset="1" stopColor="#4E7A2E" />
-        </LinearGradient>
-        <LinearGradient id="feuille-d" x1="1" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor="#7B9C3D" /><Stop offset="0.45" stopColor="#5F8A33" /><Stop offset="1" stopColor="#4A782D" />
-        </LinearGradient>
-      </Defs>
-      <Path d="M8 5.5C13 7.5 17.5 10.5 18.3 13.2 15.3 17 14.3 25 15 33 8.5 31 4 25 4.2 17.5 4.3 12.5 6 8.5 8 5.5Z" fill="url(#feuille-g)"
-        stroke="#FFFAF1" strokeWidth={0.9} strokeLinejoin="round" />
-      <Path d="M38.2 3.3C39.2 12 37 24 30 29 25 32.5 20.5 33.7 17 33.7 15.7 24.5 18 17 23.5 11.5 28 7.2 33 5 38.2 3.3Z" fill="url(#feuille-d)"
-        stroke="#FFFAF1" strokeWidth={0.9} strokeLinejoin="round" />
-      <Path d="M15.5 37.5c.5-2 1.3-3.7 2.4-5.5" fill="none" stroke="#3F6A2A" strokeWidth={1.9} strokeLinecap="round" />
-      <Path d="M17.5 32.5L22.8 24.3M22.8 24.3C24.8 21.5 26 19.5 27 13.5M22.8 24.3C25.5 22.3 29.5 20 32.3 16.5M25 20.8C26.8 19 28.5 16.5 30.3 13M15.8 30.5C14.5 25.5 12.8 20.5 10.7 16.5"
-        fill="none" stroke="#FFFDF6" strokeWidth={1.4} strokeLinecap="round" />
-    </Svg>
+    <Image source={require("../../assets/logo-marmite.png")} style={{ width, height }} contentFit="contain" transition={0}
+      accessibilityLabel="Logo MenuBily" />
   );
 }
