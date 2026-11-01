@@ -13,6 +13,8 @@
  *  - ingredient_images : (jeton x-cron-token) vignettes des ingrédients, images libres de Wikimedia Commons.
  *  - ingredient_candidates : (jeton x-cron-token) photos libres candidates de Commons pour remplacer une vignette ;
  *  - dish_photos       : (jeton x-cron-token) photos libres de Commons pour les plats sans illustration, avec crédits ;
+ *  - foyer_photos      : (jeton x-cron-token) visuels de plats fournis par le foyer, versionnés dans le dépôt
+ *                        (data/photos-plats), copiés comme image commune du plat (origine « foyer », sans crédit) ;
  *  - suggest_products  : lecture des produits de tickets Lidl non reconnus (nom, rôle, ingrédients) pour le module de correction.
  * Les recettes renvoyées sont des brouillons : l'application les vérifie et les fait confirmer avant de les enregistrer.
  */
@@ -573,6 +575,41 @@ const foldText = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "
  * Photos libres pour les plats sans illustration : photo de Wikimedia Commons (licence libre) trouvée d'après le nom du
  * plat (ou une recherche, ou un fichier précis), réduite à 800 px, enregistrée avec ses crédits. Quelques plats par appel.
  */
+/** Dépôt public d'où sont copiés les visuels fournis par le foyer (commit précis, fichiers data/photos-plats/<recette>.jpg). */
+const FOYER_REPO = "https://raw.githubusercontent.com/n50963/projetsecret";
+
+/**
+ * Visuels de plats fournis par le foyer : chaque fichier du dépôt (déjà réduit à 800 px) devient l'image commune du plat,
+ * à la place de la photo de Commons ; la date d'enregistrement sert de version (images embarquées dans l'application).
+ */
+async function foyerPhotos(db: SupabaseClient, ref: string, recipeIds: string[]) {
+  if (!/^[0-9a-f]{40}$/.test(ref)) throw new HttpError(400, "Commit attendu (40 caractères hexadécimaux).");
+  const done: Array<{ recipe_id: string; created_at: string }> = [];
+  const failed: string[] = [];
+  for (const id of recipeIds) {
+    try {
+      if (!/^[0-9a-f-]{36}$/.test(id)) throw new Error("identifiant invalide");
+      const r = await fetch(`${FOYER_REPO}/${ref}/data/photos-plats/${id}.jpg`, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+      if (!r.ok) throw new Error(`dépôt ${r.status}`);
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      if (!(bytes[0] === 0xff && bytes[1] === 0xd8) || bytes.length > 400_000) throw new Error("JPEG de 400 Ko au plus attendu");
+      const path = `common/${id}.jpg`;
+      const up = await db.storage.from("recipe-images").upload(path, bytes, { contentType: "image/jpeg", upsert: true });
+      if (up.error) throw new Error(up.error.message);
+      const created_at = new Date().toISOString();
+      const ins = await db.from("recipe_images").upsert({
+        recipe_id: id, household_id: null, storage_path: path, source: "foyer", created_at,
+        author: null, license: null, license_url: null, source_url: null,
+      }, { onConflict: "recipe_id,household_id" }).select("created_at").single();
+      if (ins.error) throw new Error(ins.error.message);
+      done.push({ recipe_id: id, created_at: ins.data.created_at });
+    } catch (e) {
+      failed.push(`${id} : ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return { done, failed };
+}
+
 async function dishPhotos(db: SupabaseClient, limit: number, files: Record<string, string>, queries: Record<string, string>, redo: string[]) {
   if (redo.length) await db.from("recipe_images").delete().eq("source", "commons").in("recipe_id", redo);
   const [recipes, images] = await Promise.all([
@@ -710,7 +747,7 @@ Deno.serve(async (req) => {
     return json({ error: "Corps JSON attendu" }, 400);
   }
 
-  if (["illustrate_missing", "shrink_images", "ingredient_images", "ingredient_candidates", "dish_photos"].includes(String(body.action))) {
+  if (["illustrate_missing", "shrink_images", "ingredient_images", "ingredient_candidates", "dish_photos", "foyer_photos"].includes(String(body.action))) {
     try {
       const db = admin();
       const expected = (await db.from("app_settings").select("value").eq("key", "cron_token").maybeSingle()).data?.value;
@@ -720,6 +757,10 @@ Deno.serve(async (req) => {
         const queries = Object.fromEntries(Object.entries(body.queries && typeof body.queries === "object" ? body.queries : {}).slice(0, 50)
           .map(([k, v]) => [k, String(v)]));
         return json(await ingredientCandidates(queries, Math.min(8, Math.max(1, Number(body.per ?? 6)))));
+      }
+      if (body.action === "foyer_photos") {
+        const ids = Array.isArray(body.recipes) ? (body.recipes as unknown[]).map(String).slice(0, 40) : [];
+        return json(await foyerPhotos(db, String(body.ref ?? ""), ids));
       }
       if (body.action === "dish_photos") {
         const asMap = (v: unknown) => Object.fromEntries(Object.entries(v && typeof v === "object" ? v : {}).slice(0, 80)

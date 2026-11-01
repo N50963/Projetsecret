@@ -38,7 +38,7 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    (jour abrégé, numéro, deux barrettes pour le déjeuner et le dîner : vert = menu choisi, vert clair = à proposer,
    beige = libre), puis la carte du jour touché. Un menu choisi y apparaît avec sa photo (toucher : fiche ; croix :
    annuler) ; un repas libre se coche (« À proposer ») et reçoit son temps disponible (30 min, 1 h ou sans limite).
-   Il se replie avec « Masquer » / « Afficher la semaine » ; « Proposer les menus (n repas) » lance les propositions.
+   Il est toujours affiché ; « Proposer les menus (n repas) » lance les propositions.
 6. **Menu du jour avec un ingrédient** (carte principale de l'accueil) : le foyer tape un ingrédient (recherche parmi
    les ingrédients des recettes, sans suggestion avant la saisie), s'il l'a acheté ou va
    l'acheter, le repas (déjeuner ou dîner) et le temps disponible. Les propositions suivent les mêmes règles que les

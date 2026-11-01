@@ -10,7 +10,7 @@ import { IngredientMenu, type IngredientMenuRequest } from "../components/Ingred
 import { ReminderSheet } from "../components/ReminderSheet";
 import { TimersBar } from "../components/Steps";
 import { WeekRibbon } from "../components/WeekRibbon";
-import { BottomNav, Button, ErrorText, TextLink } from "../components/ui";
+import { BottomNav, Button, ErrorText } from "../components/ui";
 import { dayLabel, mealLabel, minutes } from "../lib/format";
 import { illustrationUrls, pictureOf, preloadPictures, sourceOf, type Picture } from "../lib/images";
 import { useHousehold } from "../lib/session";
@@ -50,7 +50,7 @@ function confirm(message: string, action: string, onConfirm: () => void) {
 /**
  * Accueil MenuBily : en-tête au logo ; en grand, le prochain repas (menu du jour, sinon le prochain de la semaine) ;
  * recherche de menu par ingrédient ; les repas de la semaine en ruban (7 jours, puis la carte du jour choisi : menus
- * choisis et repas à cocher avec leur temps), section repliable ; liste de courses ; barre de navigation.
+ * choisis et repas à cocher avec leur temps), toujours affichés ; liste de courses ; barre de navigation.
  */
 export default function Accueil() {
   const router = useRouter();
@@ -65,7 +65,6 @@ export default function Accueil() {
   const [images, setImages] = useState<Record<string, Picture | null>>({});
   const [shopping, setShopping] = useState<ShoppingItem[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [hidden, setHidden] = useState(false);
   const [reminders, setReminders] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -116,7 +115,6 @@ export default function Accueil() {
   // tous les menus choisis se retrouvent ensuite jour par jour dans le ruban de la semaine.
   const menus = days.flatMap((d) => MEALS.map((m) => slots[`${d}:${m}`]).filter((s): s is WeekSlot => s?.status === "accepted"));
   const hero = menus[0];
-  const showPlanning = loaded && !hidden;
 
   const requests: SlotRequest[] = days.flatMap((d) => MEALS
     .filter((m) => choiceOf(d)[m] && !isChosen(d, m))
@@ -231,16 +229,11 @@ export default function Accueil() {
             todaySlots={{ dejeuner: slots[`${today}:dejeuner`], diner: slots[`${today}:diner`] }} />
         )}
 
+        {/* Ruban de la semaine, toujours affiché, sans titre ni lien pour le replier. */}
         {loaded && (
-          <View>
-            {/* Pas de titre : le ruban de la semaine se suffit ; seul le lien pour le replier reste, à droite. */}
-            <View style={styles.planningHead}>
-              <TextLink title={hidden ? "Afficher la semaine" : "Masquer"} onPress={() => setHidden((h) => !h)} />
-            </View>
-            {showPlanning && (
-              <WeekRibbon days={days} today={today} planOf={choiceOf} slotOf={(d, m) => slots[`${d}:${m}`]} picture={picture}
-                busy={busy !== null} onChange={update} onOpen={open} onCancel={cancel} />
-            )}
+          <View style={styles.planning}>
+            <WeekRibbon days={days} today={today} planOf={choiceOf} slotOf={(d, m) => slots[`${d}:${m}`]} picture={picture}
+              busy={busy !== null} onChange={update} onOpen={open} onCancel={cancel} />
           </View>
         )}
 
@@ -297,7 +290,7 @@ const styles = StyleSheet.create({
   },
   rowName: { fontSize: 15.5, lineHeight: 19, fontWeight: "700", marginTop: 1 },
   rowMeta: { fontSize: 14.2, lineHeight: 18 },
-  planningHead: { flexDirection: "row", justifyContent: "flex-end", paddingRight: 7.5 },
+  planning: { marginTop: 12 },
   shopping: {
     flexDirection: "row", alignItems: "center", gap: 12, minHeight: 66, marginTop: 12, marginLeft: 12.8, marginRight: 9.2,
     paddingVertical: 8, paddingLeft: 12, paddingRight: 9, borderRadius: 12, borderWidth: 1,
