@@ -16,22 +16,26 @@ Données : `data/recipes/seed.json` (généré). Migrations : `supabase/migratio
 | Part compatible avec le temps disponible un soir de semaine | ≈ 60 % |
 
 Recettes nécessaires hors répétition : 6 / (0,65 × 0,35 × 0,6) ≈ 44, plus les 24 récemment servies : **≈ 70 au minimum**.
-Le jeu initial en compte **84**, réparties pour que les règles de variété aient de quoi alterner les protéines :
+Le jeu initial en compte **144** : 84 recettes de départ, puis 60 plats du quotidien ajoutés le 2026-11-01
+(`services/recipes/seed_quotidien.py` : cordon bleu et haricots verts, raclette, tartiflette, blanquette de veau,
+pot-au-feu, salade de pâtes au surimi, carottes râpées et œufs durs, pizza reine, tarte à la tomate…). Réparties pour que
+les règles de variété aient de quoi alterner les protéines :
 
 | Protéine principale | Recettes | | Saison | Recettes |
 |---|---|---|---|---|
-| Volaille | 16 | | Printemps | 49 |
-| Bœuf | 9 | | Été | 59 |
-| Porc et charcuterie | 10 | | Automne | 66 |
-| Poisson | 13 | | Hiver | 64 |
-| Fruits de mer | 4 | | Déjeuner possible | 24 |
-| Œufs | 7 | | 30 min ou moins | 30 |
-| Légumineuses | 10 | | Sans viande ni poisson | 32 |
-| Végétarien (fromage, légumes) | 15 | | | |
+| Volaille | 25 | | Printemps | 91 |
+| Bœuf et veau | 19 | | Été | 105 |
+| Porc et charcuterie | 23 | | Automne | 119 |
+| Poisson | 23 | | Hiver | 110 |
+| Fruits de mer | 4 | | Déjeuner possible | 54 |
+| Œufs | 10 | | 30 min ou moins | 45 |
+| Légumineuses | 12 | | Sans viande ni poisson | 49 |
+| Végétarien (fromage, légumes) | 28 | | | |
 
 Les recettes ont été rédigées pour ce projet à partir des produits que le foyer achète réellement (poulet, saumon et truite,
-courgettes, butternut, feta, chèvre, wraps, gnocchis, lentilles…), pour 4 portions. À mesure que les avis s'accumulent,
-la base s'enrichit de recettes importées ou générées par Mistral (cible ≈ 120), validées avant enregistrement.
+courgettes, butternut, feta, chèvre, wraps, gnocchis, lentilles, cordons bleus, raclette…), pour 4 portions. Le veau est
+classé avec le bœuf (viande de boucherie) pour l'équilibre de la semaine, mais s'affiche « Veau ». À mesure que les avis
+s'accumulent, la base s'enrichit de recettes importées ou générées par Mistral, validées avant enregistrement.
 
 ## Modèle
 

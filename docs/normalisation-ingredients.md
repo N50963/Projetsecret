@@ -31,6 +31,11 @@ Aucune contenance n'est inventée. Quand plusieurs formats existent, le plus fr�
 dans `products.pack_formats` et la confiance est abaissée : l'application doit demander confirmation.
 L'utilisateur peut corriger (`quantity_source = 'user'`), et ses corrections ne sont jamais écrasées.
 
+Pour les ingrédients vendus par paquet (œufs, jambon en tranches, saucisses, surimi, wraps, portions de fromage fondu,
+cordons bleus…), une vente `unit_sale` compte un paquet et non une pièce : le moteur de menus lui donne alors son contenu
+habituel (`PACK_COUNT` dans `app/src/modules/planning/stock.ts` : boîte de 6 œufs, 4 tranches de jambon, 6 saucisses…),
+pour ne pas croire qu'il manque des œufs quand une boîte vient d'être achetée.
+
 ## Sources externes
 
 - **Site lidl.fr** : non utilisé. Le catalogue en ligne contient surtout du non alimentaire, et le site est protégé
