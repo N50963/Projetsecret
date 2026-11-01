@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { LinearGradient } from "expo-linear-gradient";
-import { Animated, PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
+import { Animated, PanResponder, Platform, Pressable, StyleSheet, Text, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
 
 import { PRIMARY_GRADIENT, PRIMARY_GRADIENT_STOPS, colors } from "../lib/theme";
 import { Icon } from "./icons";
 
 const THRESHOLD = 110;
+/** Animations jouées par le système (fil natif) : la carte part sans attendre le calcul des propositions suivantes. */
+const NATIVE = Platform.OS !== "web";
 
 export type SwipeDirection = "left" | "right";
 
@@ -20,7 +22,7 @@ export function SwipeCard({ children, onSwipe, onPress, swipeRef, style }: {
   const position = useRef(new Animated.ValueXY()).current;
 
   const fly = (direction: SwipeDirection) => {
-    Animated.timing(position, { toValue: { x: (direction === "right" ? 1.4 : -1.4) * width, y: 0 }, duration: 220, useNativeDriver: false })
+    Animated.timing(position, { toValue: { x: (direction === "right" ? 1.4 : -1.4) * width, y: 0 }, duration: 200, useNativeDriver: NATIVE })
       .start(() => {
         position.setValue({ x: 0, y: 0 });
         onSwipe(direction);
@@ -37,9 +39,9 @@ export function SwipeCard({ children, onSwipe, onPress, swipeRef, style }: {
     onPanResponderRelease: (_e, g) => {
       if (g.dx > THRESHOLD) flyRef.current("right");
       else if (g.dx < -THRESHOLD) flyRef.current("left");
-      else Animated.spring(position, { toValue: { x: 0, y: 0 }, useNativeDriver: false, friction: 6 }).start();
+      else Animated.spring(position, { toValue: { x: 0, y: 0 }, useNativeDriver: NATIVE, friction: 6 }).start();
     },
-    onPanResponderTerminate: () => Animated.spring(position, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start(),
+    onPanResponderTerminate: () => Animated.spring(position, { toValue: { x: 0, y: 0 }, useNativeDriver: NATIVE }).start(),
   })).current;
   const flyRef = useRef(fly);
   flyRef.current = fly;

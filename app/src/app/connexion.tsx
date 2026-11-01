@@ -70,7 +70,7 @@ export default function Connexion() {
 const styles = StyleSheet.create({
   photo: { flex: 1, minHeight: 260, marginBottom: -24 },
   sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingHorizontal: 17, gap: 13 },
-  brand: { flexDirection: "row", alignItems: "center", gap: 5, marginLeft: -3, height: 62 },
+  brand: { flexDirection: "row", alignItems: "center", gap: 12, height: 62 },
   name: { fontSize: 26.5, lineHeight: 30 },
   slogan: { fontSize: 12.2, lineHeight: 16, fontWeight: "500" },
   group: { gap: 6 },

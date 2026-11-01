@@ -40,7 +40,10 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    (jour abrégé, numéro, deux barrettes pour le déjeuner et le dîner : vert = menu choisi, vert clair = à proposer,
    beige = libre), puis la carte du jour touché. Un menu choisi y apparaît avec sa photo (toucher : fiche ; croix :
    annuler) ; un repas libre se coche (« À proposer ») et reçoit son temps disponible (30 min, 1 h ou sans limite).
-   Il est toujours affiché ; « Proposer les menus (n repas) » lance les propositions.
+   Il est toujours affiché ; « Proposer les menus (n repas) » lance les propositions. Un menu choisi se déplace par
+   appui long puis glisser : sur une pastille de jour (même repas de ce jour ; survolée un instant, la pastille ouvre son
+   jour) ou sur l'autre repas de la carte ; un menu déjà prévu à cet endroit échange sa place avec lui (fonction SQL
+   `move_meal_choice`, les articles de courses suivent leur menu).
 6. **Menu du jour avec un ingrédient** (carte principale de l'accueil) : le foyer tape un ingrédient (recherche parmi
    les ingrédients des recettes, sans suggestion avant la saisie), s'il l'a acheté ou va
    l'acheter, le repas (déjeuner ou dîner) et le temps disponible. Les propositions suivent les mêmes règles que les
@@ -53,21 +56,23 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
 7. **Propositions** (moteur `app/src/modules/planning`) : pour chaque repas, d'abord jusqu'à 5 recettes réalisables
    avec les courses, celles qui équilibrent et varient la semaine en tête. Swipe à droite pour choisir, à gauche pour
    passer (ou boutons). Si aucune ne convient : 3 recettes avec 1 à 3 ingrédients à acheter, puis 3 idées créées par
-   Mistral. Le choix d'un menu s'enregistre en arrière-plan : le repas suivant s'affiche aussitôt.
+   Mistral. Le choix d'un menu s'enregistre en arrière-plan : le repas suivant s'affiche aussitôt (seul ce repas est
+   calculé, la carte part par une animation native).
    Les ingrédients manquants des recettes choisies vont sur la liste de courses.
 8. **Fiches recettes** : photo du plat (« Plus d'options » › Photo du plat : appareil photo ou galerie ; la photo prise
    avec le téléphone remplace l'image créée par Mistral, qui ne l'écrase jamais), temps de préparation, de cuisson et
    total en haut de la fiche (photo libre de Commons, image créée par Mistral ou visuel fourni par le foyer : 33 plats,
-   fichiers de data/photos-plats copiés en ligne par la fonction foyer-photos), ingrédients avec leur vignette (photo libre de droits de Wikimedia Commons, crédits dans
+   fichiers de data/photos-plats copiés en ligne par la fonction foyer-photos ; miniatures de 240 px embarquées pour les
+   listes et le ruban, image embarquée affichée pendant le téléchargement d'une image plus récente), ingrédients avec leur vignette (photo libre de droits de Wikimedia Commons, crédits dans
    Profil › Crédits des photos), quantités pour le nombre de personnes, étapes « pas à pas » avec un seul minuteur par
    étape. Chaque minuteur dit ce qu'il minute (« Cuire le riz », étape 6) : on s'y retrouve quand plusieurs tournent ;
    « C'est prêt » reste grisé tant qu'un minuteur tourne.
-9. **Avis après la recette** : la notation n'apparaît qu'en fin de recette, le jour où elle a été faite : 5 étoiles
-   (elles font référence ; 4-5 comptent comme « aimé », 3 comme « bof », 1-2 comme « pas aimé » pour le choix des
-   menus) et une observation facultative. Une fois l'avis enregistré, Mistral le lit et dit si la recette est
-   améliorable ; si oui, la version proposée s'ouvre dans l'éditeur (nom, temps, ingrédients, étapes) et c'est
-   l'utilisateur qui décide : il la corrige puis la garde, ou garde la recette actuelle. Pas de demande de
-   modification à Mistral en dehors de cet avis. « Bon appétit ! » propose aussi de mettre sa propre photo du plat.
+9. **Note et remarque** : une seule barre de notation, en haut de la fiche (5 étoiles, modifiables à tout moment).
+   La note pondère toujours les propositions (4-5 comptent comme « aimé », 3 comme « bof », 1-2 comme « pas aimé ») et
+   ne sollicite pas Mistral. Le jour où la recette est faite, une remarque sur le contenu (goût, quantités, cuisson)
+   peut être envoyée : Mistral la lit et dit si la recette est améliorable ; si oui, la version proposée s'ouvre dans
+   l'éditeur (nom, temps, ingrédients, étapes) et c'est l'utilisateur qui décide : il la corrige puis la garde, ou garde
+   la recette actuelle. Pas de demande de modification à Mistral sans remarque. « Bon appétit ! » propose aussi de mettre sa propre photo du plat.
 10. **Recettes** (onglet de la barre du bas) : recherche, filtre Favoris, filtre par note (5 étoiles, 4 et +, 3 et +,
    non notées), note affichée sur chaque ligne. Les recettes ajoutées par le foyer se modifient ou se suppriment depuis
    leur fiche (« Plus d'options » › Modifier / Supprimer) ; les recettes de la base commune ne sont pas modifiables.

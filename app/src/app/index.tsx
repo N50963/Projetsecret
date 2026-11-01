@@ -18,7 +18,7 @@ import { supabase } from "../lib/supabase";
 import { BRAND_FONT, CARD_SHADOW, useColors } from "../lib/theme";
 import { useTimers } from "../lib/timers";
 import {
-  addDays, cancelMealChoice, ensureSlot, getShoppingList, getWeekSlots, savePlan, toIsoDate, weekDates, type ShoppingItem, type SlotRequest,
+  addDays, cancelMealChoice, ensureSlot, getShoppingList, getWeekSlots, moveMealChoice, savePlan, toIsoDate, weekDates, type ShoppingItem, type SlotRequest,
   type WeekSlot,
 } from "../modules/planning";
 import type { MealType } from "../modules/recipes";
@@ -67,6 +67,8 @@ export default function Accueil() {
   const [loaded, setLoaded] = useState(false);
   const [reminders, setReminders] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  /** Menu en cours de déplacement : la page ne défile pas pendant le glisser-déposer. */
+  const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -162,6 +164,30 @@ export default function Accueil() {
     }
   });
 
+  /**
+   * Menu déposé sur un autre jour ou un autre repas : affiché aussitôt à sa nouvelle place (échange avec le menu qui s'y
+   * trouvait), puis enregistré ; la semaine est relue ensuite.
+   */
+  const move = async (s: WeekSlot, date: string, meal: MealType) => {
+    const from = `${s.date}:${s.mealType}`;
+    const to = `${date}:${meal}`;
+    setSlots((prev) => {
+      const next = { ...prev };
+      const other = prev[to];
+      next[to] = { ...s, date, mealType: meal, maxTotalMin: other?.maxTotalMin ?? s.maxTotalMin };
+      if (other) next[from] = { ...other, date: s.date, mealType: s.mealType, maxTotalMin: s.maxTotalMin };
+      else delete next[from];
+      return next;
+    });
+    setError("");
+    try {
+      await moveMealChoice(supabase, s.slotId, date, meal);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+    await load();
+  };
+
   const toBuy = shopping.filter((i) => i.active && !i.boughtAt && !i.checkedAt);
   const open = (s: WeekSlot) => router.push(`/recette/${s.recipeId}`);
 
@@ -172,7 +198,7 @@ export default function Accueil() {
   return (
     <View style={{ flex: 1, backgroundColor: c.background }}>
       <View style={{ height: insets.top, backgroundColor: c.statusBar }} />
-      <ScrollView contentContainerStyle={{ paddingBottom: 12 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 12 }} scrollEnabled={!dragging}>
         <LinearGradient colors={["#FEF8EE", c.background]} style={styles.header}>
           <View style={styles.logo}><Logo /></View>
           <View style={{ flex: 1 }}>
@@ -199,7 +225,7 @@ export default function Accueil() {
               <Pressable onPress={() => open(hero)} accessibilityRole="button"
                 accessibilityLabel={`${dayLabel(hero.date, today)}, ${mealLabel(hero.mealType)} : ${hero.name}`}>
                 {heroPicture
-                  ? <Image source={sourceOf(heroPicture)} cachePolicy="memory-disk" priority="high"
+                  ? <Image source={sourceOf(heroPicture)} placeholder={heroPicture.fallback} placeholderContentFit="cover" cachePolicy="memory-disk" priority="high"
                     style={styles.heroImage} contentFit="cover" transition={0} />
                   : <View style={[styles.heroImage, styles.heroWaiting]}><Icon name="image" size={44} color={c.muted} /></View>}
                 <LinearGradient colors={["rgba(20,24,12,0.66)", "rgba(20,24,12,0.34)", "rgba(20,24,12,0.08)"]} locations={[0, 0.58, 1]}
@@ -233,7 +259,7 @@ export default function Accueil() {
         {loaded && (
           <View style={styles.planning}>
             <WeekRibbon days={days} today={today} planOf={choiceOf} slotOf={(d, m) => slots[`${d}:${m}`]} picture={picture}
-              busy={busy !== null} onChange={update} onOpen={open} onCancel={cancel} />
+              busy={busy !== null} onChange={update} onOpen={open} onCancel={cancel} onMove={move} onDragChange={setDragging} />
           </View>
         )}
 
@@ -266,7 +292,8 @@ export default function Accueil() {
 
 const styles = StyleSheet.create({
   header: { height: 71, flexDirection: "row", alignItems: "center", paddingLeft: 13, paddingRight: 8, gap: 5 },
-  logo: { width: 58, alignItems: "center" },
+  // Logo centré sur le nom et le slogan, avec une marge avant le texte.
+  logo: { marginLeft: 2, marginRight: 9, alignItems: "center", justifyContent: "center" },
   brand: { fontSize: 26.5, lineHeight: 30 },
   slogan: { fontSize: 12.2, lineHeight: 16, fontWeight: "500" },
   round: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },

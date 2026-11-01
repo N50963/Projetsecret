@@ -175,14 +175,16 @@ export default function Propositions() {
     if (!ctx || !current) return;
     // Menu du jour : un seul repas ; s'il avait déjà un menu, celui-ci ne compte pas (il peut être remplacé).
     const planCtx = focus ? { ...ctx, accepted: ctx.accepted.filter((m) => m.slotId !== current.id) } : ctx;
-    const plan = planMeals(planCtx, focus ? [current] : ordered, {
-      rounds: { [current.id]: round }, mealsInPlan: focus ? weekMeals : undefined, todayFirst: Boolean(focus),
+    // Seul le repas affiché est calculé : les repas précédents sont déjà choisis ou passés, et les suivants le seront
+    // d'après ce choix. Recalculer toute la semaine à chaque choix (14 repas × 144 recettes) ralentissait la validation.
+    const plan = planMeals(planCtx, [current], {
+      rounds: { [current.id]: round }, mealsInPlan: focus ? weekMeals : ordered.length, todayFirst: Boolean(focus),
       mustInclude: isFocusSlot && focus?.ingredient ? { [current.id]: focus.ingredient.slug } : undefined,
     });
     const entry = plan.find((p) => p.slotId === current.id);
     const proposals = entry?.proposals ?? [];
-    // Photos de ce repas et des repas suivants mises en mémoire : elles s'affichent dès que la carte apparaît.
-    preloadPictures([...proposals, ...plan.flatMap((p) => p.proposals)].map((p) => p.recipeId));
+    // Photos des propositions de ce repas mises en mémoire : elles s'affichent dès que la carte apparaît.
+    preloadPictures(proposals.map((p) => p.recipeId));
     if (entry && entry.round !== round) setRound(entry.round);
     setDeck(proposals);
     setExhausted(!proposals.length);
@@ -472,8 +474,8 @@ export default function Propositions() {
     <View style={[styles.card, { backgroundColor: c.background, borderColor: c.border }]}>
       <View style={{ flex: 1, minHeight: 160, backgroundColor: c.chip }}>
         {picture
-          ? <Image source={sourceOf(picture)} cachePolicy="memory-disk" style={StyleSheet.absoluteFill} contentFit="cover"
-            transition={0} accessibilityLabel={name} />
+          ? <Image source={sourceOf(picture)} placeholder={picture.fallback} placeholderContentFit="cover" cachePolicy="memory-disk"
+            style={StyleSheet.absoluteFill} contentFit="cover" transition={0} accessibilityLabel={name} />
           : (
             <View style={styles.placeholder} accessibilityLabel="Photo du plat en préparation">
               <Icon name="image" size={44} color={c.muted} />

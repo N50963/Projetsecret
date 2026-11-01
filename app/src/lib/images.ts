@@ -35,15 +35,26 @@ export interface Picture {
   version?: string;
   /** Photo du foyer (seau privé). */
   photo?: boolean;
+  /** Miniature embarquée (240 px) pour les petits affichages : listes, ruban de la semaine, liste de courses. */
+  mini?: number;
+  /**
+   * Image embarquée affichée tout de suite pendant le téléchargement d'une image en ligne plus récente (image recréée ou
+   * photo du foyer) : rien ne reste vide.
+   */
+  fallback?: number;
 }
 
-/** Source d'image pour expo-image : l'image embarquée si elle existe, sinon le lien. */
-export const sourceOf = (p: Picture) => p.asset ?? { uri: p.uri, cacheKey: p.cacheKey };
+/**
+ * Source d'image pour expo-image : l'image embarquée si elle existe (sa miniature pour un petit affichage), sinon le lien.
+ */
+export const sourceOf = (p: Picture, small = false) => (small && p.mini) || p.asset || { uri: p.uri, cacheKey: p.cacheKey };
 
-/** Image embarquée si l'image en ligne est la même (ou pas encore connue), sinon l'image en ligne. */
+/** Image embarquée si l'image en ligne est la même (ou pas encore connue), sinon l'image en ligne, avec l'image embarquée
+ * en attente de son téléchargement. */
 function resolve(recipeId: string, remote: Picture | undefined): Picture | null {
   const bundled = BUNDLED_DISHES[recipeId];
-  if (bundled && (!remote || (!remote.photo && remote.version === bundled.version))) return { uri: "", asset: bundled.asset };
+  if (bundled && (!remote || (!remote.photo && remote.version === bundled.version))) return { uri: "", asset: bundled.asset, mini: bundled.mini };
+  if (remote && bundled) return { ...remote, fallback: bundled.mini };
   return remote ?? null;
 }
 

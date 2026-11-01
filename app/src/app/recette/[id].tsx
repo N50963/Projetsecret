@@ -9,7 +9,7 @@ import { ActivityIndicator, Alert, Platform, Pressable, Share, StyleSheet, Text,
 import { Icon } from "../../components/icons";
 import { Illustration } from "../../components/Illustration";
 import { cleanDraft, RecipeEditor } from "../../components/RecipeEditor";
-import { StarRating, starsLabel } from "../../components/StarRating";
+import { StarRating } from "../../components/StarRating";
 import { StepText, TimersBar } from "../../components/Steps";
 import { Body, Button, Card, ErrorText, Field, H1, H2, HeaderIcon, Loading, Muted, Pill, Row, Screen } from "../../components/ui";
 import { minutes, proteinLabel, quantity } from "../../lib/format";
@@ -24,7 +24,7 @@ import { CARD_SHADOW, useColors } from "../../lib/theme";
 import { startTimer, stopTimer, timerId, useTimers } from "../../lib/timers";
 import {
   adaptRecipe, addRecipeToShoppingList, addRecipeVersion, archiveRecipe, getLatestRating, getRecipe, getShoppingNeeds, isFavorite, rateRecipe,
-  scaleIngredients, setFavorite, toPayload, validateRecipe, type Recipe, type RecipeRating, type ShoppingNeed, type Stars,
+  scaleIngredients, setFavorite, toPayload, validateRecipe, type Recipe, type RecipeRating, type ShoppingNeed,
 } from "../../modules/recipes";
 
 type Tab = "ingredients" | "preparation";
@@ -50,10 +50,10 @@ function confirm(message: string, action: string, onConfirm: () => void) {
 
 /**
  * Fiche recette MenuBily (ouverte en fondu) : photo, durées, puces (protéine, personnes), onglets Ingrédients (« à
- * acheter », « Ajouter à ma liste ») et Préparation (pas à pas, un minuteur par étape, écran gardé allumé). La recette
- * faite (« C'est prêt »), et ce jour-là seulement : photo du plat et avis sur 5 étoiles avec une remarque ; l'avis
- * enregistré part à Mistral, qui propose une version améliorée si la recette est améliorable (l'utilisateur la corrige
- * et la garde, ou garde la recette actuelle). Photo du plat : icône blanche discrète en haut de la photo (appareil photo ou
+ * acheter », « Ajouter à ma liste ») et Préparation (pas à pas, un minuteur par étape, écran gardé allumé). Une seule
+ * barre de notation, en haut : la note seule ne sollicite pas Mistral et pondère les propositions. La recette faite
+ * (« C'est prêt »), et ce jour-là seulement : une remarque sur le contenu (goût, quantités) part à Mistral, qui propose
+ * une version améliorée si la recette est améliorable (l'utilisateur la corrige et la garde, ou garde la recette actuelle). Photo du plat : icône blanche discrète en haut de la photo (appareil photo ou
  * galerie). « Plus d'options » (recettes ajoutées par le foyer) : modifier ou supprimer. Favoris et partage dans la bande
  * verte.
  */
@@ -71,7 +71,6 @@ export default function FicheRecette() {
   const [needs, setNeeds] = useState<ShoppingNeed[]>([]);
   const [favorite, setFav] = useState(false);
   const [previous, setPrevious] = useState<RecipeRating | null>(null);
-  const [stars, setStars] = useState<Stars | null>(null);
   const [comment, setComment] = useState("");
   const [saved, setSaved] = useState(false);
   const [more, setMore] = useState(false);
@@ -98,7 +97,6 @@ export default function FicheRecette() {
       setPrevious(rating);
       // L'avis du jour seulement (l'avis se donne le jour où la recette est faite).
       const ratedToday = rating?.stars && toIsoDate(new Date(rating.ratedAt)) === toIsoDate(new Date());
-      setStars(ratedToday ? rating.stars : null);
       setComment(ratedToday ? rating.comment ?? "" : "");
       setSaved(Boolean(ratedToday));
       setFav(fav);
@@ -177,17 +175,15 @@ export default function FicheRecette() {
     setCookedOn(today);
     AsyncStorage.setItem(cookedKey(recipe.id), today).catch(() => undefined);
   };
-  // Avis enregistré, puis envoyé à Mistral : il propose une version améliorée si la recette est améliorable.
+  // Remarque sur le contenu (goût, quantités…) : enregistrée avec la note du haut de la fiche, puis envoyée à Mistral, qui
+  // propose une version améliorée si la recette est améliorable. Une note sans remarque ne sollicite pas Mistral.
   const saveRating = () => act("rate", async () => {
-    if (!stars) return;
+    const stars = previous?.stars;
+    if (!stars || !comment.trim()) return;
     await rateRecipe(supabase, household.id, recipe, stars, comment, previous);
     setPrevious(await getLatestRating(supabase, household.id, recipe.id));
     setSaved(true);
-    if (stars === 5 && !comment.trim()) {
-      setInfo("Merci pour votre avis.");
-      return;
-    }
-    const result = await adaptRecipeDraft(household.id, toPayload(recipe), `Note : ${stars}/5.${comment.trim() ? ` ${comment.trim()}` : ""}`);
+    const result = await adaptRecipeDraft(household.id, toPayload(recipe), `Note : ${stars}/5. ${comment.trim()}`);
     if (!result.improvable) {
       setInfo("Merci pour votre avis : Mistral ne voit rien à améliorer dans cette recette.");
       return;
@@ -393,18 +389,17 @@ export default function FicheRecette() {
 
       {cookedToday && (
         <View style={[styles.section, { gap: 9 }]}>
-          <H2>Votre avis sur le plat d'aujourd'hui</H2>
-          <StarRating value={stars} onChange={(n) => {
-            setStars(n);
-            setSaved(false);
-          }} />
-          <Muted>{stars ? starsLabel(stars) : "Touchez les étoiles pour noter le plat."}</Muted>
-          <Field multiline value={comment} maxLength={1000} placeholder="Une remarque pour améliorer la recette ? (un peu fade, trop de crème…)"
+          {/* Une seule barre de notation : celle du haut de la fiche. Ici, la remarque sur le contenu, pour Mistral. */}
+          <H2>Une remarque sur le plat d'aujourd'hui ?</H2>
+          <Muted>{previous?.stars ? "Goût, quantités, cuisson… Mistral relit la recette avec votre remarque et propose une version améliorée si besoin."
+            : "Notez d'abord le plat avec les étoiles en haut de la fiche."}</Muted>
+          <Field multiline value={comment} maxLength={1000} placeholder="Un peu fade, trop de crème, portions trop petites…"
             onChangeText={(t) => {
               setComment(t);
               setSaved(false);
             }} />
-          <Button title={saved ? "Avis enregistré" : "Enregistrer mon avis"} onPress={saveRating} busy={busy === "rate"} disabled={!stars || saved} />
+          <Button title={saved ? "Remarque envoyée" : "Envoyer la remarque"} onPress={saveRating} busy={busy === "rate"}
+            disabled={!previous?.stars || !comment.trim() || saved} />
           {busy === "rate" ? <Muted>Mistral relit la recette avec votre avis…</Muted> : null}
         </View>
       )}

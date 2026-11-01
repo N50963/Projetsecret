@@ -4,7 +4,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ErrorText, Muted, Screen, SectionTitle } from "../components/ui";
 import {
-  dishCredits, illustrationUrls, ingredientCredit, ingredientCredits, ingredientPictureUrls, ingredientSource, sourceOf, type DishCredit,
+  dishCredits, illustrationUrls, ingredientCredit, ingredientCredits, ingredientPictureUrls, ingredientSource, pictureOf, sourceOf, type DishCredit,
   type IngredientCredit, type Picture,
 } from "../lib/images";
 import { CARD_SHADOW, useColors } from "../lib/theme";
@@ -58,7 +58,7 @@ export default function Credits() {
       {dishes?.length ? (
         <View style={{ gap: 7 }}>
           <SectionTitle icon="cutlery" title="Photos des plats" />
-          {dishes.map((d) => <CreditRow key={d.recipeId} name={d.name} text={credit(d)} source={dishPictures[d.recipeId] ? sourceOf(dishPictures[d.recipeId]!) : null} url={d.sourceUrl} />)}
+          {dishes.map((d) => <CreditRow key={d.recipeId} name={d.name} text={credit(d)} source={(() => { const p = dishPictures[d.recipeId] ?? pictureOf(d.recipeId); return p ? sourceOf(p, true) : null; })()} url={d.sourceUrl} />)}
         </View>
       ) : null}
       <View style={{ gap: 7 }}>

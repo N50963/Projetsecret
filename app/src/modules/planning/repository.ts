@@ -50,7 +50,10 @@ export async function loadRecipesForPlanning(supabase: SupabaseClient, household
     });
     byVersion.set(i.version_id, list);
   }
-  const votes = (id: string, rating: string) => ratings.filter((x) => x.recipe_id === id && x.rating === rating).length;
+  // Notes du foyer (étoiles : 4-5 aimé, 1-2 pas aimé) : elles pondèrent toujours les propositions. Comptées en un passage.
+  const tally = new Map<string, number>();
+  for (const x of ratings) tally.set(`${x.recipe_id}:${x.rating}`, (tally.get(`${x.recipe_id}:${x.rating}`) ?? 0) + 1);
+  const votes = (id: string, rating: string) => tally.get(`${id}:${rating}`) ?? 0;
   return catalog.map((r) => ({
     id: r.id, versionId: r.version_id, name: r.name, totalMin: r.total_min, servings: r.servings, mainProtein: r.main_protein,
     mealTypes: r.meal_types, seasons: r.seasons, cuisine: r.cuisine, tags: r.tags, allergens: r.allergens, spiciness: r.spiciness,
@@ -366,6 +369,15 @@ export async function getWeekSlots(supabase: SupabaseClient, householdId: string
 export async function cancelMealChoice(supabase: SupabaseClient, slotId: string) {
   const { error } = await supabase.rpc("cancel_meal_choice", { p_slot_id: slotId });
   check(error, "Choix non annulé");
+}
+
+/**
+ * Déplace un menu choisi vers un autre jour ou un autre repas ; si un repas y est déjà prévu, les deux menus s'échangent
+ * (chaque repas garde son temps disponible et son nombre de personnes ; les articles de courses suivent leur menu).
+ */
+export async function moveMealChoice(supabase: SupabaseClient, slotId: string, date: IsoDate, mealType: MealType) {
+  const { error } = await supabase.rpc("move_meal_choice", { p_slot_id: slotId, p_date: date, p_meal_type: mealType });
+  check(error, "Menu non déplacé");
 }
 
 /** Repas choisis à partir d'une date (accueil). */

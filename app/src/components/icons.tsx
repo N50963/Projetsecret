@@ -214,7 +214,7 @@ export function Icon({ name, size = 22, color, width, height }: { name: IconName
 }
 
 /** Logo MenuBily : la marmite (même image que l'icône de l'application, assets/logo-marmite.png). */
-export function Logo({ width = 60, height = 54 }: { width?: number; height?: number }) {
+export function Logo({ width = 56, height = 35 }: { width?: number; height?: number }) {
   return (
     <Image source={require("../../assets/logo-marmite.png")} style={{ width, height }} contentFit="contain" transition={0}
       accessibilityLabel="Logo MenuBily" />

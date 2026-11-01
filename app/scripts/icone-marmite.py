@@ -73,7 +73,9 @@ Image.new("RGBA", (1024, 1024), CREAM).save(assets / "android-icon-background.pn
 monochrome(1024, FG_RATIO).save(assets / "android-icon-monochrome.png", optimize=True)
 placed(1024, 0.74).save(assets / "splash-icon.png", optimize=True)
 placed(48, 0.9).save(assets / "favicon.png", optimize=True)
-# Logo de l'application : marmite seule, 3 fois sa taille d'affichage (≈ 60 px de large).
-logo = pot.resize((180, round(pot.height * 180 / pot.width)), Image.LANCZOS)
+# Logo de l'application : marmite seule, recadrée sur sa partie pleine (la vapeur, très légère, la décentrait vers le bas
+# à côté du nom), 3 fois sa taille d'affichage (≈ 56 px de large).
+body = pot.crop(pot.getchannel("A").point(lambda v: 255 if v > 200 else 0).getbbox())
+logo = body.resize((168, round(body.height * 168 / body.width)), Image.LANCZOS)
 logo.save(assets / "logo-marmite.png", optimize=True)
 print("icônes, écran de démarrage et logo générés", logo.size)

@@ -7,6 +7,6 @@ export {
   type SlotPlan,
 } from "./engine";
 export {
-  acceptProposal, addShoppingItems, cancelMealChoice, ensureSlot, getPlanSlots, getSlotsFrom, ingredientsInRecipes, type RecipeIngredientOption, getWeekSlots, getShoppingList, loadPlannerContext, loadPurchases, loadRecipesForPlanning, recordShown, rejectProposal,
+  acceptProposal, addShoppingItems, cancelMealChoice, ensureSlot, moveMealChoice, getPlanSlots, getSlotsFrom, ingredientsInRecipes, type RecipeIngredientOption, getWeekSlots, getShoppingList, loadPlannerContext, loadPurchases, loadRecipesForPlanning, recordShown, rejectProposal,
   getUpcomingMeals, savePlan, setShoppingItemChecked, skipSlot, type PlannedSlot, type ShoppingItem, type SlotRequest, type UpcomingMeal, type WeekSlot,
 } from "./repository";

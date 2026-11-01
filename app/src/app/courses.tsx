@@ -6,7 +6,7 @@ import { Icon } from "../components/icons";
 import { Illustration } from "../components/Illustration";
 import { ErrorText, Muted, Screen, SectionTitle } from "../components/ui";
 import { quantity } from "../lib/format";
-import { illustrationUrls, type Picture } from "../lib/images";
+import { illustrationUrls, pictureOf, type Picture } from "../lib/images";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { CARD_SHADOW, useColors } from "../lib/theme";
@@ -60,7 +60,7 @@ export default function Courses() {
               style={styles.check}>
               <Icon name="circle" size={26} color={c.orangeInk} />
             </Pressable>
-            {i.recipeId ? <Illustration picture={images[i.recipeId]} height={64} width={74} rounded={9} /> : (
+            {i.recipeId ? <Illustration picture={images[i.recipeId] ?? pictureOf(i.recipeId)} height={64} width={74} rounded={9} /> : (
               <View style={[styles.noPhoto, { backgroundColor: c.chip }]}><Icon name="image" size={24} color={c.muted} /></View>
             )}
             <View style={styles.text}>
