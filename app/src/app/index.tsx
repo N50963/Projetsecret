@@ -199,8 +199,8 @@ export default function Accueil() {
           </Pressable>
         </LinearGradient>
 
-        <View style={{ paddingHorizontal: 8 }}>
-          <ErrorText>{error}</ErrorText>
+        <View>
+          <View style={{ paddingHorizontal: 8 }}><ErrorText>{error}</ErrorText></View>
           {hero && (
             <View style={[styles.hero, { backgroundColor: c.chip }]}>
               <Pressable onPress={() => open(hero)} accessibilityRole="button"
@@ -211,6 +211,9 @@ export default function Accueil() {
                   : <View style={[styles.heroImage, styles.heroWaiting]}><Icon name="image" size={44} color={c.muted} /></View>}
                 <LinearGradient colors={["rgba(20,24,12,0.66)", "rgba(20,24,12,0.34)", "rgba(20,24,12,0.08)"]} locations={[0, 0.58, 1]}
                   start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+                {/* Fondu du bord droit vers le fond de l'accueil. */}
+                <LinearGradient colors={["rgba(254,243,227,0)", "rgba(254,243,227,0.75)", c.background]} locations={[0, 0.6, 1]}
+                  start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.heroFade} pointerEvents="none" />
                 <View style={[styles.heroPill, { backgroundColor: c.heroPill }]}>
                   <Text style={styles.heroPillText}>{dayLabel(hero.date, today)} · {mealLabel(hero.mealType)}</Text>
                 </View>
@@ -220,8 +223,9 @@ export default function Accueil() {
                   {hero.difficulty ? <><Icon name="toque" size={18} color="#FFFFFF" /><Text style={styles.heroMetaText}>{LEVEL[hero.difficulty]}</Text></> : null}
                 </View>
               </Pressable>
-              <Pressable onPress={() => cancel(hero)} disabled={busy !== null} accessibilityRole="button" style={styles.heroCancel}>
-                <Text style={styles.heroCancelText}>{busy === hero.slotId ? "Annulation…" : "Annuler ce menu"}</Text>
+              <Pressable onPress={() => cancel(hero)} disabled={busy !== null} accessibilityRole="button" accessibilityLabel={`Annuler « ${hero.name} »`}
+                hitSlop={6} style={({ pressed }) => [styles.close, { opacity: pressed ? 0.6 : 1 }]}>
+                <Icon name="close" size={22} color={c.text} />
               </Pressable>
             </View>
           )}
@@ -255,12 +259,11 @@ export default function Accueil() {
                 <View style={styles.rowText}>
                   <Text style={[styles.rowDay, { color: s.date === today ? c.primary : c.muted }]}>{dayLabel(s.date, today)} · {mealLabel(s.mealType)}</Text>
                   <Text style={[styles.rowName, { color: c.text }]} numberOfLines={2}>{s.name}</Text>
-                  <View style={styles.rowFoot}>
-                    {s.totalMin ? <Text style={[styles.rowMeta, { color: c.muted }]}>{minutes(s.totalMin)}</Text> : null}
-                    <TextLink title={busy === s.slotId ? "Annulation…" : "Annuler"} onPress={() => cancel(s)} disabled={busy !== null} />
-                  </View>
                 </View>
-                <View style={styles.chevron}><Icon name="chevronRight" width={9} height={15} color={c.text} /></View>
+                <Pressable onPress={() => cancel(s)} disabled={busy !== null} hitSlop={6} accessibilityRole="button"
+                  accessibilityLabel={`Annuler « ${s.name} »`} style={({ pressed }) => [styles.rowClose, { opacity: pressed ? 0.6 : 1 }]}>
+                  <Icon name="close" size={18} color={c.muted} />
+                </Pressable>
               </Pressable>
             );
           })}
@@ -345,13 +348,15 @@ const styles = StyleSheet.create({
   round: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
   badge: { position: "absolute", top: 10, right: 11, width: 9, height: 9, borderRadius: 5 },
   avatar: { width: 45, height: 45, borderRadius: 23, alignItems: "center", justifyContent: "center" },
-  hero: { height: 172, borderRadius: 17, overflow: "hidden", marginBottom: 4 },
+  hero: { height: 172, overflow: "hidden", marginBottom: 4 },
+  heroFade: { position: "absolute", top: 0, bottom: 0, right: 0, width: "30%" },
+  close: { position: "absolute", top: 6, right: 6, width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   heroImage: { width: "100%", height: 172 },
   heroWaiting: { alignItems: "center", justifyContent: "center" },
   heroPill: { position: "absolute", left: 17, top: 22, height: 28, borderRadius: 14, paddingHorizontal: 12, justifyContent: "center" },
   heroPillText: { color: "#FFFFFF", fontSize: 16, fontWeight: "500" },
   heroTitle: {
-    position: "absolute", left: 19, right: 19, top: 60, color: "#FFFFFF", fontSize: 24.5, lineHeight: 28.5, fontWeight: "600",
+    position: "absolute", left: 19, right: "24%", top: 60, color: "#FFFFFF", fontSize: 24.5, lineHeight: 28.5, fontWeight: "600",
     textShadowColor: "rgba(0,0,0,0.45)", textShadowRadius: 3, textShadowOffset: { width: 0, height: 1 },
   },
   heroMeta: { position: "absolute", left: 18, top: 137, flexDirection: "row", alignItems: "center", gap: 7 },
@@ -359,23 +364,17 @@ const styles = StyleSheet.create({
     color: "#FFFFFF", fontSize: 16, fontWeight: "500", marginRight: 12,
     textShadowColor: "rgba(0,0,0,0.4)", textShadowRadius: 2, textShadowOffset: { width: 0, height: 1 },
   },
-  heroCancel: { position: "absolute", right: 4, bottom: 0, minHeight: 48, paddingHorizontal: 12, justifyContent: "center" },
-  heroCancelText: {
-    color: "#FFFFFF", fontSize: 14.2, fontWeight: "500", textDecorationLine: "underline",
-    textShadowColor: "rgba(0,0,0,0.7)", textShadowRadius: 3, textShadowOffset: { width: 0, height: 1 },
-  },
   list: { paddingLeft: 12.8, paddingRight: 9.2, gap: 7 },
   empty: { fontSize: 15, lineHeight: 20, paddingHorizontal: 2, paddingBottom: 4 },
-  row: { minHeight: 96, borderRadius: 12, borderWidth: 1, overflow: "hidden", flexDirection: "row" },
-  rowPhoto: { position: "absolute", left: 0, top: 0, bottom: 0, width: 156 },
+  row: { minHeight: 72, borderRadius: 12, borderWidth: 1, overflow: "hidden", flexDirection: "row" },
+  rowPhoto: { position: "absolute", left: 0, top: 0, bottom: 0, width: 140 },
   rowWaiting: { alignItems: "center", justifyContent: "center" },
-  rowFade: { position: "absolute", top: 0, bottom: 0, right: 0, width: 78 },
-  rowText: { flex: 1, minWidth: 0, marginLeft: 150, paddingTop: 10, paddingBottom: 2, paddingRight: 26, justifyContent: "center" },
+  rowFade: { position: "absolute", top: 0, bottom: 0, right: 0, width: 52 },
+  rowText: { flex: 1, minWidth: 0, marginLeft: 136, paddingVertical: 9, paddingRight: 34, justifyContent: "center" },
+  rowClose: { position: "absolute", top: 2, right: 2, width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   rowDay: { fontSize: 13.5, lineHeight: 17, fontWeight: "600" },
   rowName: { fontSize: 15.5, lineHeight: 19, fontWeight: "700", marginTop: 1 },
-  rowFoot: { flexDirection: "row", alignItems: "center", gap: 12 },
   rowMeta: { fontSize: 14.2, lineHeight: 18 },
-  chevron: { position: "absolute", right: 10, top: 0, bottom: 0, justifyContent: "center" },
   planningHead: { flexDirection: "row", alignItems: "center", paddingLeft: 13, paddingRight: 13, marginTop: 6 },
   day: { borderRadius: 12, borderWidth: 1, paddingTop: 10, paddingLeft: 12, paddingRight: 8, paddingBottom: 8, gap: 8 },
   dayName: { fontSize: 16, lineHeight: 20, fontWeight: "700" },

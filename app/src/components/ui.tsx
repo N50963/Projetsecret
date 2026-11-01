@@ -2,9 +2,10 @@
 
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, usePathname, useRouter } from "expo-router";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import {
-  ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle,
+  ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance, type StyleProp, type TextInputProps,
+  type TextStyle, type ViewStyle,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -15,15 +16,17 @@ export type NavTab = "accueil" | "courses" | "recettes" | "profil";
 
 /**
  * Écran : fond crème, contenu défilant ; `title` règle la bande verte du haut ; `nav` affiche la barre du bas
- * (Accueil, Courses, Recettes, Profil) ; `footer` s'affiche juste au-dessus (minuteurs, bouton fixe).
+ * (Accueil, Courses, Recettes, Profil) ; `footer` s'affiche juste au-dessus (minuteurs, bouton fixe) ; `scrollRef` permet de
+ * faire défiler l'écran (montrer un contenu qui vient de se déplier).
  */
-export function Screen({ title, headerRight, children, footer, nav, scroll = true, padded = true }: {
+export function Screen({ title, headerRight, children, footer, nav, scroll = true, padded = true, scrollRef }: {
   title?: string; headerRight?: () => ReactNode; children: ReactNode; footer?: ReactNode; nav?: NavTab; scroll?: boolean; padded?: boolean;
+  scrollRef?: RefObject<ScrollViewInstance | null>;
 }) {
   const c = useColors();
   const content = [padded ? styles.content : styles.bare];
   const body = scroll
-    ? <ScrollView contentContainerStyle={content} keyboardShouldPersistTaps="handled">{children}</ScrollView>
+    ? <ScrollView ref={scrollRef} contentContainerStyle={content} keyboardShouldPersistTaps="handled">{children}</ScrollView>
     : <View style={[content, { flex: 1 }]}>{children}</View>;
   return (
     <SafeAreaView edges={nav ? ["left", "right"] : ["bottom", "left", "right"]} style={{ flex: 1, backgroundColor: c.background }}>

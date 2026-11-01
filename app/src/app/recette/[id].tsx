@@ -1,9 +1,10 @@
 import { Image } from "expo-image";
 import { useKeepAwake } from "expo-keep-awake";
+import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useCallback, useEffect, useState } from "react";
-import { Alert, Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Platform, Pressable, Share, StyleSheet, Text, View, type ScrollViewInstance } from "react-native";
 
 import { Icon } from "../../components/icons";
 import { Illustration } from "../../components/Illustration";
@@ -19,7 +20,7 @@ import { useHousehold } from "../../lib/session";
 import { clock, stepTimer } from "../../lib/steps";
 import { supabase } from "../../lib/supabase";
 import { toIsoDate } from "../../modules/planning";
-import { useColors } from "../../lib/theme";
+import { CARD_SHADOW, useColors } from "../../lib/theme";
 import { startTimer, stopTimer, timerId, useTimers } from "../../lib/timers";
 import {
   adaptRecipe, addRecipeToShoppingList, addRecipeVersion, archiveRecipe, getLatestRating, getRecipe, getShoppingNeeds, isFavorite, rateRecipe,
@@ -52,8 +53,9 @@ function confirm(message: string, action: string, onConfirm: () => void) {
  * acheter », « Ajouter à ma liste ») et Préparation (pas à pas, un minuteur par étape, écran gardé allumé). La recette
  * faite (« C'est prêt »), et ce jour-là seulement : photo du plat et avis sur 5 étoiles avec une remarque ; l'avis
  * enregistré part à Mistral, qui propose une version améliorée si la recette est améliorable (l'utilisateur la corrige
- * et la garde, ou garde la recette actuelle). « Plus d'options » : photo du plat ; pour les recettes ajoutées par le
- * foyer, modifier ou supprimer. Favoris et partage dans la bande verte.
+ * et la garde, ou garde la recette actuelle). Photo du plat : icône blanche discrète en haut de la photo (appareil photo ou
+ * galerie). « Plus d'options » (recettes ajoutées par le foyer) : modifier ou supprimer. Favoris et partage dans la bande
+ * verte.
  */
 export default function FicheRecette() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -73,6 +75,8 @@ export default function FicheRecette() {
   const [comment, setComment] = useState("");
   const [saved, setSaved] = useState(false);
   const [more, setMore] = useState(false);
+  const [photoMenu, setPhotoMenu] = useState(false);
+  const scroll = useRef<ScrollViewInstance>(null);
   const [draft, setDraft] = useState<Revision | null>(null);
   const [cookedOn, setCookedOn] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -217,13 +221,35 @@ export default function FicheRecette() {
   });
 
   return (
-    <Screen title="Recette" padded={false} footer={<TimersBar />} headerRight={() => (
+    <Screen title="Recette" padded={false} footer={<TimersBar />} scrollRef={scroll} headerRight={() => (
       <View style={{ flexDirection: "row" }}>
         <HeaderIcon name="share" label="Partager" onPress={share} size={23} />
         <HeaderIcon name={favorite ? "heart" : "heartOutline"} label={favorite ? "Retirer des favoris" : "Ajouter aux favoris"} onPress={toggleFavorite} />
       </View>
     )}>
-      <Illustration picture={image} height={172} rounded={0} />
+      <View>
+        <Illustration picture={image} height={210} rounded={0} />
+        {/* Fondu du bas : la photo se fond dans le fond de la fiche, sans démarcation nette. */}
+        <LinearGradient colors={["rgba(254,243,227,0)", "rgba(254,243,227,0.7)", c.background]} locations={[0, 0.6, 1]}
+          style={styles.photoFade} pointerEvents="none" />
+        <Pressable onPress={() => setPhotoMenu((m) => !m)} disabled={busy === "photo"} hitSlop={8} accessibilityRole="button"
+          accessibilityLabel="Ajouter ou changer la photo du plat" style={({ pressed }) => [styles.photoButton, { opacity: pressed ? 0.7 : 1 }]}>
+          {busy === "photo" ? <ActivityIndicator color="#FFFFFF" /> : <Icon name="camera" size={21} color="#FFFFFF" />}
+        </Pressable>
+        {photoMenu && (
+          <View style={[styles.photoMenu, { backgroundColor: c.card, borderColor: c.border }, CARD_SHADOW]}>
+            {([["camera", "Prendre une photo", true], ["gallery", "Choisir dans la galerie", false]] as const).map(([icon, label, camera]) => (
+              <Pressable key={icon} accessibilityRole="button" onPress={() => {
+                setPhotoMenu(false);
+                changePhoto(camera);
+              }} style={({ pressed }) => [styles.photoMenuItem, { opacity: pressed ? 0.7 : 1 }]}>
+                <Icon name={icon} size={20} color={c.text} />
+                <Text style={{ color: c.text, fontSize: 15.5, fontWeight: "500" }}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </View>
       <View style={styles.head}>
         <H1>{recipe.name}</H1>
         {recipe.description ? <Body style={{ color: c.muted }}>{recipe.description}</Body> : null}
@@ -376,33 +402,28 @@ export default function FicheRecette() {
         <ErrorText>{error}</ErrorText>
       </View>
 
-      <View style={styles.section}>
-        <Pressable onPress={() => setMore((m) => !m)} accessibilityRole="button" accessibilityState={{ expanded: more }}
-          style={({ pressed }) => [styles.more, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.8 : 1 }]}>
-          <Text style={{ color: c.text, fontSize: 16, fontWeight: "600" }}>Plus d’options</Text>
-          <Icon name={more ? "chevronUp" : "chevronDown"} size={18} color={c.text} />
-        </Pressable>
-        {more && (
-          <Card>
-            <H2>Photo du plat</H2>
-            <Muted>Votre photo remplace l'image créée par Mistral.</Muted>
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <Button title="Prendre une photo" kind="secondary" icon="camera" onPress={() => changePhoto(true)} busy={busy === "photo"} style={{ flex: 1.6 }} />
-              <Button title="Galerie" kind="secondary" icon="gallery" onPress={() => changePhoto(false)} style={{ flex: 1 }} />
-            </View>
-            {own && (
-              <>
-                <View style={{ height: 1, backgroundColor: c.border, marginVertical: 4 }} />
-                <H2>Votre recette</H2>
-                <View style={{ flexDirection: "row", gap: 8 }}>
-                  <Button title="Modifier" kind="secondary" onPress={editRecipe} style={{ flex: 1 }} />
-                  <Button title="Supprimer" kind="danger" icon="trash" onPress={deleteRecipe} busy={busy === "delete"} style={{ flex: 1 }} />
-                </View>
-              </>
-            )}
-          </Card>
-        )}
-      </View>
+      {own && (
+        <View style={styles.section}>
+          <Pressable onPress={() => {
+            setMore((m) => !m);
+            // Le contenu déplié est en bas de la fiche : il est amené à l'écran.
+            if (!more) setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 80);
+          }} accessibilityRole="button" accessibilityState={{ expanded: more }}
+            style={({ pressed }) => [styles.more, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.8 : 1 }]}>
+            <Text style={{ color: c.text, fontSize: 16, fontWeight: "600" }}>Plus d’options</Text>
+            <Icon name={more ? "chevronUp" : "chevronDown"} size={18} color={c.text} />
+          </Pressable>
+          {more && (
+            <Card>
+              <H2>Fiche recette</H2>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <Button title="Modifier" kind="secondary" onPress={editRecipe} style={{ flex: 1 }} />
+                <Button title="Supprimer" kind="danger" icon="trash" onPress={deleteRecipe} busy={busy === "delete"} style={{ flex: 1 }} />
+              </View>
+            </Card>
+          )}
+        </View>
+      )}
 
       {draft && (
         <View style={[styles.section, { gap: 12 }]}>
@@ -426,7 +447,15 @@ export default function FicheRecette() {
 }
 
 const styles = StyleSheet.create({
-  head: { paddingHorizontal: 19, paddingTop: 8, gap: 6 },
+  head: { paddingHorizontal: 19, paddingTop: 2, gap: 6 },
+  photoFade: { position: "absolute", left: 0, right: 0, bottom: 0, height: 64 },
+  // Icône discrète : blanche sur un rond sombre translucide, lisible sur une photo claire comme foncée.
+  photoButton: {
+    position: "absolute", top: 10, right: 10, width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(20,24,12,0.32)",
+  },
+  photoMenu: { position: "absolute", top: 56, right: 10, borderRadius: 12, borderWidth: 1, paddingVertical: 4 },
+  photoMenuItem: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48, paddingHorizontal: 14 },
   pills: { flexDirection: "row", gap: 7.5, marginHorizontal: 17.5, marginTop: 10 },
   stepper: { flex: 1, minWidth: 128, height: 38, borderRadius: 13, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   stepperButton: { width: 40, height: 48, alignItems: "center", justifyContent: "center" },

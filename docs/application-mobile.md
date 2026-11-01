@@ -31,9 +31,9 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    de corriger n'importe quel produit déjà acheté (ex. « pavés de truite » → truite fumée).
 4. **Comparaison avec la liste de courses** : un article est coché tout seul quand son ingrédient apparaît sur un ticket
    postérieur à son ajout (vue `shopping_list_status`).
-5. **Accueil** : en grand, le menu du jour (ou, s'il n'y en a pas, le prochain menu de la semaine) ; puis les menus de
-   la semaine empilés en lignes (photo qui part du bord gauche et s'efface en fondu avant le nom, jour écrit en entier ;
-   un toucher ouvre la recette en fondu). Les repas à prévoir (déjeuners et dîners à cocher, temps disponible :
+5. **Accueil** : en grand, bord à bord avec un fondu à droite, le menu du jour (ou, s'il n'y en a pas, le prochain menu de la semaine) ; puis les menus de
+   la semaine empilés en lignes basses (photo qui part du bord gauche et s'efface en fondu avant le nom, jour écrit en
+   entier, croix en haut à droite pour annuler le menu ; un toucher ouvre la recette en fondu). Les repas à prévoir (déjeuners et dîners à cocher, temps disponible :
    30 min, 1 h ou sans limite) sont masqués dès que des menus sont choisis, derrière le raccourci « Prévoir d'autres
    repas ».
 6. **Menu du jour avec un ingrédient** (carte principale de l'accueil) : le foyer indique un ingrédient (les achats des
