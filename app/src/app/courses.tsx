@@ -39,7 +39,8 @@ export default function Courses() {
     setShoppingItemChecked(supabase, item.id, checked).catch((e) => setError(e instanceof Error ? e.message : String(e)));
   };
 
-  const toBuy = items.filter((i) => !i.boughtAt && !i.checkedAt);
+  // Seuls les articles des menus choisis à venir (ou d'une recette ajoutée depuis sa fiche) restent à acheter.
+  const toBuy = items.filter((i) => i.active && !i.boughtAt && !i.checkedAt);
   const found = items.filter((i) => i.boughtAt || i.checkedAt);
 
   return (

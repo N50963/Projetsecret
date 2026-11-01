@@ -169,7 +169,7 @@ export default function Accueil() {
     setTimeout(() => scroll.current?.scrollTo({ y: Math.max(0, planningY.current - 8), animated: true }), 80);
   };
 
-  const toBuy = shopping.filter((i) => !i.boughtAt && !i.checkedAt);
+  const toBuy = shopping.filter((i) => i.active && !i.boughtAt && !i.checkedAt);
   const open = (s: WeekSlot) => router.push(`/recette/${s.recipeId}`);
 
   const notifications = () => setReminders(true);

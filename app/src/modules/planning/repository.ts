@@ -279,9 +279,14 @@ export interface ShoppingItem {
   /** Plat pour lequel l'article a été mis sur la liste (photo et nom dans la liste de courses). */
   recipeId: string | null;
   recipeName: string | null;
+  /** L'article sert un menu choisi à venir (ou une recette ajoutée depuis sa fiche) : seul cas où il est « à acheter ». */
+  active: boolean;
 }
 
-/** Liste de courses comparée aux derniers tickets (articles achetés depuis leur ajout). */
+/**
+ * Liste de courses comparée aux derniers tickets (articles achetés depuis leur ajout). Un article n'est « à acheter » que
+ * s'il est `active` : son menu est choisi et pas encore passé, ou il a été ajouté depuis la fiche d'une recette.
+ */
 export async function getShoppingList(supabase: SupabaseClient, householdId: string, sinceDays = 21): Promise<ShoppingItem[]> {
   const since = new Date(Date.now() - sinceDays * 86_400_000).toISOString();
   const { data, error } = await supabase.from("shopping_list_status").select("*").eq("household_id", householdId)
@@ -291,14 +296,15 @@ export async function getShoppingList(supabase: SupabaseClient, householdId: str
   const slotIds = [...new Set(rows.map((i) => i.slot_id).filter(Boolean))];
   const { data: slots } = slotIds.length ? await supabase.from("meal_slots").select("id, recipe_id").in("id", slotIds) : { data: [] };
   const recipeOfSlot = new Map(((slots ?? []) as Row[]).map((r) => [r.id, r.recipe_id as string | null]));
-  const recipeIds = [...new Set([...recipeOfSlot.values()].filter((v): v is string => Boolean(v)))];
+  const recipeIds = [...new Set([...recipeOfSlot.values(), ...rows.map((i) => i.recipe_id as string | null)].filter((v): v is string => Boolean(v)))];
   const { data: names } = recipeIds.length ? await supabase.from("recipe_catalog").select("id, name").in("id", recipeIds) : { data: [] };
   const nameOf = new Map(((names ?? []) as Row[]).map((n) => [n.id, n.name as string]));
   return rows.map((i) => {
-    const recipeId = i.slot_id ? recipeOfSlot.get(i.slot_id) ?? null : null;
+    const recipeId: string | null = (i.slot_id ? recipeOfSlot.get(i.slot_id) : undefined) ?? i.recipe_id ?? null;
     return {
       id: i.id, label: i.label, quantity: i.quantity === null ? null : Number(i.quantity), unit: i.unit, createdAt: i.created_at,
       checkedAt: i.checked_at, boughtAt: i.bought_at, recipeId, recipeName: recipeId ? nameOf.get(recipeId) ?? null : null,
+      active: i.active ?? true,
     };
   });
 }
