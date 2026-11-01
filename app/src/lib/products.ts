@@ -82,7 +82,7 @@ export function ingredientOptions(): Promise<IngredientOption[]> {
 }
 
 /** Comparaison sans accents ni majuscules. */
-export const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+export const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
 export async function correctProduct(id: string, name: string, role: ProductRole, ingredients: string[]): Promise<void> {
   const { error } = await supabase.rpc("correct_product", {

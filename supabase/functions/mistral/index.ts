@@ -567,7 +567,7 @@ async function ingredientImages(db: SupabaseClient, offset: number, limit: numbe
 
 /** Mots trop courants pour dire si le titre d'une photo correspond au plat cherché. */
 const COMMON_WORDS = new Set(["with", "and", "the", "avec", "aux", "des", "les", "sauce", "food", "dish", "plat", "maison", "style"]);
-const foldText = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const foldText = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
 /**
  * Photos libres pour les plats sans illustration : photo de Wikimedia Commons (licence libre) trouvée d'après le nom du
