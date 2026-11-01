@@ -65,6 +65,8 @@ export interface ServedMeal {
   date: IsoDate;
   servings: number;
   slotId?: string;
+  /** Déjeuner avant dîner pour l'ordre des repas d'un même jour. */
+  mealType?: MealType;
 }
 
 export interface MissingIngredient {

@@ -13,8 +13,9 @@ import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { useColors } from "../lib/theme";
 import {
-  acceptProposal, DEFAULT_TARGETS, getPlanSlots, loadPlannerContext, loadRecipesForPlanning, missingForSlot, planMeals,
-  recordShown, rejectProposal, skipSlot, toIsoDate, type PlannedSlot, type PlannerContext, type Proposal,
+  acceptProposal, addDays, addShoppingItems, DEFAULT_TARGETS, getPlanSlots, getSlotsFrom, ingredientsInRecipes, loadPlannerContext, loadRecipesForPlanning,
+  missingForSlot, neededQuantity, planMeals, recordShown, rejectProposal, shortagesAfter, skipSlot, Stock, toIsoDate,
+  type MissingIngredient, type PlannedSlot, type PlannerContext, type Proposal, type ServedMeal, type Shortage,
 } from "../modules/planning";
 import { createRecipe, currentSeason, type MainProtein } from "../modules/recipes";
 
@@ -65,8 +66,27 @@ interface Ideas {
 /** Écart entre les demandes d'idées envoyées ensemble (limite de débit de l'offre gratuite de Mistral). */
 const IDEA_STAGGER_MS = 1500;
 
+/** Idées de Mistral autour d'un ingrédient imposé : trois façons de le cuisiner. */
+const INGREDIENT_STYLES = ["un plat mijoté ou au four", "un plat rapide à la poêle ou au wok", "une salade composée, un gratin ou une tarte"];
+
+interface Focus {
+  /** Repas du menu du jour choisi d'après un ingrédient. */
+  slotId: string;
+  ingredient: { slug: string; name: string } | null;
+  /** L'ingrédient est à acheter : il rejoint la liste de courses avec le menu choisi. */
+  toBuy: boolean;
+}
+
+/**
+ * Propositions de menus, repas par repas (swipe, tours avec les courses puis quelques achats, idées de Mistral).
+ * Menu du jour (paramètre `slot`, éventuellement `ingredient`) : un seul repas, d'après un ingrédient acheté ou à acheter ;
+ * une fois choisi, si un repas prévu plus tard manque d'un ingrédient déjà compté, le foyer choisit de le remplacer
+ * (nouvelles propositions selon ce qui reste) ou de le garder (ingrédients ajoutés à la liste de courses) ; la fiche du
+ * menu du jour s'ouvre ensuite.
+ */
 export default function Propositions() {
-  const { plan: planId, start } = useLocalSearchParams<{ plan: string; start: string }>();
+  const params = useLocalSearchParams<{ plan: string; start: string; slot?: string; ingredient?: string; buy?: string }>();
+  const { plan: planId, start } = params;
   const router = useRouter();
   const household = useHousehold();
   const c = useColors();
@@ -83,6 +103,15 @@ export default function Propositions() {
   const [images, setImages] = useState<Record<string, Picture | null>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [focus, setFocus] = useState<Focus | null>(null);
+  /** Menu du jour : repas encore à choisir (le menu du jour, puis ceux qu'on remplace). */
+  const [pending, setPending] = useState<string[]>([]);
+  /** Repas prévus plus tard qui manqueront d'un ingrédient, en attente d'une décision. */
+  const [shortages, setShortages] = useState<Shortage[]>([]);
+  /** Repas à remplacer et ce qui leur manquera s'ils sont gardés. */
+  const [replacing, setReplacing] = useState<Record<string, MissingIngredient[]>>({});
+  const [chosenToday, setChosenToday] = useState<string | null>(null);
+  const [info, setInfo] = useState("");
   const swipe = useRef<((d: SwipeDirection) => void) | null>(null);
   // Une seule illustration demandée à la fois ; plus aucune pendant la session si Mistral refuse (quota gratuit).
   const illustrating = useRef(false);
@@ -92,9 +121,30 @@ export default function Propositions() {
   useEffect(() => {
     (async () => {
       try {
-        const [s, context] = await Promise.all([getPlanSlots(supabase, planId), loadPlannerContext(supabase, household.id, start, planId)]);
+        // Menu du jour : tous les repas à partir d'aujourd'hui (un repas à remplacer peut relever d'une autre planification).
+        const [s, context] = await Promise.all([
+          params.slot ? getSlotsFrom(supabase, household.id, start) : getPlanSlots(supabase, planId),
+          loadPlannerContext(supabase, household.id, start, planId),
+        ]);
+        let ready = context;
+        const target = params.slot ? s.find((x) => x.id === params.slot) : undefined;
+        if (target) {
+          let ingredient: Focus["ingredient"] = null;
+          if (params.ingredient) {
+            const info = (await ingredientsInRecipes(supabase)).find((o) => o.slug === params.ingredient);
+            ingredient = { slug: params.ingredient, name: info?.name ?? params.ingredient };
+            // Ingrédient indiqué par le foyer (acheté hors ticket, ou à acheter) : disponible pour ce repas.
+            const stock = Stock.fromPurchases(context.purchases, { freezes: context.prefs.freezesFreshMeatFish });
+            if (!stock.available(params.ingredient, target.date).present) {
+              ready = { ...context, purchases: [...context.purchases,
+                { slug: params.ingredient, category: info?.category ?? "conserve", quantity: null, unit: null, purchasedAt: target.date }] };
+            }
+          }
+          setFocus({ slotId: target.id, ingredient, toBuy: params.buy === "1" });
+          setPending([target.id]);
+        }
         setSlots(s);
-        setCtx(context);
+        setCtx(ready);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       }
@@ -102,13 +152,24 @@ export default function Propositions() {
   }, [planId, start, household.id]);
 
   const ordered = useMemo(() => (slots ?? []).slice().sort((a, b) => a.date.localeCompare(b.date) || (a.mealType === "dejeuner" ? -1 : 1)), [slots]);
-  const current = ordered.find((s) => s.status === "open") ?? null;
+  const current = focus ? (shortages.length ? null : ordered.find((s) => s.id === pending[0]) ?? null) : ordered.find((s) => s.status === "open") ?? null;
   const done = ordered.filter((s) => s.status !== "open").length;
+  /** Menu du jour : repas de la semaine (déjà choisis et celui-ci), pour les repères d'équilibre. */
+  const weekMeals = useMemo(() => {
+    if (!focus || !ctx || !current) return ordered.length;
+    return ctx.accepted.filter((m) => m.slotId !== current.id && m.date >= start && m.date <= addDays(start, 6)).length + 1;
+  }, [focus, ctx, current, ordered.length, start]);
+  const isFocusSlot = Boolean(focus && current && current.id === focus.slotId);
 
   // Paquet de propositions pour le repas courant (recalculé à chaque repas et à chaque tour).
   useEffect(() => {
     if (!ctx || !current) return;
-    const plan = planMeals(ctx, ordered, { rounds: { [current.id]: round } });
+    // Menu du jour : un seul repas ; s'il avait déjà un menu, celui-ci ne compte pas (il peut être remplacé).
+    const planCtx = focus ? { ...ctx, accepted: ctx.accepted.filter((m) => m.slotId !== current.id) } : ctx;
+    const plan = planMeals(planCtx, focus ? [current] : ordered, {
+      rounds: { [current.id]: round }, mealsInPlan: focus ? weekMeals : undefined, todayFirst: Boolean(focus),
+      mustInclude: isFocusSlot && focus?.ingredient ? { [current.id]: focus.ingredient.slug } : undefined,
+    });
     const entry = plan.find((p) => p.slotId === current.id);
     const proposals = entry?.proposals ?? [];
     // Photos de ce repas et des repas suivants mises en mémoire : elles s'affichent dès que la carte apparaît.
@@ -142,10 +203,12 @@ export default function Propositions() {
 
   // Tous les repas ont leur menu : retour au calendrier de l'accueil (photos et menus de la semaine).
   useEffect(() => {
-    if (!slots || !ctx || current) return;
-    if (router.canGoBack()) router.back();
+    if (!slots || !ctx || current || shortages.length) return;
+    // Menu du jour choisi : la suite est celle de tout menu, avec la fiche de préparation et ses étapes.
+    if (focus && chosenToday) router.replace(`/recette/${chosenToday}`);
+    else if (router.canGoBack()) router.back();
     else router.replace("/");
-  }, [slots, ctx, current, router]);
+  }, [slots, ctx, current, router, shortages.length, focus, chosenToday]);
 
   const next = useCallback(() => {
     setDeck((d) => {
@@ -161,6 +224,37 @@ export default function Propositions() {
   const markSlot = (slotId: string, status: PlannedSlot["status"], recipeId: string | null = null) =>
     setSlots((s) => (s ?? []).map((x) => (x.id === slotId ? { ...x, status, recipeId } : x)));
 
+  /** Menu du jour d'après un ingrédient à acheter : il rejoint la liste de courses avec les autres manques. */
+  const withIngredient = (missing: MissingIngredient[], recipeId: string, context: PlannerContext): MissingIngredient[] => {
+    if (!isFocusSlot || !focus?.toBuy || !focus.ingredient || !current) return missing;
+    if (missing.some((m) => m.slug === focus.ingredient!.slug)) return missing;
+    const recipe = context.recipes.find((r) => r.id === recipeId);
+    const ing = recipe?.ingredients.find((i) => i.slug === focus.ingredient!.slug);
+    const need = ing && recipe ? neededQuantity(ing, recipe.servings, current.servings) : null;
+    return [...missing, { slug: focus.ingredient.slug, label: ing?.label ?? focus.ingredient.name, quantity: need ? Math.ceil(need) : null, unit: ing?.baseUnit ?? null }];
+  };
+
+  /**
+   * Menu choisi : il réserve ses ingrédients. Menu du jour : les repas prévus plus tard qui n'auront plus assez d'un
+   * ingrédient sont signalés, puis la fiche du menu s'ouvre.
+   */
+  const chosen = (recipeId: string, context: PlannerContext) => {
+    if (!current) return context;
+    const meal: ServedMeal = { recipeId, date: current.date, servings: current.servings, slotId: current.id, mealType: current.mealType };
+    const next = { ...context, accepted: [...context.accepted.filter((m) => m.slotId !== current.id), meal] };
+    setCtx(next);
+    markSlot(current.id, "accepted", recipeId);
+    setRound(1);
+    if (focus) {
+      if (current.id === focus.slotId) setChosenToday(recipeId);
+      const later = shortagesAfter(next, meal).filter((x) => !pending.slice(1).includes(x.slotId));
+      setShortages((prev) => [...prev.filter((x) => x.slotId !== current.id && !later.some((l) => l.slotId === x.slotId)), ...later]);
+      setPending((p) => p.slice(1));
+      setReplacing(({ [current.id]: _done, ...rest }) => rest);
+    }
+    return next;
+  };
+
   const onSwipe = async (p: Proposal, direction: SwipeDirection) => {
     if (!current || !ctx) return;
     setError("");
@@ -172,10 +266,8 @@ export default function Propositions() {
     }
     setBusy("accept");
     try {
-      await acceptProposal(supabase, current.id, p);
-      setCtx({ ...ctx, accepted: [...ctx.accepted, { recipeId: p.recipeId, date: current.date, servings: current.servings, slotId: current.id }] });
-      markSlot(current.id, "accepted", p.recipeId);
-      setRound(1);
+      await acceptProposal(supabase, current.id, { recipeId: p.recipeId, missing: withIngredient(p.missing, p.recipeId, ctx) });
+      chosen(p.recipeId, ctx);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -188,24 +280,30 @@ export default function Propositions() {
    * (contre près d'une minute pour 3 idées d'un coup) et s'affiche aussitôt.
    */
   const startIdeas = useCallback((slot: PlannedSlot, context: PlannerContext) => {
-    const proteins = ideaProteins(context, ordered.length);
+    const meals = focus ? weekMeals : ordered.length;
+    const ingredient = focus && slot.id === focus.slotId ? focus.ingredient : null;
+    // Autour d'un ingrédient imposé, trois façons de le cuisiner (la protéine en découle) ; sinon trois protéines.
+    const variants: Array<{ protein?: MainProtein; hint: string }> = ingredient
+      ? INGREDIENT_STYLES.map((hint) => ({ hint: `Ingrédient imposé : ${ingredient.name} (${focus?.toBuy ? "le foyer va l'acheter" : "déjà acheté"}), `
+        + `utilisé comme ingrédient principal. Façon : ${hint}. ` }))
+      : ideaProteins(context, meals).map((protein) => ({ protein, hint: "" }));
     const avoid = [...(context.rejected[slot.id] ?? []), ...context.accepted.map((m) => m.recipeId)]
       .map((id) => context.recipes.find((r) => r.id === id)?.name).filter((n): n is string => Boolean(n));
-    const brief = balanceBrief(context, ordered.length);
+    const brief = balanceBrief(context, meals);
     const season = currentSeason(new Date(`${slot.date}T12:00:00`));
     const forSlot = (update: (i: Ideas) => Ideas) => setIdeas((i) => (i?.slotId === slot.id ? update(i) : i));
-    setIdeas({ slotId: slot.id, drafts: [], pending: proteins.length, failed: null });
+    setIdeas({ slotId: slot.id, drafts: [], pending: variants.length, failed: null });
     setSeen(0);
-    proteins.forEach((protein, n) => ideaTimers.current.push(setTimeout(() => {
+    variants.forEach(({ protein, hint }, n) => ideaTimers.current.push(setTimeout(() => {
       generateRecipes(household.id, {
-        brief, count: 1, servings: slot.servings,
+        brief: `${hint}${brief}`, count: 1, servings: slot.servings,
         constraints: { max_total_min: slot.maxTotalMin, meal_type: slot.mealType, season, main_protein: protein, avoid },
       })
         .then(({ recipes }) => forSlot((i) => ({ ...i, pending: i.pending - 1,
           drafts: [...i.drafts, ...recipes.filter((d) => d.recipe.name && d.recipe.ingredients.length >= 3)] })))
         .catch((e) => forSlot((i) => ({ ...i, pending: i.pending - 1, failed: e instanceof Error ? e.message : String(e) })));
     }, n * IDEA_STAGGER_MS)));
-  }, [household.id, ordered.length]);
+  }, [household.id, ordered.length, focus, weekMeals]);
 
   // Dès les propositions avec achats (ou quand il n'y a plus rien à proposer), les idées sont préparées en arrière-plan.
   useEffect(() => {
@@ -227,12 +325,11 @@ export default function Propositions() {
       const recipeId = await createRecipe(supabase, household.id, draftToInput(d.recipe, "mistral"));
       const recipes = await loadRecipesForPlanning(supabase, household.id);
       const recipe = recipes.find((r) => r.id === recipeId);
-      const missing = recipe ? missingForSlot({ ...ctx, recipes }, recipe, current) : [];
+      const base = { ...ctx, recipes, accepted: ctx.accepted.filter((m) => m.slotId !== current.id) };
+      const missing = recipe ? withIngredient(missingForSlot(base, recipe, current, { todayFirst: Boolean(focus) }), recipeId, base) : [];
       await acceptProposal(supabase, current.id, { recipeId, missing });
       illustrateRecipe(household.id, recipeId).catch(() => undefined);
-      setCtx({ ...ctx, recipes, accepted: [...ctx.accepted, { recipeId, date: current.date, servings: current.servings, slotId: current.id }] });
-      markSlot(current.id, "accepted", recipeId);
-      setRound(1);
+      chosen(recipeId, { ...ctx, recipes });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -243,19 +340,77 @@ export default function Propositions() {
   const skip = async () => {
     if (!current) return;
     try {
-      await skipSlot(supabase, current.id);
-      markSlot(current.id, "skipped");
+      if (focus && replacing[current.id]) {
+        // Repas qu'on pensait remplacer, finalement gardé : ce qui lui manquera va sur la liste de courses.
+        await addShoppingItems(supabase, household.id, current.id, replacing[current.id]!);
+        setReplacing(({ [current.id]: _kept, ...rest }) => rest);
+      } else if (current.status === "open") {
+        await skipSlot(supabase, current.id);
+        markSlot(current.id, "skipped");
+      }
+      if (focus) setPending((p) => p.slice(1));
       setRound(1);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   };
 
+  /** Repas prévu plus tard qui manquera d'un ingrédient : nouvelles propositions selon ce qui reste et ce qui est prévu. */
+  const replace = (s: Shortage) => {
+    setShortages((list) => list.filter((x) => x.slotId !== s.slotId));
+    setReplacing((r) => ({ ...r, [s.slotId]: s.missing }));
+    setPending((p) => [...p, s.slotId]);
+  };
+
+  /** Repas gardé tel quel : les ingrédients qui manqueront vont sur la liste de courses. */
+  const keep = async (s: Shortage) => {
+    setBusy(s.slotId);
+    try {
+      await addShoppingItems(supabase, household.id, s.slotId, s.missing);
+      setShortages((list) => list.filter((x) => x.slotId !== s.slotId));
+      setInfo(`Ajouté à la liste de courses : ${s.missing.map((m) => m.label).join(", ")}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (!slots || !ctx) return error ? <Screen title="Propositions"><ErrorText>{error}</ErrorText></Screen> : <Loading label="Préparation des menus…" />;
 
-  if (!current) return <Loading label="Menus choisis : retour au calendrier…" />;
+  if (focus && shortages.length) {
+    const nameOf = (id: string) => ctx.recipes.find((r) => r.id === id)?.name ?? "Recette";
+    return (
+      <Screen title="Attention aux courses">
+        <View style={[styles.alert, { backgroundColor: c.dangerSoft }]}>
+          <Icon name="alert" size={26} color={c.danger} />
+          <Text style={{ flex: 1, color: c.text, fontSize: 16, lineHeight: 22 }}>
+            {chosenToday ? `« ${nameOf(chosenToday)} » utilise des ingrédients déjà comptés pour ` : "Ce menu utilise des ingrédients déjà comptés pour "}
+            {shortages.length > 1 ? "des repas prévus plus tard" : "un repas prévu plus tard"} : il n'en restera plus assez.
+          </Text>
+        </View>
+        <ErrorText>{error}</ErrorText>
+        {info ? <Text style={{ color: c.greenInk, fontSize: 15 }}>{info}</Text> : null}
+        {shortages.map((s) => (
+          <View key={s.slotId} style={[styles.shortage, { backgroundColor: c.card, borderColor: c.cardLine }]}>
+            <Text style={{ color: c.primary, fontSize: 14, fontWeight: "600" }}>{dayLabel(s.date, today)} · {mealLabel(s.mealType)}</Text>
+            <Text style={[styles.shortageName, { color: c.text }]}>{nameOf(s.recipeId)}</Text>
+            <Text style={{ color: c.orangeInk, fontSize: 15, lineHeight: 20 }}>Il manquera : {s.missing.map((m) => m.label).join(", ")}</Text>
+            <Button title="Proposer un autre repas" icon="wand" onPress={() => replace(s)} disabled={busy !== null} />
+            <Button title="Le garder (ingrédients sur la liste de courses)" kind="secondary" icon="cartBold" onPress={() => keep(s)}
+              busy={busy === s.slotId} disabled={busy !== null} />
+          </View>
+        ))}
+      </Screen>
+    );
+  }
+
+  if (!current) return <Loading label={focus && chosenToday ? "Ouverture de la fiche…" : "Menus choisis : retour au calendrier…"} />;
 
   const top = deck[0];
+  /** Menu du jour avec un ingrédient à acheter : il s'ajoute à ce qui manque (il rejoindra la liste de courses). */
+  const extra = isFocusSlot && focus?.toBuy && focus.ingredient ? [focus.ingredient.name.toLowerCase()] : [];
+  const toBuyLabels = top ? [...extra, ...top.missing.map((m) => m.label).filter((l) => !extra.includes(l.toLowerCase()))] : extra;
   const slotIdeas = ideas?.slotId === current.id ? ideas : null;
   const draft = exhausted ? slotIdeas?.drafts[seen] : undefined;
   const waiting = slotIdeas ? slotIdeas.pending : 3;
@@ -263,9 +418,9 @@ export default function Propositions() {
   const failed = exhausted && !draft && waiting === 0;
   const tag = exhausted
     ? <Tag label="idée Mistral" tone="plain" icon="sparkle" />
-    : round === 1 || !top?.missing.length
+    : !toBuyLabels.length
       ? <Tag label="avec vos courses" tone="green" />
-      : <Tag label={`${top.missing.length} à acheter`} tone="orange" />;
+      : <Tag label={`${toBuyLabels.length} à acheter`} tone="orange" />;
   const card = (name: string, picture: Picture | null | undefined, duration: number, protein: string, ingredients: string, toBuy?: string) => (
     <View style={[styles.card, { backgroundColor: c.background, borderColor: c.border }]}>
       <View style={{ flex: 1, minHeight: 160, backgroundColor: c.chip }}>
@@ -300,7 +455,9 @@ export default function Propositions() {
     <Screen title={`${dayLabel(current.date, today)} · ${mealLabel(current.mealType)}`} scroll={false} padded={false}>
       <View style={styles.line}>
         <Text style={{ color: c.muted, fontSize: 15 }}>
-          Repas {done + 1} sur {ordered.length} · {current.maxTotalMin ? `${minutes(current.maxTotalMin)} au plus` : "sans limite"} ·
+          {isFocusSlot ? (focus?.ingredient ? `Menu du jour avec ${focus.ingredient.name.toLowerCase()}${focus.toBuy ? " (à acheter)" : ""}` : "Menu du jour")
+            : focus ? `Nouveau menu (il manquerait : ${(replacing[current.id] ?? []).map((m) => m.label).join(", ")})`
+              : `Repas ${done + 1} sur ${ordered.length}`} · {current.maxTotalMin ? `${minutes(current.maxTotalMin)} au plus` : "sans limite"} ·
         </Text>
         {tag}
       </View>
@@ -313,7 +470,7 @@ export default function Propositions() {
             onPress={() => router.push(`/recette/${top.recipeId}`)}>
             {card(top.name, images[top.recipeId] ?? pictureOf(top.recipeId), top.totalMin, proteinLabel(top.mainProtein),
               ctx.recipes.find((r) => r.id === top.recipeId)?.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", ") ?? "",
-              top.missing.length ? top.missing.map((m) => m.label).join(", ") : undefined)}
+              toBuyLabels.length ? toBuyLabels.join(", ") : undefined)}
           </SwipeCard>
         )}
         {draft && (
@@ -362,7 +519,9 @@ export default function Propositions() {
           </View>
         ) : <View style={{ height: 48 }} />}
         <Pressable onPress={skip} accessibilityRole="button" style={styles.skip}>
-          <Text style={{ color: c.muted, fontSize: 16, fontWeight: "500", textDecorationLine: "underline" }}>Passer ce repas</Text>
+          <Text style={{ color: c.muted, fontSize: 16, fontWeight: "500", textDecorationLine: "underline" }}>
+            {focus && replacing[current.id] ? "Garder l'ancien menu (manques sur la liste de courses)" : "Passer ce repas"}
+          </Text>
         </Pressable>
       </View>
     </Screen>
@@ -382,5 +541,8 @@ const styles = StyleSheet.create({
   slot: { width: 84, height: 84, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   stateTitle: { fontSize: 19, lineHeight: 25, fontWeight: "700", textAlign: "center" },
   footer: { paddingTop: 21, paddingHorizontal: 14, paddingBottom: 6, gap: 2 },
+  alert: { flexDirection: "row", gap: 12, alignItems: "flex-start", borderRadius: 12, padding: 14 },
+  shortage: { borderRadius: 12, borderWidth: 1, padding: 14, gap: 10 },
+  shortageName: { fontSize: 17, lineHeight: 22, fontWeight: "700" },
   skip: { height: 48, alignItems: "center", justifyContent: "center" },
 });

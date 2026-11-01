@@ -36,32 +36,41 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    un toucher ouvre la recette en fondu). Les repas à prévoir (déjeuners et dîners à cocher, temps disponible :
    30 min, 1 h ou sans limite) sont masqués dès que des menus sont choisis, derrière le raccourci « Prévoir d'autres
    repas ».
-6. **Propositions** (moteur `app/src/modules/planning`) : pour chaque repas, 3 recettes réalisables avec les courses,
+6. **Menu du jour avec un ingrédient** (carte principale de l'accueil) : le foyer indique un ingrédient (les achats des
+   7 derniers jours sont proposés, puis une recherche parmi les ingrédients des recettes), s'il l'a acheté ou va
+   l'acheter, le repas (déjeuner ou dîner) et le temps disponible. Les propositions suivent les mêmes règles que les
+   menus de la semaine (swipe, recettes avec les courses, puis avec 1 à 3 achats, puis idées de Mistral autour de
+   l'ingrédient), limitées aux recettes qui l'utilisent. Le menu du jour puise d'abord dans ce qui est à la maison,
+   même ce qui était compté pour un repas prévu plus tard ; un ingrédient « à acheter » rejoint la liste de courses.
+   Une fois le menu choisi, si un repas prévu plus tard n'a plus assez d'un ingrédient, l'application le signale :
+   « Proposer un autre repas » (nouvelles propositions selon ce qui reste et ce qui est prévu) ou « Le garder »
+   (les manques vont sur la liste de courses). La fiche du menu du jour s'ouvre ensuite, avec ses étapes.
+7. **Propositions** (moteur `app/src/modules/planning`) : pour chaque repas, 3 recettes réalisables avec les courses,
    classées selon l'équilibre et la variété de la semaine. Swipe à droite pour choisir, à gauche pour passer (ou
    boutons). Si aucune ne convient : 3 recettes avec 1 à 3 ingrédients à acheter, puis 3 idées créées par Mistral.
    Les ingrédients manquants des recettes choisies vont sur la liste de courses.
-7. **Fiches recettes** : photo du plat (« Plus d'options » › Photo du plat : appareil photo ou galerie ; la photo prise
+8. **Fiches recettes** : photo du plat (« Plus d'options » › Photo du plat : appareil photo ou galerie ; la photo prise
    avec le téléphone remplace l'image créée par Mistral, qui ne l'écrase jamais), temps de préparation, de cuisson et
    total en haut de la fiche, ingrédients avec leur vignette (photo libre de droits de Wikimedia Commons, crédits dans
    Profil › Crédits des photos), quantités pour le nombre de personnes, étapes « pas à pas » avec un seul minuteur par
    étape. Chaque minuteur dit ce qu'il minute (« Cuire le riz », étape 6) : on s'y retrouve quand plusieurs tournent ;
    « C'est prêt » reste grisé tant qu'un minuteur tourne.
-8. **Avis après la recette** : la notation n'apparaît qu'en fin de recette, le jour où elle a été faite : 5 étoiles
+9. **Avis après la recette** : la notation n'apparaît qu'en fin de recette, le jour où elle a été faite : 5 étoiles
    (elles font référence ; 4-5 comptent comme « aimé », 3 comme « bof », 1-2 comme « pas aimé » pour le choix des
    menus) et une observation facultative. Une fois l'avis enregistré, Mistral le lit et dit si la recette est
    améliorable ; si oui, la version proposée s'ouvre dans l'éditeur (nom, temps, ingrédients, étapes) et c'est
    l'utilisateur qui décide : il la corrige puis la garde, ou garde la recette actuelle. Pas de demande de
    modification à Mistral en dehors de cet avis. « Bon appétit ! » propose aussi de mettre sa propre photo du plat.
-9. **Recettes** (onglet de la barre du bas) : recherche, filtre Favoris, filtre par note (5 étoiles, 4 et +, 3 et +,
+10. **Recettes** (onglet de la barre du bas) : recherche, filtre Favoris, filtre par note (5 étoiles, 4 et +, 3 et +,
    non notées), note affichée sur chaque ligne. Les recettes ajoutées par le foyer se modifient ou se suppriment depuis
    leur fiche (« Plus d'options » › Modifier / Supprimer) ; les recettes de la base commune ne sont pas modifiables.
-10. **Ajout de recettes** : texte collé ou saisie libre, mis en forme par Mistral (durées de cuisson, feu et
+11. **Ajout de recettes** : texte collé ou saisie libre, mis en forme par Mistral (durées de cuisson, feu et
    température précisés : chaque étape avec une durée aura son minuteur). L'utilisateur relit et corrige tout dans
    l'éditeur avant d'enregistrer ; photo du plat facultative (appareil photo ou galerie), sinon Mistral crée une
    illustration.
-11. **Favoris** : cœur dans la bande verte de la fiche ; filtre « Favoris » dans l'onglet Recettes. « Ajouter à ma
+12. **Favoris** : cœur dans la bande verte de la fiche ; filtre « Favoris » dans l'onglet Recettes. « Ajouter à ma
    liste » met sur la liste de courses les ingrédients ni de placard ni achetés ces 7 derniers jours.
-12. **Rappels** (cloche de l'accueil) : panneau qui monte du bas avec le menu du jour (ou le prochain), les minuteurs
+13. **Rappels** (cloche de l'accueil) : panneau qui monte du bas avec le menu du jour (ou le prochain), les minuteurs
    en cours et le nombre d'articles à acheter.
 
 Produits achetés tels quels : la truite et le thon fumés de Lidl sont des tranches prêtes à manger (« Truite fumée

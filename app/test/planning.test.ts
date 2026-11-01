@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { planMeals } from "../src/modules/planning/engine";
+import { planMeals, shortagesAfter } from "../src/modules/planning/engine";
 import { addDays, dayDiff, Stock } from "../src/modules/planning/stock";
 import type { MealSlot, PlannerContext, PlannerIngredient, PlannerRecipe, Purchase } from "../src/modules/planning/types";
 import { DEFAULT_PREFERENCES } from "../src/modules/recipes/preferences";
@@ -118,5 +118,60 @@ describe("propositions de menus", () => {
     const plan = planMeals(ctx, days.map((d) => slot(d, d)));
     const chosen = plan.map((p) => p.proposals[0]?.recipeId).filter(Boolean);
     expect(chosen).toContain("dahl");
+  });
+});
+
+describe("menu du jour d'après un ingrédient", () => {
+  const curry = recipe("curry-poulet", "volaille", ["poulet_filet", "riz", "courgette"]);
+  const poelee = recipe("poelee-poulet", "volaille", ["poulet_filet", "poivron"]);
+  const saumon = recipe("saumon-riz", "poisson", ["saumon", "riz", "courgette"]);
+  const dahl = recipe("dahl", "legumineuse", ["lentilles", "tomate_conserve", "carotte", "riz"]);
+
+  it("ne propose que des recettes avec l'ingrédient indiqué, selon les mêmes tours", () => {
+    const ctx = context([curry, poelee, saumon, dahl], ["poulet_filet", "riz", "courgette", "saumon", "lentilles", "tomate_conserve", "carotte"].map((s) => buy(s, SHOP)));
+    const [first] = planMeals(ctx, [slot("jour", "2026-10-27")], { mustInclude: { jour: "poulet_filet" } });
+    expect(first!.proposals.map((p) => p.recipeId)).toEqual(["curry-poulet"]);
+    const [second] = planMeals(ctx, [slot("jour", "2026-10-27")], { mustInclude: { jour: "poulet_filet" }, rounds: { jour: 2 } });
+    expect(second!.proposals.map((p) => p.recipeId)).toEqual(["poelee-poulet"]);
+  });
+
+  it("prévient quand un repas prévu plus tard n'aura plus assez d'un ingrédient déjà compté", () => {
+    // 400 g de courgette : assez pour le saumon de mercredi, plus assez si le curry de ce soir en prend déjà 300 g.
+    const purchases = [buy("saumon", "2026-10-27", 600), buy("riz", SHOP, 2000), buy("courgette", SHOP, 400), buy("poulet_filet", SHOP, 600)];
+    const ctx = context([curry, saumon, dahl], purchases, {
+      accepted: [{ recipeId: "saumon-riz", date: "2026-10-28", servings: 4, slotId: "mer", mealType: "diner" }],
+    });
+    const shortages = shortagesAfter(ctx, { recipeId: "curry-poulet", date: "2026-10-27", servings: 4, slotId: "mar", mealType: "diner" });
+    expect(shortages).toHaveLength(1);
+    expect(shortages[0]!.slotId).toBe("mer");
+    expect(shortages[0]!.missing.map((m) => m.slug)).toEqual(["courgette"]);
+    // Un repas plus tôt dans la semaine n'est pas concerné, et un repas sans ingrédient commun non plus.
+    expect(shortagesAfter(ctx, { recipeId: "dahl", date: "2026-10-27", servings: 4, slotId: "mar", mealType: "diner" })).toEqual([]);
+    expect(shortagesAfter(ctx, { recipeId: "curry-poulet", date: "2026-10-29", servings: 4, slotId: "jeu", mealType: "diner" })).toEqual([]);
+  });
+
+  it("le menu du jour puise d'abord dans ce qui est à la maison, même compté pour un repas suivant", () => {
+    const purchases = [buy("saumon", "2026-10-27", 600), buy("riz", SHOP, 2000), buy("courgette", SHOP, 400), buy("poulet_filet", SHOP, 600)];
+    const ctx = context([curry, saumon], purchases, {
+      accepted: [{ recipeId: "saumon-riz", date: "2026-10-28", servings: 4, slotId: "mer", mealType: "diner" }],
+    });
+    // Repas réservés d'abord (menus de la semaine) : la courgette est gardée pour mercredi, le curry demande d'en acheter.
+    const [weekly] = planMeals(ctx, [slot("mar", "2026-10-27")], { rounds: { mar: 2 } });
+    expect(weekly!.proposals[0]!.missing.map((m) => m.slug)).toEqual(["courgette"]);
+    // Menu du jour : le curry se fait avec la courgette de la maison ; mercredi est signalé ensuite.
+    const [today] = planMeals(ctx, [slot("mar", "2026-10-27")], { todayFirst: true, mustInclude: { mar: "poulet_filet" } });
+    expect(today!.round).toBe(1);
+    expect(today!.proposals.map((p) => p.recipeId)).toEqual(["curry-poulet"]);
+  });
+
+  it("avec un ingrédient imposé, le tour 2 reprend les recettes écartées pour l'équilibre de la semaine", () => {
+    const omelette = recipe("omelette", "oeuf", ["oeuf", "epinard"]);
+    const ctx = context([omelette, dahl], ["oeuf", "epinard", "lentilles", "tomate_conserve", "carotte", "riz"].map((s) => buy(s, SHOP)), {
+      prefs: { ...DEFAULT_PREFERENCES, meatlessDinnersMin: 0, meatlessDinnersMax: 1 },
+      accepted: [{ recipeId: "dahl", date: "2026-10-28", servings: 4, slotId: "mer", mealType: "diner" }],
+    });
+    const options = { mustInclude: { mar: "oeuf" }, mealsInPlan: 7, todayFirst: true };
+    expect(planMeals(ctx, [slot("mar", "2026-10-27")], options)[0]!.round).toBe(2);
+    expect(planMeals(ctx, [slot("mar", "2026-10-27")], options)[0]!.proposals.map((p) => p.recipeId)).toEqual(["omelette"]);
   });
 });

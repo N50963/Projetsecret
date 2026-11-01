@@ -8,7 +8,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getHouseholdPreferences } from "../recipes/preferences";
 import type { MealType } from "../recipes/types";
 import { addDays, PURCHASE_WINDOW_DAYS } from "./stock";
-import type { IsoDate, MealSlot, PlannerContext, PlannerIngredient, PlannerRecipe, Proposal, Purchase, ServedMeal } from "./types";
+import type {
+  IsoDate, MealSlot, MissingIngredient, PlannerContext, PlannerIngredient, PlannerRecipe, Proposal, Purchase, ServedMeal,
+} from "./types";
 
 type Row = Record<string, any>;
 const PAGE = 1000;
@@ -73,11 +75,11 @@ export async function loadPlannerContext(supabase: SupabaseClient, householdId: 
     loadPurchases(supabase, householdId, addDays(start, -PURCHASE_WINDOW_DAYS)),
     getHouseholdPreferences(supabase, householdId),
   ]);
-  const { data: served, error } = await supabase.from("meal_slots").select("id, plan_id, recipe_id, meal_date, servings")
+  const { data: served, error } = await supabase.from("meal_slots").select("id, plan_id, recipe_id, meal_date, meal_type, servings")
     .eq("household_id", householdId).eq("status", "accepted").gte("meal_date", addDays(start, -21));
   check(error, "Repas passés illisibles");
   const meals = (served ?? []) as Row[];
-  const toMeal = (m: Row): ServedMeal => ({ recipeId: m.recipe_id, date: m.meal_date, servings: m.servings, slotId: m.id });
+  const toMeal = (m: Row): ServedMeal => ({ recipeId: m.recipe_id, date: m.meal_date, servings: m.servings, slotId: m.id, mealType: m.meal_type });
   const inPlan = (m: Row) => planId !== undefined && m.plan_id === planId;
 
   const proposals = await fetchAll((a, b) => supabase.from("meal_proposals").select("slot_id, recipe_id, decision")
@@ -91,7 +93,9 @@ export async function loadPlannerContext(supabase: SupabaseClient, householdId: 
   return {
     recipes, purchases, prefs, rejected, rejectionCounts,
     history: meals.filter((m) => !inPlan(m) && m.meal_date < start).map(toMeal),
-    accepted: meals.filter(inPlan).map(toMeal),
+    // Menus choisis de la planification, et tous ceux déjà prévus à partir de son début (menu du jour, autre planification) :
+    // ils réservent leurs ingrédients et comptent pour l'équilibre.
+    accepted: meals.filter((m) => inPlan(m) || m.meal_date >= start).map(toMeal),
   };
 }
 
@@ -139,6 +143,95 @@ export async function savePlan(supabase: SupabaseClient, householdId: string, st
     check(e4, "Repas non retirés");
   }
   return { planId, slots: ((slots ?? []) as Row[]).map(toSlot) };
+}
+
+/**
+ * Repas d'un jour pour le menu du jour : repris s'il existe (rouvert s'il avait été passé), sinon créé dans la
+ * planification qui couvre ce jour, ou dans une planification d'un jour.
+ */
+export async function ensureSlot(supabase: SupabaseClient, householdId: string, request: SlotRequest): Promise<PlannedSlot> {
+  const { data: existing, error } = await supabase.from("meal_slots").select("*").eq("household_id", householdId)
+    .eq("meal_date", request.date).eq("meal_type", request.mealType).maybeSingle();
+  check(error, "Repas illisible");
+  if (existing) {
+    const row = existing as Row;
+    const patch: Row = { max_total_min: request.maxTotalMin };
+    if (row.status === "skipped") patch.status = "open";
+    const { data, error: e2 } = await supabase.from("meal_slots").update(patch).eq("id", row.id).select("*").single();
+    check(e2, "Repas non mis à jour");
+    return toSlot(data as Row);
+  }
+  const { data: plans, error: e3 } = await supabase.from("meal_plans").select("id").eq("household_id", householdId)
+    .lte("start_date", request.date).gte("end_date", request.date).order("start_date", { ascending: false }).limit(1);
+  check(e3, "Planification illisible");
+  let planId = ((plans ?? []) as Row[])[0]?.id as string | undefined;
+  if (!planId) {
+    const { data: plan, error: e4 } = await supabase.from("meal_plans")
+      .upsert({ household_id: householdId, start_date: request.date, end_date: request.date }, { onConflict: "household_id,start_date" })
+      .select("id").single();
+    check(e4, "Planification non enregistrée");
+    planId = (plan as Row).id as string;
+  }
+  const { data: slot, error: e5 } = await supabase.from("meal_slots").insert({
+    plan_id: planId, household_id: householdId, meal_date: request.date, meal_type: request.mealType,
+    max_total_min: request.maxTotalMin, servings: request.servings,
+  }).select("*").single();
+  check(e5, "Repas non enregistré");
+  return toSlot(slot as Row);
+}
+
+/** Articles ajoutés à la liste de courses pour un repas (ingrédients qui manqueront). */
+export async function addShoppingItems(supabase: SupabaseClient, householdId: string, slotId: string, items: MissingIngredient[]) {
+  if (!items.length) return;
+  const { data: ids, error } = await supabase.from("ingredients").select("id, slug").in("slug", items.map((i) => i.slug));
+  check(error, "Ingrédients illisibles");
+  const idOf = new Map(((ids ?? []) as Row[]).map((r) => [r.slug, r.id as string]));
+  const { error: e2 } = await supabase.from("shopping_list_items").insert(items.map((i) => ({
+    household_id: householdId, slot_id: slotId, ingredient_id: idOf.get(i.slug) ?? null, label: i.label.slice(0, 200),
+    quantity: i.quantity && i.quantity > 0 ? i.quantity : null, unit: i.quantity && i.quantity > 0 ? i.unit : null,
+  })));
+  check(e2, "Articles non ajoutés à la liste de courses");
+}
+
+/** Ingrédient du référentiel utilisé par au moins une recette (choix du menu du jour). */
+export interface RecipeIngredientOption {
+  slug: string;
+  name: string;
+  category: string;
+  /** Nombre de recettes qui l'utilisent. */
+  recipes: number;
+}
+
+let recipeIngredients: Promise<RecipeIngredientOption[]> | null = null;
+
+/** Ingrédients des recettes (hors produits de base toujours présents), du plus utilisé au moins utilisé. */
+export function ingredientsInRecipes(supabase: SupabaseClient): Promise<RecipeIngredientOption[]> {
+  recipeIngredients ??= (async () => {
+    const catalog = await fetchAll((a, b) => supabase.from("recipe_catalog").select("version_id").order("version_id").range(a, b), "Recettes illisibles");
+    const rows = await fetchAll((a, b) => supabase.from("recipe_ingredients").select("version_id, optional, ingredients(slug, name, category, is_pantry_staple)")
+      .in("version_id", catalog.map((r) => r.version_id)).eq("optional", false).order("version_id").order("position").range(a, b), "Ingrédients illisibles");
+    const bySlug = new Map<string, RecipeIngredientOption & { versions: Set<string> }>();
+    for (const r of rows) {
+      const i = r.ingredients;
+      if (!i?.slug || i.is_pantry_staple) continue;
+      const entry = bySlug.get(i.slug) ?? { slug: i.slug, name: i.name, category: i.category, recipes: 0, versions: new Set<string>() };
+      entry.versions.add(r.version_id);
+      entry.recipes = entry.versions.size;
+      bySlug.set(i.slug, entry);
+    }
+    return [...bySlug.values()].map(({ versions: _v, ...o }) => o).sort((a, b) => b.recipes - a.recipes || a.name.localeCompare(b.name));
+  })().catch((e) => {
+    recipeIngredients = null;
+    throw e;
+  });
+  return recipeIngredients;
+}
+
+/** Repas enregistrés à partir d'une date, toutes planifications confondues (menu du jour et repas à remplacer). */
+export async function getSlotsFrom(supabase: SupabaseClient, householdId: string, from: IsoDate): Promise<PlannedSlot[]> {
+  const { data, error } = await supabase.from("meal_slots").select("*").eq("household_id", householdId).gte("meal_date", from).order("meal_date");
+  check(error, "Repas illisibles");
+  return ((data ?? []) as Row[]).map(toSlot);
 }
 
 export async function getPlanSlots(supabase: SupabaseClient, planId: string): Promise<PlannedSlot[]> {

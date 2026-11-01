@@ -38,6 +38,9 @@ const FOOD_GROUP_TEST: Record<string, (r: PlannerRecipe) => boolean> = {
   coquillages: (r) => r.ingredients.some((i) => !i.optional && /^(moule|coque|saint_jacques|coquillage|palourde|huitre)/.test(i.slug ?? "")),
 };
 
+/** Ordre des repas : par date, le déjeuner avant le dîner. */
+const mealKey = (m: { date: IsoDate; mealType?: string }) => `${m.date}:${m.mealType === "dejeuner" ? 0 : 1}`;
+
 export interface SlotPlan {
   slotId: string;
   round: 1 | 2;
@@ -48,6 +51,15 @@ export interface PlanOptions {
   /** Tour demandé par repas (2 après refus de toutes les propositions du tour 1). */
   rounds?: Record<string, 1 | 2>;
   count?: number;
+  /** Ingrédient imposé par repas (menu du jour choisi d'après un ingrédient acheté ou à acheter). */
+  mustInclude?: Record<string, string>;
+  /** Nombre de repas de la semaine pour les repères d'équilibre (par défaut : les repas demandés). */
+  mealsInPlan?: number;
+  /**
+   * Menu du jour prioritaire : il puise dans ce qui est à la maison, même ce qui est compté pour un repas prévu plus
+   * tard (le foyer est prévenu ensuite, voir `shortagesAfter`). Par défaut, les repas choisis réservent leurs ingrédients.
+   */
+  todayFirst?: boolean;
 }
 
 interface Evaluation {
@@ -226,7 +238,9 @@ export function planMeals(ctx: PlannerContext, slots: MealSlot[], options: PlanO
   };
   const history = ctx.history.map(known).filter((m) => m !== null).sort((a, b) => a.date.localeCompare(b.date));
   const accepted = ctx.accepted.map(known).filter((m) => m !== null);
-  for (const m of [...history, ...accepted]) consumeRecipe(stock, m.recipe, m);
+  for (const m of [...history, ...accepted]) {
+    if (!options.todayFirst || mealKey(m) < mealKey(ordered[0]!)) consumeRecipe(stock, m.recipe, m);
+  }
 
   const week: WeekState = {
     meals: accepted.map((m) => ({ recipe: m.recipe, date: m.date, slotId: m.slotId })),
@@ -237,17 +251,22 @@ export function planMeals(ctx: PlannerContext, slots: MealSlot[], options: PlanO
   const acceptedSlots = new Set(accepted.map((m) => m.slotId));
 
   const plans: SlotPlan[] = [];
+  const mealsInPlan = options.mealsInPlan ?? ordered.length;
   for (const slot of ordered) {
     if (acceptedSlots.has(slot.id)) continue;
+    const must = options.mustInclude?.[slot.id];
     const excluded = new Set([...servedRecently(slot.date), ...week.meals.map((m) => m.recipe.id), ...(ctx.rejected[slot.id] ?? [])]);
     const requested = options.rounds?.[slot.id] ?? 1;
     const candidates = (round: 1 | 2) => ctx.recipes
       .filter((r) => allowed(ctx, r, slot, excluded))
+      .filter((r) => !must || r.ingredients.some((i) => !i.optional && i.slug === must))
       .map((r) => evaluate(r, slot, stock))
-      .filter((e) => (round === 1 ? e.missing.length === 0 : e.missing.length >= 1 && e.missing.length <= MAX_MISSING))
-      .map((e) => ({ ...e, ...score(ctx, e, slot, week, ordered.length) }))
-      // Au tour 1, une recette qui déséquilibre la semaine laisse plutôt la place au tour 2 (quelques achats).
-      .filter((c) => round === 2 || c.score >= 0)
+      .map((e) => ({ ...e, ...score(ctx, e, slot, week, mealsInPlan) }))
+      // Au tour 1, une recette qui déséquilibre la semaine laisse plutôt la place au tour 2 (quelques achats). Avec un
+      // ingrédient imposé, le tour 2 reprend ces recettes sans achat : elles valent mieux qu'une idée de Mistral.
+      .filter((c) => (round === 1
+        ? c.missing.length === 0 && c.score >= 0
+        : (c.missing.length >= 1 && c.missing.length <= MAX_MISSING) || (must !== undefined && c.missing.length === 0 && c.score < 0)))
       .sort((a, b) => b.score - a.score || a.recipe.totalMin - b.recipe.totalMin);
 
     let round: 1 | 2 = requested;
@@ -272,14 +291,65 @@ export function planMeals(ctx: PlannerContext, slots: MealSlot[], options: PlanO
 }
 
 /** Ingrédients à acheter pour cuisiner une recette donnée à ce repas (recette ajoutée ou proposée par Mistral). */
-export function missingForSlot(ctx: PlannerContext, recipe: PlannerRecipe, slot: MealSlot): MissingIngredient[] {
+export function missingForSlot(ctx: PlannerContext, recipe: PlannerRecipe, slot: MealSlot, options: { todayFirst?: boolean } = {}): MissingIngredient[] {
   const byId = new Map([...ctx.recipes, recipe].map((r) => [r.id, r]));
   const stock = Stock.fromPurchases(ctx.purchases, { freezes: ctx.prefs.freezesFreshMeatFish });
   for (const m of [...ctx.history, ...ctx.accepted].sort((a, b) => a.date.localeCompare(b.date))) {
     const r = byId.get(m.recipeId);
-    if (r && m.slotId !== slot.id) consumeRecipe(stock, r, m);
+    if (r && m.slotId !== slot.id && (!options.todayFirst || mealKey(m) < mealKey(slot))) consumeRecipe(stock, r, m);
   }
   return evaluate(recipe, slot, stock).missing;
+}
+
+/** Repas choisi plus tard qui n'aura plus assez d'ingrédients une fois le nouveau repas cuisiné. */
+export interface Shortage {
+  slotId: string;
+  recipeId: string;
+  date: IsoDate;
+  mealType: MealSlot["mealType"];
+  /** Ingrédients qui manqueront (en plus de ce qui manquait déjà). */
+  missing: MissingIngredient[];
+}
+
+/**
+ * Repas déjà choisis pour plus tard qui manqueront d'un ingrédient si l'on cuisine `chosen` : les courses de la semaine
+ * sont consommées repas après repas, dans l'ordre du calendrier, avec et sans ce repas (mêmes règles que les propositions).
+ */
+export function shortagesAfter(ctx: PlannerContext, chosen: ServedMeal): Shortage[] {
+  const byId = new Map(ctx.recipes.map((r) => [r.id, r]));
+  const added = byId.get(chosen.recipeId);
+  if (!added) return [];
+  const meals = [...ctx.history, ...ctx.accepted.filter((m) => m.slotId !== chosen.slotId)]
+    .filter((m) => byId.has(m.recipeId)).sort((a, b) => mealKey(a).localeCompare(mealKey(b)));
+  const run = (withChosen: boolean) => {
+    const stock = Stock.fromPurchases(ctx.purchases, { freezes: ctx.prefs.freezesFreshMeatFish });
+    const missing = new Map<string, MissingIngredient[]>();
+    let pending = withChosen;
+    for (const m of meals) {
+      const later = mealKey(m) > mealKey(chosen);
+      if (pending && later) {
+        consumeRecipe(stock, added, chosen);
+        pending = false;
+      }
+      const recipe = byId.get(m.recipeId)!;
+      if (later && m.slotId) {
+        const slot: MealSlot = { id: m.slotId, date: m.date, mealType: m.mealType ?? "diner", maxTotalMin: null, servings: m.servings };
+        missing.set(m.slotId, evaluate(recipe, slot, stock).missing);
+      }
+      consumeRecipe(stock, recipe, m);
+    }
+    return missing;
+  };
+  const before = run(false);
+  const after = run(true);
+  const shortages: Shortage[] = [];
+  for (const m of meals) {
+    if (!m.slotId || !after.has(m.slotId)) continue;
+    const had = new Set((before.get(m.slotId) ?? []).map((x) => x.slug));
+    const lacking = after.get(m.slotId)!.filter((x) => !had.has(x.slug));
+    if (lacking.length) shortages.push({ slotId: m.slotId, recipeId: m.recipeId, date: m.date, mealType: m.mealType ?? "diner", missing: lacking });
+  }
+  return shortages;
 }
 
 /** Les jours d'une semaine de planification, à partir d'une date. */

@@ -6,6 +6,7 @@ import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View, type Sc
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon, Logo } from "../components/icons";
+import { IngredientMenu, type IngredientMenuRequest } from "../components/IngredientMenu";
 import { ReminderSheet } from "../components/ReminderSheet";
 import { TimersBar } from "../components/Steps";
 import { TimeWheel } from "../components/TimeWheel";
@@ -17,7 +18,8 @@ import { supabase } from "../lib/supabase";
 import { BRAND_FONT, CARD_SHADOW, useColors } from "../lib/theme";
 import { useTimers } from "../lib/timers";
 import {
-  addDays, cancelMealChoice, getShoppingList, getWeekSlots, savePlan, toIsoDate, weekDates, type ShoppingItem, type SlotRequest, type WeekSlot,
+  addDays, cancelMealChoice, ensureSlot, getShoppingList, getWeekSlots, savePlan, toIsoDate, weekDates, type ShoppingItem, type SlotRequest,
+  type WeekSlot,
 } from "../modules/planning";
 import type { MealType } from "../modules/recipes";
 
@@ -133,6 +135,22 @@ export default function Accueil() {
     }
   };
 
+  /** Menu du jour d'après un ingrédient : même écran de propositions, limité à ce repas et à cet ingrédient. */
+  const findTodayMenu = async (r: IngredientMenuRequest) => {
+    setBusy("today");
+    setError("");
+    try {
+      const slot = await ensureSlot(supabase, household.id, { date: today, mealType: r.mealType, maxTotalMin: r.maxTotalMin, servings: household.defaultServings });
+      router.push({ pathname: "/propositions", params: {
+        plan: slot.planId, start: today, slot: slot.id, ingredient: r.ingredient.slug, buy: r.toBuy ? "1" : "0",
+      } });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const cancel = (s: WeekSlot) => confirm(`Annuler « ${s.name} » ?`, "Annuler ce menu", async () => {
     setBusy(s.slotId);
     setError("");
@@ -208,6 +226,11 @@ export default function Accueil() {
             </View>
           )}
         </View>
+
+        {loaded && (
+          <IngredientMenu householdId={household.id} today={today} busy={busy === "today"} onFind={findTodayMenu}
+            todaySlots={{ dejeuner: slots[`${today}:dejeuner`], diner: slots[`${today}:diner`] }} />
+        )}
 
         <View style={{ paddingLeft: 13, paddingRight: 9 }}>
           <SectionTitle icon="calendar" title="Ma semaine de menus" action="Recettes" onAction={() => router.push("/recettes")} />
