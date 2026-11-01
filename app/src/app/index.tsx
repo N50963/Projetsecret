@@ -240,9 +240,9 @@ export default function Accueil() {
           <SectionTitle icon="calendar" title="Ma semaine de menus" action="Recettes" onAction={() => router.push("/recettes")} />
         </View>
 
-        <View style={styles.list}>
+        <View style={styles.menus}>
           {loaded && menus.length === 0 && (
-            <Text style={[styles.empty, { color: c.muted }]}>Aucun menu choisi pour la semaine : cochez les repas à prévoir ci-dessous.</Text>
+            <Text style={[styles.empty, { color: c.muted, marginLeft: 12.8 }]}>Aucun menu choisi pour la semaine : cochez les repas à prévoir ci-dessous.</Text>
           )}
           {others.map((s) => {
             const pic = picture(s.recipeId);
@@ -365,8 +365,12 @@ const styles = StyleSheet.create({
     textShadowColor: "rgba(0,0,0,0.4)", textShadowRadius: 2, textShadowOffset: { width: 0, height: 1 },
   },
   list: { paddingLeft: 12.8, paddingRight: 9.2, gap: 7 },
+  // Menus choisis : la photo part du bord gauche de l'écran, sans marge ni liseré.
+  menus: { paddingRight: 9.2, gap: 7 },
   empty: { fontSize: 15, lineHeight: 20, paddingHorizontal: 2, paddingBottom: 4 },
-  row: { minHeight: 72, borderRadius: 12, borderWidth: 1, overflow: "hidden", flexDirection: "row" },
+  row: {
+    minHeight: 72, borderTopRightRadius: 12, borderBottomRightRadius: 12, borderWidth: 1, borderLeftWidth: 0, overflow: "hidden", flexDirection: "row",
+  },
   rowPhoto: { position: "absolute", left: 0, top: 0, bottom: 0, width: 140 },
   rowWaiting: { alignItems: "center", justifyContent: "center" },
   rowFade: { position: "absolute", top: 0, bottom: 0, right: 0, width: 52 },
