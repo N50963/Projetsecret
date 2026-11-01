@@ -7,9 +7,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon, Logo } from "../components/icons";
 import { IngredientMenu, type IngredientMenuRequest } from "../components/IngredientMenu";
+import { PlanningGrid } from "../components/PlanningGrid";
 import { ReminderSheet } from "../components/ReminderSheet";
 import { TimersBar } from "../components/Steps";
-import { TimeWheel } from "../components/TimeWheel";
 import { BottomNav, Button, ErrorText, SectionTitle, TextLink } from "../components/ui";
 import { dayLabel, mealLabel, minutes } from "../lib/format";
 import { illustrationUrls, pictureOf, preloadPictures, sourceOf, type Picture } from "../lib/images";
@@ -277,37 +277,7 @@ export default function Accueil() {
               <View style={{ flex: 1 }}><SectionTitle icon="calendar" title="Repas à prévoir" /></View>
               {menus.length > 0 && <TextLink title="Masquer" onPress={() => setPlanning(false)} />}
             </View>
-            <View style={styles.list}>
-              {toPlan.map((d) => {
-                const choice = choiceOf(d);
-                const planned = MEALS.filter((m) => !isChosen(d, m));
-                const active = planned.some((m) => choice[m]);
-                return (
-                  <View key={d} style={[styles.day, { backgroundColor: c.card, borderColor: c.cardLine }, CARD_SHADOW]}>
-                    <Text style={[styles.dayName, { color: d === today ? c.primary : c.text }]}>{dayLabel(d, today)}</Text>
-                    <View style={styles.plan}>
-                      <View style={{ flex: 1, gap: 8 }}>
-                        {planned.map((m) => {
-                          const on = choice[m];
-                          return (
-                            <Pressable key={m} onPress={() => update(d, { [m]: !on })} accessibilityRole="checkbox" accessibilityState={{ checked: on }}
-                              style={({ pressed }) => [styles.mealChip, {
-                                backgroundColor: on ? c.greenSoft : c.chip, borderColor: on ? c.primary : "transparent", opacity: pressed ? 0.8 : 1,
-                              }]}>
-                              <Icon name={on ? "checkCircle" : "circle"} size={22} color={on ? c.primary : c.text} />
-                              <Text style={{ color: c.text, fontSize: 16, fontWeight: "500" }}>{mealLabel(m)}</Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                      {active
-                        ? <TimeWheel value={choice.time} onChange={(time) => update(d, { time })} />
-                        : <Text style={[styles.nothing, { color: c.muted }]}>Rien de prévu</Text>}
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
+            <PlanningGrid days={toPlan} today={today} planOf={choiceOf} isChosen={isChosen} onChange={update} />
           </View>
         )}
 
@@ -380,11 +350,6 @@ const styles = StyleSheet.create({
   rowName: { fontSize: 15.5, lineHeight: 19, fontWeight: "700", marginTop: 1 },
   rowMeta: { fontSize: 14.2, lineHeight: 18 },
   planningHead: { flexDirection: "row", alignItems: "center", paddingLeft: 13, paddingRight: 13, marginTop: 6 },
-  day: { borderRadius: 12, borderWidth: 1, paddingTop: 10, paddingLeft: 12, paddingRight: 8, paddingBottom: 8, gap: 8 },
-  dayName: { fontSize: 16, lineHeight: 20, fontWeight: "700" },
-  plan: { flexDirection: "row", alignItems: "center", gap: 10 },
-  mealChip: { height: 48, flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 10, borderRadius: 13, borderWidth: 1.5 },
-  nothing: { width: 112, textAlign: "center", fontSize: 15, lineHeight: 20 },
   shopping: {
     flexDirection: "row", alignItems: "center", gap: 12, minHeight: 66, marginTop: 12, marginLeft: 12.8, marginRight: 9.2,
     paddingVertical: 8, paddingLeft: 12, paddingRight: 9, borderRadius: 12, borderWidth: 1,

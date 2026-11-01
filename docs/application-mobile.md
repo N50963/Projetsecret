@@ -33,7 +33,8 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    postérieur à son ajout (vue `shopping_list_status`).
 5. **Accueil** : en grand, bord à bord avec un fondu à droite, le menu du jour (ou, s'il n'y en a pas, le prochain menu de la semaine) ; puis les menus de
    la semaine empilés en lignes basses (photo qui part du bord gauche et s'efface en fondu avant le nom, jour écrit en
-   entier, croix en haut à droite pour annuler le menu ; un toucher ouvre la recette en fondu). Les repas à prévoir (déjeuners et dîners à cocher, temps disponible :
+   entier, croix en haut à droite pour annuler le menu ; un toucher ouvre la recette en fondu). Les repas à prévoir, en grille (une case par jour, trois par ligne : déjeuner et dîner à cocher, temps disponible
+   qui change d'un toucher :
    30 min, 1 h ou sans limite) sont masqués dès que des menus sont choisis, derrière le raccourci « Prévoir d'autres
    repas ».
 6. **Menu du jour avec un ingrédient** (carte principale de l'accueil) : le foyer tape un ingrédient (recherche parmi
