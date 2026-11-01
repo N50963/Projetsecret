@@ -31,9 +31,9 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    de corriger n'importe quel produit déjà acheté (ex. « pavés de truite » → truite fumée).
 4. **Comparaison avec la liste de courses** : un article est coché tout seul quand son ingrédient apparaît sur un ticket
    postérieur à son ajout (vue `shopping_list_status`).
-5. **Accueil** : en grand, bord à bord avec un fondu à droite, le menu du jour (ou, s'il n'y en a pas, le prochain menu de la semaine) ; puis les menus de
-   la semaine empilés en lignes basses (photo qui part du bord gauche et s'efface en fondu avant le nom, jour écrit en
-   entier, croix en haut à droite pour annuler le menu ; un toucher ouvre la recette en fondu). « Autre repas possible »
+5. **Accueil** : en grand, bord à bord avec un fondu à droite, le prochain repas (menu du jour ou, s'il n'y en a pas, le
+   prochain menu de la semaine ; croix pour l'annuler, toucher pour la fiche). Les autres menus choisis se retrouvent jour
+   par jour dans le ruban de la semaine (plus de liste séparée). « Autre repas possible »
    reprend la maquette Claude Design « Ruban de la semaine » (`components/WeekRibbon.tsx`) : les 7 jours en pastilles
    (jour abrégé, numéro, deux barrettes pour le déjeuner et le dîner : vert = menu choisi, vert clair = à proposer,
    beige = libre), puis la carte du jour touché. Un menu choisi y apparaît avec sa photo (toucher : fiche ; croix :

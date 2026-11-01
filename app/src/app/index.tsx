@@ -26,8 +26,6 @@ import type { MealType } from "../modules/recipes";
 const MEALS: MealType[] = ["dejeuner", "diner"];
 const DEFAULT_TIME = 60;
 const LEVEL = ["", "Facile", "Moyen", "Difficile"];
-/** Fondu de la photo vers le fond de la carte (#FDF4E9). */
-const FADE = ["rgba(253,244,233,0)", "rgba(253,244,233,0.75)", "#FDF4E9"] as const;
 
 interface DayChoice {
   dejeuner: boolean;
@@ -50,10 +48,9 @@ function confirm(message: string, action: string, onConfirm: () => void) {
 }
 
 /**
- * Accueil MenuBily : en-tête au logo ; en grand, le menu du jour ou, s'il n'y en a pas, le prochain ; les menus de la
- * semaine empilés en lignes (photo en fondu, nom, jour en entier) ; les repas de la semaine en ruban (7 jours, puis la
- * carte du jour choisi : menus choisis et repas à cocher avec leur temps), section repliable ; liste de courses ; barre de
- * navigation.
+ * Accueil MenuBily : en-tête au logo ; en grand, le prochain repas (menu du jour, sinon le prochain de la semaine) ;
+ * recherche de menu par ingrédient ; les repas de la semaine en ruban (7 jours, puis la carte du jour choisi : menus
+ * choisis et repas à cocher avec leur temps), section repliable ; liste de courses ; barre de navigation.
  */
 export default function Accueil() {
   const router = useRouter();
@@ -115,10 +112,10 @@ export default function Accueil() {
   const update = (d: string, patch: Partial<DayChoice>) => setChoices((p) => ({ ...p, [d]: { ...choiceOf(d), ...patch } }));
   const isChosen = (d: string, m: MealType) => slots[`${d}:${m}`]?.status === "accepted";
 
-  // Menus choisis, dans l'ordre de la semaine : le premier (aujourd'hui, sinon le prochain) s'affiche en grand.
+  // Menus choisis, dans l'ordre de la semaine : le premier (aujourd'hui, sinon le prochain) s'affiche en grand en tête ;
+  // tous les menus choisis se retrouvent ensuite jour par jour dans le ruban de la semaine.
   const menus = days.flatMap((d) => MEALS.map((m) => slots[`${d}:${m}`]).filter((s): s is WeekSlot => s?.status === "accepted"));
   const hero = menus[0];
-  const others = menus.slice(1);
   const showPlanning = loaded && !hidden;
 
   const requests: SlotRequest[] = days.flatMap((d) => MEALS
@@ -234,41 +231,6 @@ export default function Accueil() {
             todaySlots={{ dejeuner: slots[`${today}:dejeuner`], diner: slots[`${today}:diner`] }} />
         )}
 
-        <View style={{ paddingLeft: 13, paddingRight: 9 }}>
-          <SectionTitle icon="calendar" title="Ma semaine de menus" action="Recettes" onAction={() => router.push("/recettes")} />
-        </View>
-
-        <View style={styles.menus}>
-          {loaded && menus.length === 0 && (
-            <Text style={[styles.empty, { color: c.muted, marginLeft: 12.8 }]}>Aucun menu choisi pour la semaine : cochez les repas ci-dessous.</Text>
-          )}
-          {others.map((s) => {
-            const pic = picture(s.recipeId);
-            return (
-              <Pressable key={s.slotId} onPress={() => open(s)} accessibilityRole="button"
-                accessibilityLabel={`${dayLabel(s.date, today)}, ${mealLabel(s.mealType)} : ${s.name}`}
-                style={({ pressed }) => [styles.row, { backgroundColor: c.card, borderColor: c.cardLine, opacity: pressed ? 0.85 : 1 }]}>
-                <View style={styles.rowPhoto}>
-                  {pic
-                    ? <Image source={sourceOf(pic)} cachePolicy="memory-disk" style={StyleSheet.absoluteFill} contentFit="cover" transition={0} />
-                    : <View style={[StyleSheet.absoluteFill, styles.rowWaiting, { backgroundColor: c.chip }]}><Icon name="image" size={28} color={c.muted} /></View>}
-                  {/* Fondu légèrement oblique : la photo s'efface en biais, plus loin en bas qu'en haut. */}
-                  {/* Paliers choisis pour que le biais reste invisible aux bords : transparent à gauche, opaque à droite. */}
-                  <LinearGradient colors={FADE} locations={[0.2, 0.55, 0.8]} start={{ x: 0, y: 0.62 }} end={{ x: 1, y: 0.38 }} style={styles.rowFade} />
-                </View>
-                <View style={styles.rowText}>
-                  <Text style={[styles.rowDay, { color: s.date === today ? c.primary : c.muted }]}>{dayLabel(s.date, today)} · {mealLabel(s.mealType)}</Text>
-                  <Text style={[styles.rowName, { color: c.text }]} numberOfLines={2}>{s.name}</Text>
-                </View>
-                <Pressable onPress={() => cancel(s)} disabled={busy !== null} hitSlop={6} accessibilityRole="button"
-                  accessibilityLabel={`Annuler « ${s.name} »`} style={({ pressed }) => [styles.rowClose, { opacity: pressed ? 0.6 : 1 }]}>
-                  <Icon name="close" size={18} color={c.muted} />
-                </Pressable>
-              </Pressable>
-            );
-          })}
-        </View>
-
         {loaded && (
           <View>
             <View style={styles.planningHead}>
@@ -333,17 +295,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF", fontSize: 16, fontWeight: "500", marginRight: 12,
     textShadowColor: "rgba(0,0,0,0.4)", textShadowRadius: 2, textShadowOffset: { width: 0, height: 1 },
   },
-  list: { paddingLeft: 12.8, paddingRight: 9.2, gap: 7 },
-  // Menus choisis : la photo part du bord gauche de l'écran, sans marge ni liseré.
-  menus: {},
-  empty: { fontSize: 15, lineHeight: 20, paddingHorizontal: 2, paddingBottom: 4 },
-  row: { minHeight: 72, borderBottomWidth: 1, overflow: "hidden", flexDirection: "row" },
-  rowPhoto: { position: "absolute", left: 0, top: 0, bottom: 0, width: 140 },
-  rowWaiting: { alignItems: "center", justifyContent: "center" },
-  rowFade: { position: "absolute", top: 0, bottom: 0, right: 0, width: 72 },
-  rowText: { flex: 1, minWidth: 0, marginLeft: 136, paddingVertical: 9, paddingRight: 34, justifyContent: "center" },
-  rowClose: { position: "absolute", top: 2, right: 2, width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  rowDay: { fontSize: 13.5, lineHeight: 17, fontWeight: "600" },
   rowName: { fontSize: 15.5, lineHeight: 19, fontWeight: "700", marginTop: 1 },
   rowMeta: { fontSize: 14.2, lineHeight: 18 },
   planningHead: { flexDirection: "row", alignItems: "center", paddingLeft: 13, paddingRight: 7.5, marginTop: 6 },
