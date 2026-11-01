@@ -117,6 +117,15 @@ export default function Propositions() {
   const illustrating = useRef(false);
   const imagesPaused = useRef(false);
   const ideaTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  // Demandes à Mistral abandonnées dès qu'elles ne servent plus : sur Android, 5 connexions au plus vers Supabase, et une
+  // demande à Mistral (20 à 60 s) en occupe une ; laissées en cours, elles retardaient l'enregistrement des choix suivants.
+  const ideaAbort = useRef<AbortController | null>(null);
+  const illustrateAbort = useRef<AbortController | null>(null);
+  // Choix enregistrés en arrière-plan : le menu suivant s'affiche tout de suite.
+  const writes = useRef<Array<Promise<unknown>>>([]);
+  const failures = useRef(0);
+  /** Double toucher sur « Je choisis » : le second ne choisit pas aussi le menu du repas suivant. */
+  const lastChoice = useRef(0);
 
   useEffect(() => {
     (async () => {
@@ -187,27 +196,40 @@ export default function Propositions() {
   useEffect(() => {
     if (!shown || images[shown] !== null || illustrating.current || imagesPaused.current) return;
     illustrating.current = true;
-    illustrateRecipe(household.id, shown)
+    const ctrl = new AbortController();
+    illustrateAbort.current = ctrl;
+    illustrateRecipe(household.id, shown, ctrl.signal)
       .then(async () => {
         forgetIllustration(shown);
         const urls = await illustrationUrls([shown]);
         setImages((prev) => ({ ...prev, ...urls }));
       })
       .catch(() => {
-        imagesPaused.current = true;
+        if (!ctrl.signal.aborted) imagesPaused.current = true;
       })
       .finally(() => {
         illustrating.current = false;
       });
   }, [shown, images, household.id]);
+  // Autre carte : l'image de la précédente n'est plus attendue.
+  useEffect(() => () => illustrateAbort.current?.abort(), [shown]);
 
   // Tous les repas ont leur menu : retour au calendrier de l'accueil (photos et menus de la semaine).
   useEffect(() => {
     if (!slots || !ctx || current || shortages.length) return;
-    // Menu du jour choisi : la suite est celle de tout menu, avec la fiche de préparation et ses étapes.
-    if (focus && chosenToday) router.replace(`/recette/${chosenToday}`);
-    else if (router.canGoBack()) router.back();
-    else router.replace("/");
+    // Les choix en cours d'enregistrement sont attendus ; un échec rouvre son repas (et l'on ne quitte pas l'écran).
+    let live = true;
+    const failed = failures.current;
+    Promise.all(writes.current).then(() => {
+      if (!live || failures.current !== failed) return;
+      // Menu du jour choisi : la suite est celle de tout menu, avec la fiche de préparation et ses étapes.
+      if (focus && chosenToday) router.replace(`/recette/${chosenToday}`);
+      else if (router.canGoBack()) router.back();
+      else router.replace("/");
+    });
+    return () => {
+      live = false;
+    };
   }, [slots, ctx, current, router, shortages.length, focus, chosenToday]);
 
   const next = useCallback(() => {
@@ -223,6 +245,20 @@ export default function Propositions() {
 
   const markSlot = (slotId: string, status: PlannedSlot["status"], recipeId: string | null = null) =>
     setSlots((s) => (s ?? []).map((x) => (x.id === slotId ? { ...x, status, recipeId } : x)));
+
+  /** Enregistrement en arrière-plan ; en cas d'échec, le repas est rouvert pour être choisi de nouveau. */
+  const track = (write: Promise<unknown>, slotId: string) => {
+    writes.current.push(write.catch((e) => {
+      failures.current += 1;
+      setError(`Choix non enregistré (${e instanceof Error ? e.message : String(e)}) : choisissez de nouveau ce repas.`);
+      markSlot(slotId, "open");
+      setCtx((c) => (c ? { ...c, accepted: c.accepted.filter((m) => m.slotId !== slotId) } : c));
+      if (focus) {
+        setPending((p) => (p.includes(slotId) ? p : [slotId, ...p]));
+        if (slotId === focus.slotId) setChosenToday(null);
+      }
+    }));
+  };
 
   /** Menu du jour d'après un ingrédient à acheter : il rejoint la liste de courses avec les autres manques. */
   const withIngredient = (missing: MissingIngredient[], recipeId: string, context: PlannerContext): MissingIngredient[] => {
@@ -264,15 +300,13 @@ export default function Propositions() {
       rejectProposal(supabase, household.id, current.id, p).catch((e) => setError(String(e)));
       return;
     }
-    setBusy("accept");
-    try {
-      await acceptProposal(supabase, current.id, { recipeId: p.recipeId, missing: withIngredient(p.missing, p.recipeId, ctx) });
-      chosen(p.recipeId, ctx);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(null);
-    }
+    if (Date.now() - lastChoice.current < 450) return;
+    lastChoice.current = Date.now();
+    // Le menu suivant s'affiche tout de suite ; le choix s'enregistre en arrière-plan.
+    const missing = withIngredient(p.missing, p.recipeId, ctx);
+    const slotId = current.id;
+    chosen(p.recipeId, ctx);
+    track(acceptProposal(supabase, slotId, { recipeId: p.recipeId, missing }), slotId);
   };
 
   /**
@@ -280,6 +314,12 @@ export default function Propositions() {
    * (contre près d'une minute pour 3 idées d'un coup) et s'affiche aussitôt.
    */
   const startIdeas = useCallback((slot: PlannedSlot, context: PlannerContext) => {
+    // Une seule série d'idées à la fois : la précédente est abandonnée.
+    ideaAbort.current?.abort();
+    ideaTimers.current.forEach(clearTimeout);
+    ideaTimers.current = [];
+    const ctrl = new AbortController();
+    ideaAbort.current = ctrl;
     const meals = focus ? weekMeals : ordered.length;
     const ingredient = focus && slot.id === focus.slotId ? focus.ingredient : null;
     // Autour d'un ingrédient imposé, trois façons de le cuisiner (la protéine en découle) ; sinon trois protéines.
@@ -298,10 +338,12 @@ export default function Propositions() {
       generateRecipes(household.id, {
         brief: `${hint}${brief}`, count: 1, servings: slot.servings,
         constraints: { max_total_min: slot.maxTotalMin, meal_type: slot.mealType, season, main_protein: protein, avoid },
-      })
+      }, ctrl.signal)
         .then(({ recipes }) => forSlot((i) => ({ ...i, pending: i.pending - 1,
           drafts: [...i.drafts, ...recipes.filter((d) => d.recipe.name && d.recipe.ingredients.length >= 3)] })))
-        .catch((e) => forSlot((i) => ({ ...i, pending: i.pending - 1, failed: e instanceof Error ? e.message : String(e) })));
+        .catch((e) => {
+          if (!ctrl.signal.aborted) forSlot((i) => ({ ...i, pending: i.pending - 1, failed: e instanceof Error ? e.message : String(e) }));
+        });
     }, n * IDEA_STAGGER_MS)));
   }, [household.id, ordered.length, focus, weekMeals]);
 
@@ -311,7 +353,12 @@ export default function Propositions() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, round, exhausted]);
 
-  useEffect(() => () => ideaTimers.current.forEach(clearTimeout), []);
+  // Repas suivant (ou écran quitté) : les idées encore en préparation pour ce repas sont abandonnées.
+  useEffect(() => () => {
+    ideaAbort.current?.abort();
+    ideaTimers.current.forEach(clearTimeout);
+    ideaTimers.current = [];
+  }, [current?.id]);
 
   const onDraftSwipe = async (d: Draft, direction: SwipeDirection) => {
     if (!current || !ctx) return;
@@ -321,6 +368,8 @@ export default function Propositions() {
     }
     setBusy("accept");
     setError("");
+    // Les autres idées en préparation ne servent plus : leurs connexions sont libérées pour l'enregistrement.
+    ideaAbort.current?.abort();
     try {
       const recipeId = await createRecipe(supabase, household.id, draftToInput(d.recipe, "mistral"));
       const recipes = await loadRecipesForPlanning(supabase, household.id);
@@ -337,22 +386,20 @@ export default function Propositions() {
     }
   };
 
-  const skip = async () => {
+  const skip = () => {
     if (!current) return;
-    try {
-      if (focus && replacing[current.id]) {
-        // Repas qu'on pensait remplacer, finalement gardé : ce qui lui manquera va sur la liste de courses.
-        await addShoppingItems(supabase, household.id, current.id, replacing[current.id]!);
-        setReplacing(({ [current.id]: _kept, ...rest }) => rest);
-      } else if (current.status === "open") {
-        await skipSlot(supabase, current.id);
-        markSlot(current.id, "skipped");
-      }
-      if (focus) setPending((p) => p.slice(1));
-      setRound(1);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+    const slotId = current.id;
+    if (focus && replacing[slotId]) {
+      // Repas qu'on pensait remplacer, finalement gardé : ce qui lui manquera va sur la liste de courses.
+      writes.current.push(addShoppingItems(supabase, household.id, slotId, replacing[slotId]!)
+        .catch((e) => setError(e instanceof Error ? e.message : String(e))));
+      setReplacing(({ [slotId]: _kept, ...rest }) => rest);
+    } else if (current.status === "open") {
+      markSlot(slotId, "skipped");
+      track(skipSlot(supabase, slotId), slotId);
     }
+    if (focus) setPending((p) => p.slice(1));
+    setRound(1);
   };
 
   /** Repas prévu plus tard qui manquera d'un ingrédient : nouvelles propositions selon ce qui reste et ce qui est prévu. */

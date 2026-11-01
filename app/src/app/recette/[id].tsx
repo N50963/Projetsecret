@@ -253,6 +253,18 @@ export default function FicheRecette() {
       <View style={styles.head}>
         <H1>{recipe.name}</H1>
         {recipe.description ? <Body style={{ color: c.muted }}>{recipe.description}</Body> : null}
+        {/* Note de la recette, modifiable à tout moment (les observations, elles, se donnent en fin de recette faite). */}
+        <View style={styles.note}>
+          <Text style={{ color: c.muted, fontSize: 14.2 }}>{previous?.stars ? "Votre note" : "Noter"}</Text>
+          <StarRating value={previous?.stars ?? null} size={26} onChange={(n) => {
+            if (n === previous?.stars) return;
+            act("note", async () => {
+              await rateRecipe(supabase, household.id, recipe, n, previous?.comment ?? null, previous);
+              setPrevious(await getLatestRating(supabase, household.id, recipe.id));
+            });
+          }} />
+          {busy === "note" ? <ActivityIndicator color={c.primary} /> : null}
+        </View>
       </View>
 
       <View style={styles.durations}>
@@ -448,6 +460,7 @@ export default function FicheRecette() {
 
 const styles = StyleSheet.create({
   head: { paddingHorizontal: 19, paddingTop: 2, gap: 6 },
+  note: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 2 },
   photoFade: { position: "absolute", left: 0, right: 0, bottom: 0, height: 64 },
   // Icône discrète : blanche sur un rond sombre translucide, lisible sur une photo claire comme foncée.
   photoButton: {

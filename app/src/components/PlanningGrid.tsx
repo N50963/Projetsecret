@@ -1,6 +1,7 @@
 /**
- * Repas à prévoir en grille : une case par jour (trois par ligne, deux sur un petit écran). Dans chaque case : le jour en
- * entier, le déjeuner et le dîner à cocher, et le temps disponible (30 min, 1 h, sans limite) qui change à chaque toucher.
+ * Autres repas possibles en grille : une case par jour (trois par ligne, deux sur un petit écran). Dans chaque case : le
+ * jour en entier, le déjeuner et le dîner à cocher, chacun avec son temps disponible (30 min, 1 h, sans limite) qui change
+ * à chaque toucher.
  */
 
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
@@ -14,8 +15,8 @@ import { TIME_CHOICES } from "./TimeWheel";
 export interface DayPlan {
   dejeuner: boolean;
   diner: boolean;
-  /** Temps disponible pour les repas du jour (préparation et cuisson) ; null : sans limite. */
-  time: number | null;
+  /** Temps disponible pour chaque repas (préparation et cuisson) ; null : sans limite. */
+  time: Record<MealType, number | null>;
 }
 
 const MEALS: MealType[] = ["dejeuner", "diner"];
@@ -38,7 +39,6 @@ function DayCell({ date, today, width, plan, chosen, onChange }: {
   const c = useColors();
   const [top, sub] = dayLines(date, today);
   const active = MEALS.some((m) => !chosen[m] && plan[m]);
-  const next = TIME_CHOICES[(Math.max(0, TIME_CHOICES.indexOf(plan.time)) + 1) % TIME_CHOICES.length] ?? null;
   return (
     <View style={[styles.cell, { width, backgroundColor: c.card, borderColor: active ? c.primary : c.cardLine }, CARD_SHADOW]}>
       <View>
@@ -47,35 +47,38 @@ function DayCell({ date, today, width, plan, chosen, onChange }: {
       </View>
       {MEALS.map((m) => {
         if (chosen[m]) {
+          // Menu déjà choisi pour ce repas : rappel discret, sans temps à régler.
           return (
             <View key={m} style={styles.meal} accessibilityLabel={`${mealLabel(m)} déjà choisi`}>
               <Icon name="checkCircle" size={18} color={c.muted} />
-              <Text style={[styles.mealText, { color: c.muted }]} numberOfLines={1}>{mealLabel(m)} choisi</Text>
+              <Text style={[styles.mealText, { color: c.muted }]} numberOfLines={1}>{mealLabel(m)}</Text>
             </View>
           );
         }
         const on = plan[m];
+        const time = plan.time[m];
+        const next = TIME_CHOICES[(Math.max(0, TIME_CHOICES.indexOf(time)) + 1) % TIME_CHOICES.length] ?? null;
         return (
-          <Pressable key={m} onPress={() => onChange({ [m]: !on })} accessibilityRole="checkbox" accessibilityState={{ checked: on }}
-            accessibilityLabel={`${top} ${sub}, ${mealLabel(m)}`} hitSlop={{ top: 3, bottom: 3 }}
-            style={({ pressed }) => [styles.meal, styles.toggle, {
-              backgroundColor: on ? c.greenSoft : c.chip, borderColor: on ? c.primary : "transparent", opacity: pressed ? 0.8 : 1,
-            }]}>
-            <Icon name={on ? "checkCircle" : "circle"} size={18} color={on ? c.primary : c.text} />
-            <Text style={[styles.mealText, { color: c.text }]} numberOfLines={1}>{mealLabel(m)}</Text>
-          </Pressable>
+          <View key={m} style={{ gap: 4 }}>
+            <Pressable onPress={() => onChange({ [m]: !on })} accessibilityRole="checkbox" accessibilityState={{ checked: on }}
+              accessibilityLabel={`${top} ${sub}, ${mealLabel(m)}`} hitSlop={{ top: 3, bottom: 3 }}
+              style={({ pressed }) => [styles.meal, styles.toggle, {
+                backgroundColor: on ? c.greenSoft : c.chip, borderColor: on ? c.primary : "transparent", opacity: pressed ? 0.8 : 1,
+              }]}>
+              <Icon name={on ? "checkCircle" : "circle"} size={18} color={on ? c.primary : c.text} />
+              <Text style={[styles.mealText, { color: c.text }]} numberOfLines={1}>{mealLabel(m)}</Text>
+            </Pressable>
+            {on ? (
+              <Pressable onPress={() => onChange({ time: { ...plan.time, [m]: next } })} accessibilityRole="button"
+                accessibilityLabel={`${mealLabel(m)}, temps disponible : ${timeLabel(time)}. Toucher pour passer à ${timeLabel(next)}`}
+                style={({ pressed }) => [styles.time, { backgroundColor: c.background, borderColor: c.border, opacity: pressed ? 0.7 : 1 }]}>
+                <Icon name="clock" size={14} color={c.greenInk} />
+                <Text style={[styles.timeText, { color: c.greenInk }]} numberOfLines={1}>{timeLabel(time)}</Text>
+              </Pressable>
+            ) : null}
+          </View>
         );
       })}
-      {active ? (
-        <Pressable onPress={() => onChange({ time: next })} accessibilityRole="button"
-          accessibilityLabel={`Temps disponible : ${timeLabel(plan.time)}. Toucher pour passer à ${timeLabel(next)}`}
-          style={({ pressed }) => [styles.time, { backgroundColor: c.background, borderColor: c.border, opacity: pressed ? 0.7 : 1 }]}>
-          <Icon name="clock" size={14} color={c.greenInk} />
-          <Text style={[styles.timeText, { color: c.greenInk }]} numberOfLines={1}>{timeLabel(plan.time)}</Text>
-        </Pressable>
-      ) : (
-        <View style={styles.time}><Text style={[styles.timeText, { color: c.muted, fontWeight: "400" }]} numberOfLines={1}>Rien de prévu</Text></View>
-      )}
     </View>
   );
 }

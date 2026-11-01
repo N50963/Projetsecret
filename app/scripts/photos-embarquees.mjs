@@ -16,7 +16,7 @@ export const BUNDLED_DISHES: Record<string, { asset: number; version: string }> 
 ${dishes.join("\n")}
 };
 
-/** Vignettes des ingrédients sur fond blanc (détourées, ou en pastille ronde pour les graines et poudres). */
+/** Vignettes des ingrédients sur fond blanc (détourées, ou photo telle quelle pour les graines et poudres). */
 export const BUNDLED_INGREDIENTS: Record<string, number> = {
 ${ingredients.join("\n")}
 };

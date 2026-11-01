@@ -6,30 +6,27 @@ Usage (Python avec rembg et Pillow ; modèle isnet-general-use téléchargé au 
 puis : node scripts/photos-embarquees.mjs
 
 - Sujet détouré (rembg), recadré et centré sur un carré blanc.
-- Pastille ronde sur fond blanc quand il n'y a pas de sujet à détourer (graines, poudres, herbes séchées : la photo
-  remplit le cadre) ou quand le détourage est raté (liste PASTILLE, établie à l'œil sur une planche de contrôle).
+- Photo telle quelle, carrée et non recadrée en rond, posée au centre d'un fond blanc, quand il n'y a pas de sujet à
+  détourer (graines, poudres, herbes séchées : la photo remplit le cadre) ou quand le détourage est raté (liste
+  TELLE_QUELLE, établie à l'œil sur une planche de contrôle).
 """
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageFilter
 from rembg import new_session, remove
 
-PASTILLE = set("""anchois beurre bouillon canard_aiguillette canard_magret_fume charcuterie_tranchee chou_blanc citron comte
+TELLE_QUELLE = set("""anchois beurre bouillon canard_aiguillette canard_magret_fume charcuterie_tranchee chou_blanc citron comte
 epinard falafel gnocchi jambon_cuit levure_chimique moutarde nouilles pain pates_fraiches persil poisson_blanc porc_hache
 porc_tranche poivre saucisson vinaigre""".split())
-SIZE, MARGIN, SS = 160, 0.08, 4
+SIZE, MARGIN, PHOTO = 160, 0.08, 136
 
 
-def pastille(im: Image.Image) -> Image.Image:
-    dia = int(SIZE * 0.9)
-    photo = im.resize((dia * SS, dia * SS), Image.LANCZOS)
-    mask = Image.new("L", (dia * SS, dia * SS), 0)
-    ImageDraw.Draw(mask).ellipse((0, 0, dia * SS - 1, dia * SS - 1), fill=255)
-    big = Image.new("RGB", (SIZE * SS, SIZE * SS), "white")
-    off = (SIZE * SS - dia * SS) // 2
-    big.paste(photo, (off, off), mask)
-    return big.resize((SIZE, SIZE), Image.LANCZOS)
+def telle_quelle(im: Image.Image) -> Image.Image:
+    """Photo carrée inchangée, centrée sur un fond blanc (marge de 12 px)."""
+    canvas = Image.new("RGB", (SIZE, SIZE), "white")
+    canvas.paste(im.resize((PHOTO, PHOTO), Image.LANCZOS), ((SIZE - PHOTO) // 2, (SIZE - PHOTO) // 2))
+    return canvas
 
 
 def detoure(im: Image.Image, session) -> Image.Image | None:
@@ -52,9 +49,9 @@ def main(src: Path, dst: Path) -> None:
     session = new_session("isnet-general-use")
     for p in sorted(src.glob("*.jpg")):
         im = Image.open(p).convert("RGB")
-        out = None if p.stem in PASTILLE else detoure(im, session)
-        (out or pastille(im)).save(dst / p.name, "JPEG", quality=82, optimize=True)
-        print(p.stem, "détouré" if out else "pastille")
+        out = None if p.stem in TELLE_QUELLE else detoure(im, session)
+        (out or telle_quelle(im)).save(dst / p.name, "JPEG", quality=82, optimize=True)
+        print(p.stem, "détouré" if out else "telle quelle")
 
 
 if __name__ == "__main__":

@@ -101,8 +101,8 @@ légumes 7…) ; un repas choisi réserve ses ingrédients. Les recettes aimées
   dans l'application (`app/assets/plats`, `app/assets/ingredients`, table `app/src/lib/bundled.ts` générée par
   `app/scripts/photos-embarquees.mjs`) : affichage instantané, sans réseau. Une image en ligne plus récente (même recette,
   autre date) ou une recette ajoutée depuis est téléchargée à la place ; une photo du foyer reste prioritaire.
-- Ingrédients sur fond blanc : sujet détouré (rembg) et centré sur un carré blanc, ou pastille ronde pour les graines,
-  poudres et photos mal détourées (`app/scripts/ingredients-fond-blanc.py`) ; vignette bordée sur la fiche.
+- Ingrédients sur fond blanc : sujet détouré (rembg) et centré sur un carré blanc, ou photo telle quelle (non recadrée)
+  sur fond blanc pour les graines, poudres et photos mal détourées (`app/scripts/ingredients-fond-blanc.py`) ; vignette bordée sur la fiche.
 - Limite : 40 appels par heure et par foyer (journal `ai_calls`).
 - Plan gratuit Supabase : voir `docs/plan-gratuit-supabase.md`.
 

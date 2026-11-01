@@ -89,7 +89,7 @@ export const BUNDLED_DISHES: Record<string, { asset: number; version: string }> 
   "ff54c21f-f5b7-4bd8-b07b-2ea144b3eebb": { asset: require("../../assets/plats/ff54c21f-f5b7-4bd8-b07b-2ea144b3eebb.jpg"), version: "2026-11-01T08:59:27.427+00:00" },
 };
 
-/** Vignettes des ingrédients sur fond blanc (détourées, ou en pastille ronde pour les graines et poudres). */
+/** Vignettes des ingrédients sur fond blanc (détourées, ou photo telle quelle pour les graines et poudres). */
 export const BUNDLED_INGREDIENTS: Record<string, number> = {
   abricot: require("../../assets/ingredients/abricot.jpg"),
   agrume_petit: require("../../assets/ingredients/agrume_petit.jpg"),

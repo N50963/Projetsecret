@@ -29,8 +29,12 @@ export interface Draft {
   issues: string[];
 }
 
-async function call<T>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke("mistral", { body });
+/**
+ * Appel de la fonction serveur. `signal` permet d'abandonner une demande devenue inutile : sur Android, l'application
+ * n'ouvre que 5 connexions à la fois vers Supabase, et une demande à Mistral (20 à 60 s) en occupe une.
+ */
+async function call<T>(body: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
+  const { data, error } = await supabase.functions.invoke("mistral", { body, signal });
   if (error) {
     if (error instanceof FunctionsHttpError) {
       const detail = await error.context.json().catch(() => null);
@@ -54,8 +58,8 @@ export interface GenerateRequest {
   constraints: { max_total_min?: number | null; main_protein?: string; season?: string; meal_type?: MealType; avoid?: string[] };
 }
 
-export const generateRecipes = (householdId: string, req: GenerateRequest) =>
-  call<{ recipes: Draft[] }>({ action: "generate_recipes", household_id: householdId, ...req });
+export const generateRecipes = (householdId: string, req: GenerateRequest, signal?: AbortSignal) =>
+  call<{ recipes: Draft[] }>({ action: "generate_recipes", household_id: householdId, ...req }, signal);
 
 /** Version améliorée d'après l'avis du foyer, ou `improvable: false` si Mistral ne voit rien à changer. */
 export type Adaptation = { improvable: false } | (Draft & { improvable: true; change_note: string });
@@ -63,8 +67,8 @@ export type Adaptation = { improvable: false } | (Draft & { improvable: true; ch
 export const adaptRecipeDraft = (householdId: string, recipe: unknown, feedback: string) =>
   call<Adaptation>({ action: "adapt_recipe", household_id: householdId, recipe, feedback });
 
-export const illustrateRecipe = (householdId: string, recipeId: string) =>
-  call<{ path: string }>({ action: "illustrate", household_id: householdId, recipe_id: recipeId });
+export const illustrateRecipe = (householdId: string, recipeId: string, signal?: AbortSignal) =>
+  call<{ path: string }>({ action: "illustrate", household_id: householdId, recipe_id: recipeId }, signal);
 
 export function draftToInput(d: DraftRecipe, source: RecipeSource): RecipeInput {
   return {

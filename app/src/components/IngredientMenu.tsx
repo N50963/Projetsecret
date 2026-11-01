@@ -1,5 +1,6 @@
 /**
- * Fonction principale de l'accueil : le menu du jour choisi d'après un ingrédient que le foyer a acheté ou compte acheter.
+ * Fonction principale de l'accueil, en menu dépliant « Recherche de menu par ingrédient » (replié par défaut) : le menu du
+ * jour choisi d'après un ingrédient que le foyer a acheté ou compte acheter.
  * Le foyer tape l'ingrédient (recherche parmi ceux des recettes), le repas et le temps disponible ; les propositions suivent
  * ensuite les mêmes règles que les menus de la semaine.
  */
@@ -29,9 +30,10 @@ export interface IngredientMenuRequest {
 function Thumb({ slug, size = 26 }: { slug: string; size?: number }) {
   const c = useColors();
   const source = ingredientSource(slug);
+  // Vignette carrée sur fond blanc (pas de recadrage en rond).
   return source
-    ? <Image source={source} style={{ width: size, height: size, borderRadius: size / 2 }} contentFit="cover" transition={0} />
-    : <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: c.chipActive }} />;
+    ? <Image source={source} style={{ width: size, height: size, borderRadius: 4, backgroundColor: "#FFFFFF" }} contentFit="contain" transition={0} />
+    : <View style={{ width: size, height: size, borderRadius: 4, backgroundColor: c.chipActive }} />;
 }
 
 export function IngredientMenu({ householdId, today, todaySlots, busy, onFind }: {
@@ -47,6 +49,7 @@ export function IngredientMenu({ householdId, today, todaySlots, busy, onFind }:
   const [mealType, setMealType] = useState<MealType>(new Date().getHours() < 14 ? "dejeuner" : "diner");
   const [time, setTime] = useState<number | null>(60);
   const [error, setError] = useState("");
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     ingredientsInRecipes(supabase).then(setOptions, (e) => setError(e instanceof Error ? e.message : String(e)));
@@ -72,13 +75,16 @@ export function IngredientMenu({ householdId, today, todaySlots, busy, onFind }:
 
   return (
     <View style={[styles.card, { backgroundColor: c.card, borderColor: c.primary }, CARD_SHADOW]}>
-      <View style={styles.head}>
-        <View style={[styles.badge, { backgroundColor: c.greenSoft }]}><Icon name="wand" size={22} color={c.greenInk} /></View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { color: c.text }]} accessibilityRole="header">Menu du jour avec un ingrédient</Text>
-          <Text style={{ color: c.muted, fontSize: 14.2, lineHeight: 18 }}>Acheté ou à acheter : MenuBily vous propose quoi cuisiner.</Text>
-        </View>
-      </View>
+      <Pressable onPress={() => setOpen((o) => !o)} accessibilityRole="button" accessibilityState={{ expanded: open }}
+        style={({ pressed }) => [styles.head, { opacity: pressed ? 0.75 : 1 }]}>
+        <View style={[styles.badge, { backgroundColor: c.greenSoft }]}><Icon name="search" size={21} color={c.greenInk} /></View>
+        <Text style={[styles.title, { color: c.text, flex: 1 }]} accessibilityRole="header">Recherche de menu par ingrédient</Text>
+        <Icon name={open ? "chevronUp" : "chevronDown"} size={20} color={c.text} />
+      </Pressable>
+      {open ? (<>
+      <Text style={{ color: c.muted, fontSize: 14.2, lineHeight: 18 }}>
+        Menu du jour avec un ingrédient acheté ou à acheter : MenuBily vous propose quoi cuisiner.
+      </Text>
       <ErrorText>{error}</ErrorText>
 
       {picked ? (
@@ -141,15 +147,16 @@ export function IngredientMenu({ householdId, today, todaySlots, busy, onFind }:
             onPress={() => onFind({ ingredient: picked, toBuy, mealType, maxTotalMin: time })} />
         </View>
       ) : null}
+      </>) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { marginTop: 10, marginLeft: 12.8, marginRight: 9.2, borderRadius: 14, borderWidth: 1.5, padding: 14, gap: 12 },
-  head: { flexDirection: "row", alignItems: "center", gap: 12 },
-  badge: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
-  title: { fontSize: 17.5, lineHeight: 22, fontWeight: "700" },
+  card: { marginTop: 10, marginLeft: 12.8, marginRight: 9.2, borderRadius: 14, borderWidth: 1.5, paddingHorizontal: 12, paddingVertical: 8, gap: 12 },
+  head: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 48 },
+  badge: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  title: { fontSize: 16.5, lineHeight: 21, fontWeight: "700" },
   searchIcon: { position: "absolute", left: 14, top: 0, bottom: 0, justifyContent: "center" },
   wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   option: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44, paddingLeft: 6, paddingRight: 12, borderRadius: 22 },

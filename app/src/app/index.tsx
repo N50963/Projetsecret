@@ -32,9 +32,11 @@ const FADE = ["rgba(253,244,233,0)", "rgba(253,244,233,0.75)", "#FDF4E9"] as con
 interface DayChoice {
   dejeuner: boolean;
   diner: boolean;
-  /** Temps disponible pour les repas du jour (préparation et cuisson) ; null : sans limite. */
-  time: number | null;
+  /** Temps disponible pour chaque repas (préparation et cuisson) ; null : sans limite. */
+  time: Record<MealType, number | null>;
 }
+
+const defaultChoice = (): DayChoice => ({ dejeuner: false, diner: true, time: { dejeuner: DEFAULT_TIME, diner: DEFAULT_TIME } });
 
 /** Temps enregistré ramené aux choix de la roue (30 min, 1 h, sans limite). */
 const snapTime = (t: number | null) => (t === null ? null : t <= 30 ? 30 : t <= 60 ? 60 : null);
@@ -88,10 +90,14 @@ export default function Accueil() {
       // Les repas enregistrés fixent la sélection de leur jour ; les autres jours gardent la sélection en cours.
       setChoices((prev) => Object.fromEntries(days.map((d) => {
         const saved = MEALS.map((m) => byKey[`${d}:${m}`]).filter((s): s is WeekSlot => s !== undefined);
-        if (!saved.length) return [d, prev[d] ?? { dejeuner: false, diner: true, time: DEFAULT_TIME }];
+        if (!saved.length) return [d, prev[d] ?? defaultChoice()];
         const wanted = (m: MealType) => (byKey[`${d}:${m}`] ? byKey[`${d}:${m}`]!.status !== "skipped" : false);
-        const open = saved.find((s) => s.status !== "accepted");
-        return [d, { dejeuner: wanted("dejeuner"), diner: wanted("diner"), time: open ? snapTime(open.maxTotalMin) : prev[d]?.time ?? DEFAULT_TIME }];
+        // Temps propre à chaque repas : celui du repas enregistré, sinon la sélection en cours.
+        const timeOf = (m: MealType) => {
+          const slot = byKey[`${d}:${m}`];
+          return slot && slot.status !== "accepted" ? snapTime(slot.maxTotalMin) : prev[d]?.time[m] ?? DEFAULT_TIME;
+        };
+        return [d, { dejeuner: wanted("dejeuner"), diner: wanted("diner"), time: { dejeuner: timeOf("dejeuner"), diner: timeOf("diner") } }];
       })));
       // Liste des photos rafraîchie en arrière-plan (nouvelles images, photos du foyer).
       setImages(await illustrationUrls(ids.filter((id): id is string => id !== null)));
@@ -106,7 +112,7 @@ export default function Accueil() {
   }, [load]));
 
   const picture = (recipeId: string | null) => (recipeId ? images[recipeId] ?? pictureOf(recipeId) : null);
-  const choiceOf = (d: string): DayChoice => choices[d] ?? { dejeuner: false, diner: true, time: DEFAULT_TIME };
+  const choiceOf = (d: string): DayChoice => choices[d] ?? defaultChoice();
   const update = (d: string, patch: Partial<DayChoice>) => setChoices((p) => ({ ...p, [d]: { ...choiceOf(d), ...patch } }));
   const isChosen = (d: string, m: MealType) => slots[`${d}:${m}`]?.status === "accepted";
 
@@ -119,7 +125,7 @@ export default function Accueil() {
 
   const requests: SlotRequest[] = days.flatMap((d) => MEALS
     .filter((m) => choiceOf(d)[m] && !isChosen(d, m))
-    .map((m) => ({ date: d, mealType: m, maxTotalMin: choiceOf(d).time, servings: household.defaultServings })));
+    .map((m) => ({ date: d, mealType: m, maxTotalMin: choiceOf(d).time[m], servings: household.defaultServings })));
 
   const propose = async () => {
     setBusy("plan");
@@ -242,19 +248,21 @@ export default function Accueil() {
 
         <View style={styles.menus}>
           {loaded && menus.length === 0 && (
-            <Text style={[styles.empty, { color: c.muted, marginLeft: 12.8 }]}>Aucun menu choisi pour la semaine : cochez les repas à prévoir ci-dessous.</Text>
+            <Text style={[styles.empty, { color: c.muted, marginLeft: 12.8 }]}>Aucun menu choisi pour la semaine : cochez les repas ci-dessous.</Text>
           )}
           {others.map((s) => {
             const pic = picture(s.recipeId);
             return (
               <Pressable key={s.slotId} onPress={() => open(s)} accessibilityRole="button"
                 accessibilityLabel={`${dayLabel(s.date, today)}, ${mealLabel(s.mealType)} : ${s.name}`}
-                style={({ pressed }) => [styles.row, { backgroundColor: c.card, borderColor: c.cardLine, opacity: pressed ? 0.85 : 1 }, CARD_SHADOW]}>
+                style={({ pressed }) => [styles.row, { backgroundColor: c.card, borderColor: c.cardLine, opacity: pressed ? 0.85 : 1 }]}>
                 <View style={styles.rowPhoto}>
                   {pic
                     ? <Image source={sourceOf(pic)} cachePolicy="memory-disk" style={StyleSheet.absoluteFill} contentFit="cover" transition={0} />
                     : <View style={[StyleSheet.absoluteFill, styles.rowWaiting, { backgroundColor: c.chip }]}><Icon name="image" size={28} color={c.muted} /></View>}
-                  <LinearGradient colors={FADE} locations={[0, 0.55, 1]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.rowFade} />
+                  {/* Fondu légèrement oblique : la photo s'efface en biais, plus loin en bas qu'en haut. */}
+                  {/* Paliers choisis pour que le biais reste invisible aux bords : transparent à gauche, opaque à droite. */}
+                  <LinearGradient colors={FADE} locations={[0.2, 0.55, 0.8]} start={{ x: 0, y: 0.62 }} end={{ x: 1, y: 0.38 }} style={styles.rowFade} />
                 </View>
                 <View style={styles.rowText}>
                   <Text style={[styles.rowDay, { color: s.date === today ? c.primary : c.muted }]}>{dayLabel(s.date, today)} · {mealLabel(s.mealType)}</Text>
@@ -274,7 +282,7 @@ export default function Accueil() {
             planningY.current = e.nativeEvent.layout.y;
           }}>
             <View style={styles.planningHead}>
-              <View style={{ flex: 1 }}><SectionTitle icon="calendar" title="Repas à prévoir" /></View>
+              <View style={{ flex: 1 }}><SectionTitle icon="calendar" title="Autre repas possible" /></View>
               {menus.length > 0 && <TextLink title="Masquer" onPress={() => setPlanning(false)} />}
             </View>
             <PlanningGrid days={toPlan} today={today} planOf={choiceOf} isChosen={isChosen} onChange={update} />
@@ -297,7 +305,7 @@ export default function Accueil() {
       {loaded && (
         <View style={styles.cta}>
           {showPlanning
-            ? <Button icon="wand" title={requests.length ? `Proposer les menus (${requests.length} repas)` : "Cochez les repas à prévoir"}
+            ? <Button icon="wand" title={requests.length ? `Proposer les menus (${requests.length} repas)` : "Cochez les repas"}
               onPress={propose} busy={busy === "plan"} disabled={!requests.length} />
             : toPlan.length > 0 ? <Button icon="calendar" kind="secondary" title="Prévoir d'autres repas" onPress={openPlanning} /> : null}
         </View>
@@ -336,14 +344,12 @@ const styles = StyleSheet.create({
   },
   list: { paddingLeft: 12.8, paddingRight: 9.2, gap: 7 },
   // Menus choisis : la photo part du bord gauche de l'écran, sans marge ni liseré.
-  menus: { paddingRight: 9.2, gap: 7 },
+  menus: {},
   empty: { fontSize: 15, lineHeight: 20, paddingHorizontal: 2, paddingBottom: 4 },
-  row: {
-    minHeight: 72, borderTopRightRadius: 12, borderBottomRightRadius: 12, borderWidth: 1, borderLeftWidth: 0, overflow: "hidden", flexDirection: "row",
-  },
+  row: { minHeight: 72, borderBottomWidth: 1, overflow: "hidden", flexDirection: "row" },
   rowPhoto: { position: "absolute", left: 0, top: 0, bottom: 0, width: 140 },
   rowWaiting: { alignItems: "center", justifyContent: "center" },
-  rowFade: { position: "absolute", top: 0, bottom: 0, right: 0, width: 52 },
+  rowFade: { position: "absolute", top: 0, bottom: 0, right: 0, width: 72 },
   rowText: { flex: 1, minWidth: 0, marginLeft: 136, paddingVertical: 9, paddingRight: 34, justifyContent: "center" },
   rowClose: { position: "absolute", top: 2, right: 2, width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   rowDay: { fontSize: 13.5, lineHeight: 17, fontWeight: "600" },
