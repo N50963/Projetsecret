@@ -7,7 +7,9 @@ Courses, Paramètres, Connexion, états et planche de composants), reproduit au 
   orange #8A4B12 pour « à acheter », bande verte #445A33 en tête des écrans ;
 - typographie : Roboto (police du système Android), nom « MenuBily » en Cabin gras italique
   (`app/assets/fonts`, licence OFL) ;
-- logo en feuilles et icônes : tracés SVG des maquettes (`app/src/components/icons.tsx`, react-native-svg) ;
+- logo et icône de l'application : la marmite (`app/assets/marmite-source.png`), déclinée par
+  `app/scripts/icone-marmite.py` (icônes Android, écran de démarrage, `assets/logo-marmite.png`) ; icônes de l'interface :
+  tracés SVG des maquettes (`app/src/components/icons.tsx`, react-native-svg) ;
 - boutons pleine largeur à dégradé vert, puces beiges (vert doux bordé de vert quand elles sont choisies),
   barre du bas Accueil · Courses · Recettes · Profil.
 
