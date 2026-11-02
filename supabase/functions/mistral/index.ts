@@ -14,6 +14,11 @@
  *  - ingredient_candidates : (jeton x-cron-token) photos libres candidates de Commons pour remplacer une vignette ;
  *  - dish_photos       : (jeton x-cron-token) photos libres de Commons pour les plats sans illustration, avec crédits ;
  *  - suggest_products  : lecture des produits de tickets Lidl non reconnus (nom, rôle, ingrédients) pour le module de correction.
+ *  - import_photo      : recette photographiée (livre, fiche, écran, manuscrit) : texte lu par un modèle de vision, puis mis en
+ *                        forme comme un texte collé ;
+ *  - import_url        : recette d'une page internet (données structurées schema.org Recipe, sinon texte de la page), mise en
+ *                        forme de même ;
+ *  - import_audio      : recette lue à voix haute : enregistrement transcrit (Voxtral), puis mis en forme.
  * Les recettes renvoyées sont des brouillons : l'application les vérifie et les fait confirmer avant de les enregistrer.
  */
 
@@ -24,6 +29,14 @@ import jpeg from "npm:jpeg-js@0.4.4";
 const MISTRAL = "https://api.mistral.ai/v1";
 const TEXT_MODELS = (Deno.env.get("MISTRAL_TEXT_MODELS") ?? "mistral-small-latest,ministral-14b-latest,ministral-8b-latest").split(",").map((m) => m.trim());
 const IMAGE_MODEL = Deno.env.get("MISTRAL_IMAGE_MODEL") ?? "mistral-medium-latest";
+/** Modèles qui lisent les photos (le premier accepté par la clé est retenu). */
+const VISION_MODELS = (Deno.env.get("MISTRAL_VISION_MODELS") ?? "mistral-small-latest,pixtral-12b-latest,ministral-14b-latest,ministral-8b-latest")
+  .split(",").map((m) => m.trim());
+/** Transcription de la voix (recette lue à voix haute). */
+const TRANSCRIBE_MODEL = Deno.env.get("MISTRAL_TRANSCRIBE_MODEL") ?? "voxtral-mini-latest";
+/** Page de recette : temps et taille de lecture bornés. */
+const PAGE_TIMEOUT_MS = 20_000;
+const PAGE_MAX_BYTES = 3_000_000;
 /** Appels par foyer et par heure, pour ménager le quota gratuit. */
 const HOURLY_LIMIT = Number(Deno.env.get("MISTRAL_HOURLY_LIMIT") ?? "40");
 /** Plan gratuit Supabase : une fonction dispose de 150 s ; chaque appel extérieur est borné pour répondre avant. */
@@ -77,7 +90,7 @@ async function mistralFetch(path: string, init: RequestInit = {}): Promise<Respo
   try {
     return await fetch(`${MISTRAL}${path}`, {
       ...init, signal: AbortSignal.timeout(MISTRAL_TIMEOUT_MS),
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...init.headers },
+      headers: { Authorization: `Bearer ${key}`, ...(typeof init.body === "string" ? { "Content-Type": "application/json" } : {}), ...init.headers },
     });
   } catch (e) {
     if (e instanceof DOMException && e.name === "TimeoutError") throw new HttpError(504, "Mistral met trop de temps à répondre : réessayez.");
@@ -111,6 +124,187 @@ async function chatJson(messages: Array<{ role: string; content: string }>, temp
     }
   }
   throw new HttpError(429, `Aucun modèle Mistral disponible avec cette clé pour le moment (${last}).`);
+}
+
+/** Texte d'une recette photographiée, lu par le premier modèle de vision que la clé accepte. */
+async function visionText(images: string[]): Promise<{ text: string; model: string }> {
+  const content = [
+    { type: "text", text: "Ces photos montrent une recette de cuisine (page de livre, fiche, écran, papier manuscrit), éventuellement sur "
+      + "plusieurs pages. Recopie fidèlement tout le texte utile de la recette, dans sa langue : titre, nombre de personnes, temps, "
+      + "ingrédients avec leurs quantités, étapes dans l'ordre. N'invente rien et n'ajoute aucun commentaire. Si aucune recette n'est "
+      + "lisible, réponds exactement AUCUNE_RECETTE." },
+    ...images.map((b64) => ({ type: "image_url", image_url: `data:image/jpeg;base64,${b64}` })),
+  ];
+  let last = "";
+  for (const model of VISION_MODELS) {
+    const r = await mistralFetch("/chat/completions", { method: "POST", body: JSON.stringify({ model, temperature: 0, messages: [{ role: "user", content }] }) });
+    if (unavailable(r)) {
+      last = `${model} : ${r.status}`;
+      await r.body?.cancel();
+      continue;
+    }
+    if (!r.ok) {
+      const detail = (await r.text()).slice(0, 300);
+      // Modèle sans lecture d'image : le suivant.
+      if (r.status === 400 || r.status === 422) {
+        last = `${model} : ${detail}`;
+        continue;
+      }
+      throw new HttpError(502, `Mistral a refusé la photo (${r.status}) : ${detail}`);
+    }
+    const body = await r.json();
+    return { text: String(body.choices?.[0]?.message?.content ?? ""), model };
+  }
+  throw new HttpError(429, `Aucun modèle Mistral ne peut lire les photos avec cette clé pour le moment (${last}).`);
+}
+
+/** Recette lue à voix haute : transcription de l'enregistrement (Voxtral). */
+async function transcribe(audio: string, mime: string): Promise<string> {
+  const bytes = Uint8Array.from(atob(audio), (ch) => ch.charCodeAt(0));
+  const ext = mime.includes("webm") ? "webm" : mime.includes("ogg") ? "ogg" : mime.includes("wav") ? "wav" : mime.includes("mpeg") ? "mp3" : "m4a";
+  const form = new FormData();
+  form.append("model", TRANSCRIBE_MODEL);
+  form.append("language", "fr");
+  form.append("file", new Blob([bytes], { type: mime || "audio/mp4" }), `recette.${ext}`);
+  const r = await mistralFetch("/audio/transcriptions", { method: "POST", body: form });
+  if (unavailable(r)) throw new HttpError(429, "La transcription de la voix n'est pas disponible pour le moment : réessayez plus tard.");
+  if (!r.ok) throw new HttpError(502, `Mistral n'a pas pu transcrire l'enregistrement (${r.status}) : ${(await r.text()).slice(0, 300)}`);
+  const body = await r.json();
+  return String(body.text ?? "").trim();
+}
+
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", eacute: "é", egrave: "è", ecirc: "ê",
+  agrave: "à", acirc: "â", ccedil: "ç", ocirc: "ô", ucirc: "û", ugrave: "ù", icirc: "î", iuml: "ï", euml: "ë", oelig: "œ", deg: "°", frac12: "½",
+  frac14: "¼", frac34: "¾", rsquo: "’", lsquo: "‘", laquo: "«", raquo: "»", hellip: "…", ndash: "–", mdash: "—", times: "×" };
+const decodeEntities = (s: string) => s.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (m, e: string) => {
+  if (e[0] === "#") {
+    const code = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+    return Number.isFinite(code) ? String.fromCodePoint(code) : m;
+  }
+  return ENTITIES[e.toLowerCase()] ?? m;
+});
+const htmlText = (s: unknown) => decodeEntities(String(s ?? "").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+
+/** Durée ISO 8601 (« PT1H20M ») en clair. */
+function isoDuration(v: unknown): string {
+  const m = String(v ?? "").match(/P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?/i);
+  if (!m) return "";
+  const min = Number(m[1] ?? 0) * 1440 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
+  return min ? `${min} min` : "";
+}
+
+/** Objet schema.org « Recipe » dans les données structurées d'une page (JSON-LD), où qu'il soit rangé. */
+function findRecipe(node: any): any {
+  if (!node || typeof node !== "object") return null;
+  if (Array.isArray(node)) {
+    for (const n of node) {
+      const found = findRecipe(n);
+      if (found) return found;
+    }
+    return null;
+  }
+  const type = node["@type"];
+  if (type === "Recipe" || (Array.isArray(type) && type.includes("Recipe"))) return node;
+  return findRecipe(node["@graph"]) ?? findRecipe(node.mainEntity) ?? null;
+}
+
+function instructionsText(v: any): string[] {
+  if (!v) return [];
+  if (typeof v === "string") return htmlText(v).split(/(?<=\.)\s+(?=[A-ZÉÈÀÂÎÔ])/).filter(Boolean);
+  if (Array.isArray(v)) return v.flatMap(instructionsText);
+  if (v["@type"] === "HowToSection") return [`${htmlText(v.name)} :`, ...instructionsText(v.itemListElement)];
+  return v.text ? [htmlText(v.text)] : v.name ? [htmlText(v.name)] : [];
+}
+
+/** Adresse publique seulement (pas le réseau interne du serveur). */
+function checkPublicUrl(raw: string): URL {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    throw new HttpError(400, "Lien invalide : copiez l'adresse complète de la page (https://…).");
+  }
+  if (!/^https?:$/.test(url.protocol)) throw new HttpError(400, "Lien invalide : seules les pages web (https://…) sont acceptées.");
+  const host = url.hostname.toLowerCase();
+  if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal") || /^(127|10|0)\./.test(host) || /^192\.168\./.test(host)
+    || /^172\.(1[6-9]|2\d|3[01])\./.test(host) || /^169\.254\./.test(host) || host.includes(":") || host === "metadata.google.internal") {
+    throw new HttpError(400, "Lien invalide : cette adresse n'est pas une page publique.");
+  }
+  return url;
+}
+
+/** Texte d'une recette en ligne : données structurées de la page si elle en a (la plupart des sites), sinon son texte. */
+async function pageRecipeText(raw: string): Promise<string> {
+  const url = checkPublicUrl(raw);
+  let r: Response;
+  try {
+    r = await fetch(url, {
+      redirect: "follow", signal: AbortSignal.timeout(PAGE_TIMEOUT_MS),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml", "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.6",
+      },
+    });
+  } catch {
+    throw new HttpError(502, "La page ne répond pas : vérifiez le lien, ou copiez le texte de la recette.");
+  }
+  if (!r.ok) throw new HttpError(502, `Le site refuse la lecture de la page (${r.status}) : copiez plutôt le texte de la recette.`);
+  // Lecture bornée (une page de recette fait quelques centaines de Ko).
+  const reader = r.body?.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (reader) {
+    const { done, value } = await reader.read();
+    if (done || !value) break;
+    chunks.push(value);
+    size += value.length;
+    if (size > PAGE_MAX_BYTES) {
+      await reader.cancel();
+      break;
+    }
+  }
+  const html = new TextDecoder().decode(chunks.reduce((all, c) => {
+    const out = new Uint8Array(all.length + c.length);
+    out.set(all);
+    out.set(c, all.length);
+    return out;
+  }, new Uint8Array()));
+
+  for (const m of html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    let data: any;
+    try {
+      data = JSON.parse(m[1]!.trim());
+    } catch {
+      continue;
+    }
+    const recipe = findRecipe(data);
+    if (!recipe) continue;
+    const ingredients = (Array.isArray(recipe.recipeIngredient) ? recipe.recipeIngredient : recipe.ingredients ?? []).map(htmlText).filter(Boolean);
+    const steps = instructionsText(recipe.recipeInstructions);
+    if (ingredients.length < 2 || !steps.length) continue;
+    const yieldText = Array.isArray(recipe.recipeYield) ? recipe.recipeYield.join(" ") : recipe.recipeYield;
+    return [
+      htmlText(recipe.name), htmlText(recipe.description),
+      yieldText ? `Pour : ${htmlText(yieldText)}` : "",
+      [["Préparation", recipe.prepTime], ["Cuisson", recipe.cookTime], ["Repos", recipe.restTime ?? recipe.performTime]]
+        .map(([k, v]) => (isoDuration(v) ? `${k} : ${isoDuration(v)}` : "")).filter(Boolean).join(", "),
+      "Ingrédients :", ...ingredients.map((i: string) => `- ${i}`),
+      "Étapes :", ...steps.map((s, n) => `${n + 1}. ${s}`),
+    ].filter(Boolean).join("\n");
+  }
+  // Sans données structurées : le texte de la page, à partir des ingrédients.
+  const text = decodeEntities(html
+    .replace(/<(script|style|noscript|svg|header|footer|nav|form|iframe)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<(br|\/p|\/li|\/h\d|\/div|\/tr)[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, " "))
+    .replace(/[ \t\f\v]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
+  const title = htmlText(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
+  const at = text.search(/ingr[ée]dients/i);
+  const body = text.slice(Math.max(0, at - 1500), Math.max(0, at - 1500) + 11000);
+  if (body.length < 200 || at < 0) {
+    throw new HttpError(422, "Pas de recette lisible sur cette page (ou le site bloque la lecture) : copiez plutôt le texte de la recette.");
+  }
+  return `${title}\n${body}`;
 }
 
 // --- Recettes ----------------------------------------------------------------------------------------------------------
@@ -774,17 +968,52 @@ Deno.serve(async (req) => {
         await log(true, model);
         return json({ configured: true, key_valid: true, signed_in: true, text_model: model, image_model: IMAGE_MODEL });
       }
-      if (body.action === "import_recipe") {
-        const text = String(body.text ?? "").slice(0, 12000);
-        if (text.trim().length < 40) throw new HttpError(400, "Collez le texte complet de la recette.");
+      /** Texte d'une recette (collé, lu sur une photo, une page ou transcrit de la voix) mis en forme pour la fiche. */
+      const importText = async (raw: string, origin = "") => {
+        const text = raw.slice(0, 12000);
         const { data, model } = await chatJson([system, { role: "user", content:
           `Mets en forme cette recette pour ${body.servings ?? 4} personnes (traduis en français si besoin). Garde ses ingrédients, ses quantités `
           + `et le déroulé de ses étapes ; ne change pas le plat. Rédige les étapes selon les règles : quand le texte ne donne pas la durée d'une `
           + `cuisson, le feu ou la température du four, ajoute les valeurs habituelles ; découpe une étape qui enchaîne deux cuissons. `
-          + `Rattache chaque ingrédient au slug le plus proche du référentiel, ou null. Réponds {"recipe": {...}}.\n\n${text}` }], 0.2);
-        const out = normalizeRecipe(data.recipe ?? data, refs);
+          + `Rattache chaque ingrédient au slug le plus proche du référentiel, ou null. Réponds {"recipe": {...}}.${origin ? `\n${origin}` : ""}\n\n${text}` }], 0.2);
+        return { out: normalizeRecipe(data.recipe ?? data, refs), model };
+      };
+      if (body.action === "import_recipe") {
+        const text = String(body.text ?? "");
+        if (text.trim().length < 40) throw new HttpError(400, "Collez le texte complet de la recette.");
+        const { out, model } = await importText(text);
         await log(true, model);
         return json({ ...out, model });
+      }
+      if (body.action === "import_photo") {
+        const images = (Array.isArray(body.images) ? body.images : []).slice(0, 4).map((i: unknown) => String(i).replace(/^data:[^,]+,/, ""));
+        if (!images.length) throw new HttpError(400, "Ajoutez une photo de la recette.");
+        if (images.some((i: string) => i.length > 6_000_000)) throw new HttpError(413, "Photo trop lourde : reprenez-la ou choisissez-la de nouveau.");
+        const { text, model: reader } = await visionText(images);
+        if (/AUCUNE_RECETTE/.test(text) || text.trim().length < 40) {
+          throw new HttpError(422, "Aucune recette lisible sur la photo : reprenez-la de plus près, à plat et bien éclairée.");
+        }
+        const { out, model } = await importText(text, "Texte lu sur une photo : corrige les erreurs de lecture évidentes.");
+        await log(true, `${reader} + ${model}`);
+        return json({ ...out, model, source_text: text });
+      }
+      if (body.action === "import_url") {
+        const url = String(body.url ?? "");
+        const text = await pageRecipeText(url);
+        const { out, model } = await importText(text, "Recette lue sur une page internet : ignore tout ce qui n'est pas la recette.");
+        await log(true, model, url.slice(0, 200));
+        return json({ ...out, model, source_text: text, source_url: url });
+      }
+      if (body.action === "import_audio") {
+        const audio = String(body.audio ?? "").replace(/^data:[^,]+,/, "");
+        if (audio.length < 2000) throw new HttpError(400, "Enregistrement vide : lisez la recette à voix haute, puis arrêtez l'enregistrement.");
+        if (audio.length > 14_000_000) throw new HttpError(413, "Enregistrement trop long : 8 minutes au plus.");
+        const text = await transcribe(audio, String(body.mime ?? "audio/mp4"));
+        if (text.length < 40) throw new HttpError(422, "Enregistrement trop court ou inaudible : lisez la recette plus près du téléphone.");
+        const { out, model } = await importText(text, "Recette lue à voix haute (transcription automatique, ponctuation approximative) : "
+          + "reconstitue les ingrédients et les étapes.");
+        await log(true, `${TRANSCRIBE_MODEL} + ${model}`);
+        return json({ ...out, model, source_text: text });
       }
       if (body.action === "generate_recipes") {
         const count = Math.min(3, Math.max(1, Number(body.count ?? 3)));
