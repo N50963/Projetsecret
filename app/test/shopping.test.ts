@@ -5,7 +5,7 @@ import { shoppingLines } from "../src/lib/shopping";
 import type { ShoppingItem } from "../src/modules/planning";
 
 const item = (id: string, label: string, quantity: number | null, unit: string | null, recipeId: string | null, recipeName: string | null = recipeId): ShoppingItem => ({
-  id, label, quantity, unit, createdAt: "2026-11-02T00:00:00Z", checkedAt: null, boughtAt: null, recipeId, recipeName, active: true,
+  id, label, quantity, unit, createdAt: "2026-11-02T00:00:00Z", checkedAt: null, boughtAt: null, recipeId, recipeName, active: true, removedAt: null,
 });
 
 describe("liste de courses", () => {

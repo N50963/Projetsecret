@@ -70,6 +70,14 @@ const ICONS = {
   /** Coche et croix fines des cartes de la semaine (maquette « Ruban de la semaine »). */
   tick: { viewBox: "0 0 16 16", draw: ({ color }) => <Path d="M3.2 8.4l3.2 3.2 6.4-7" {...stroke(color, 2.4)} /> },
   cross: { viewBox: "0 0 16 16", draw: ({ color }) => <Path d="M3 3l10 10M13 3L3 13" {...stroke(color)} /> },
+  // Information : cercle et « i ».
+  info: {
+    viewBox: "0 0 16 16", draw: ({ color }) => <>
+      <Circle cx={8} cy={8} r={6.4} {...stroke(color, 1.5)} />
+      <Path d="M8 7.2v4" {...stroke(color, 1.6)} />
+      <Circle cx={8} cy={4.9} r={0.95} fill={color} />
+    </>,
+  },
   // Poignée de déplacement : deux colonnes de trois points.
   grip: {
     viewBox: "0 0 16 16", draw: ({ color }) => <>

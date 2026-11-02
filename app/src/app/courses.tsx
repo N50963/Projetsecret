@@ -1,5 +1,5 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Icon } from "../components/icons";
@@ -12,7 +12,7 @@ import { setShoppingCount, toBuyLines } from "../lib/shoppingCount";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { CARD_SHADOW, useColors } from "../lib/theme";
-import { getShoppingList, setShoppingItemChecked, type ShoppingItem } from "../modules/planning";
+import { getShoppingList, setShoppingItemChecked, setShoppingItemsRemoved, type ShoppingItem } from "../modules/planning";
 import { errorText } from "../lib/errors";
 
 /**
@@ -25,6 +25,9 @@ export default function Courses() {
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [images, setImages] = useState<Record<string, Picture | null>>({});
   const [error, setError] = useState("");
+  /** Dernier article retiré : bandeau « Annuler » pendant quelques secondes. */
+  const [undo, setUndo] = useState<{ name: string; ids: string[] } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(() => {
     getShoppingList(supabase, household.id)
@@ -45,9 +48,32 @@ export default function Courses() {
       .catch((e) => setError(errorText(e)));
   };
 
+  /**
+   * Retire une ligne de la liste (tous ses articles) : elle n'est plus à acheter ; la fiche de la recette le signale et
+   * permet de la remettre. Le bandeau « Annuler » la remet tout de suite en cas d'erreur.
+   */
+  const remove = (line: ShoppingLine) => {
+    const ids = line.items.map((i) => i.id);
+    const at = new Date().toISOString();
+    setItems((list) => list.map((i) => (ids.includes(i.id) ? { ...i, removedAt: at, active: false } : i)));
+    setShoppingItemsRemoved(supabase, ids, true).catch((e) => setError(errorText(e)));
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndo({ name: line.name, ids });
+    undoTimer.current = setTimeout(() => setUndo(null), 6000);
+  };
+  const restore = () => {
+    if (!undo) return;
+    const ids = undo.ids;
+    setUndo(null);
+    setShoppingItemsRemoved(supabase, ids, false).then(load, (e) => setError(errorText(e)));
+  };
+  useEffect(() => () => {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+  }, []);
+
   // Seuls les articles des menus choisis à venir (ou d'une recette ajoutée depuis sa fiche) restent à acheter.
   const toBuy = toBuyLines(items);
-  const found = shoppingLines(items.filter((i) => i.boughtAt || i.checkedAt));
+  const found = shoppingLines(items.filter((i) => !i.removedAt && (i.boughtAt || i.checkedAt)));
   // Pastille de l'onglet Courses : même décompte que la liste affichée (à jour à chaque article coché).
   useEffect(() => {
     setShoppingCount(toBuy.length);
@@ -63,6 +89,14 @@ export default function Courses() {
       </View>
       <View style={styles.list}>
         <ErrorText>{error}</ErrorText>
+        {undo ? (
+          <View style={[styles.undo, { backgroundColor: c.text }]} accessibilityLiveRegion="polite">
+            <Text style={{ flex: 1, color: "#FFFFFF", fontSize: 14.5 }} numberOfLines={2}>« {undo.name} » retiré de la liste.</Text>
+            <Pressable onPress={restore} accessibilityRole="button" hitSlop={8} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+              <Text style={{ color: "#F3D9A4", fontSize: 14.5, fontWeight: "700" }}>Annuler</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {toBuy.length === 0 && <Muted style={{ paddingHorizontal: 4 }}>Rien à acheter pour les menus choisis.</Muted>}
         {toBuy.map((line) => {
           const photo = line.recipes[0]?.id;
@@ -84,6 +118,11 @@ export default function Courses() {
                 ) : null}
               </View>
               <Text style={[styles.qty, { color: c.text }]}>{quantity(line.quantity, line.unit)}</Text>
+              {/* Retirer de la liste : pas besoin de l'acheter (déjà à la maison, remplacé…). */}
+              <Pressable onPress={() => remove(line)} accessibilityRole="button" accessibilityLabel={`Retirer de la liste : ${line.name}`}
+                hitSlop={4} style={({ pressed }) => [styles.remove, { opacity: pressed ? 0.5 : 1 }]}>
+                <Icon name="cross" size={14} color={c.muted} />
+              </Pressable>
             </View>
           );
         })}
@@ -127,4 +166,6 @@ const styles = StyleSheet.create({
   name: { fontSize: 15.5, lineHeight: 18, fontWeight: "700" },
   dish: { marginTop: 1.5, fontSize: 14.2, lineHeight: 18 },
   qty: { paddingLeft: 8, fontSize: 16, fontWeight: "500" },
+  remove: { width: 36, height: 44, alignItems: "center", justifyContent: "center", marginRight: -8 },
+  undo: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11 },
 });

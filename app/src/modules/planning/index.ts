@@ -8,5 +8,5 @@ export {
 } from "./engine";
 export {
   acceptProposal, addShoppingItems, cancelMealChoice, ensureSlot, moveMealChoice, getPlanSlots, getSlotsFrom, ingredientsInRecipes, type RecipeIngredientOption, getWeekSlots, getShoppingList, loadPlannerContext, loadPurchases, loadRecipesForPlanning, recordShown, rejectProposal,
-  getUpcomingMeals, savePlan, setShoppingItemChecked, skipSlot, type PlannedSlot, type ShoppingItem, type SlotRequest, type UpcomingMeal, type WeekSlot,
+  getUpcomingMeals, savePlan, setShoppingItemChecked, setShoppingItemsRemoved, skipSlot, type PlannedSlot, type ShoppingItem, type SlotRequest, type UpcomingMeal, type WeekSlot,
 } from "./repository";

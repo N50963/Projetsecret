@@ -249,14 +249,18 @@ export async function addRecipeToShoppingList(supabase: SupabaseClient, househol
 export interface IngredientShopping extends ShoppingNeed {
   /** Acheté ces 7 derniers jours (repli quand le stock estimé n'est pas lisible). */
   boughtRecently: boolean;
+  /** Retiré de la liste de courses par le foyer (pour cette recette ou son menu à venir), et pas remis. */
+  removed: boolean;
+  /** Articles retirés, à remettre sur la liste si le foyer le décide. */
+  removedItems: string[];
 }
 
 export async function getShoppingStatus(supabase: SupabaseClient, householdId: string, recipeId: string, servings: number): Promise<IngredientShopping[]> {
-  const { data, error } = await supabase.rpc("recipe_shopping_status", { p_household: householdId, p_recipe_id: recipeId, p_servings: servings });
+  const { data, error } = await supabase.rpc("recipe_shopping_state", { p_household: householdId, p_recipe_id: recipeId, p_servings: servings });
   check(error, "Ingrédients à acheter illisibles");
   return ((data ?? []) as Row[]).map((n) => ({
     ingredientId: n.ingredient_id, slug: n.slug, label: n.label, quantity: n.quantity === null ? null : Number(n.quantity), unit: n.unit,
-    onList: n.on_list, boughtRecently: n.bought_recently,
+    onList: n.on_list, boughtRecently: n.bought_recently, removed: n.removed ?? false, removedItems: n.removed_items ?? [],
   }));
 }
 

@@ -315,6 +315,8 @@ export interface ShoppingItem {
   recipeName: string | null;
   /** L'article sert un menu choisi à venir (ou une recette ajoutée depuis sa fiche) : seul cas où il est « à acheter ». */
   active: boolean;
+  /** Retiré de la liste par le foyer (la fiche recette le signale et propose de le remettre). */
+  removedAt: string | null;
 }
 
 /**
@@ -338,9 +340,16 @@ export async function getShoppingList(supabase: SupabaseClient, householdId: str
     return {
       id: i.id, label: i.label, quantity: i.quantity === null ? null : Number(i.quantity), unit: i.unit, createdAt: i.created_at,
       checkedAt: i.checked_at, boughtAt: i.bought_at, recipeId, recipeName: recipeId ? nameOf.get(recipeId) ?? null : null,
-      active: i.active ?? true,
+      active: i.active ?? true, removedAt: i.removed_at ?? null,
     };
   });
+}
+
+/** Retire des articles de la liste (ou les y remet) : ils ne sont pas effacés, la fiche recette garde la trace du retrait. */
+export async function setShoppingItemsRemoved(supabase: SupabaseClient, itemIds: string[], removed: boolean) {
+  if (!itemIds.length) return;
+  const { error } = await supabase.from("shopping_list_items").update({ removed_at: removed ? new Date().toISOString() : null }).in("id", itemIds);
+  check(error, removed ? "Article non retiré" : "Article non remis sur la liste");
 }
 
 export async function setShoppingItemChecked(supabase: SupabaseClient, itemId: string, checked: boolean) {

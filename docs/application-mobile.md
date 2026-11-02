@@ -110,7 +110,10 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    pu les consommer en dehors des menus prévus (fonction SQL `recipe_shopping_status`). Chaque ingrédient acheté a aussi
    son propre panier « Je n'en ai plus » au bout de sa ligne : un toucher l'ajoute seul à la liste, même quand d'autres
    ingrédients sont à acheter.
-   **Liste de courses** : une ligne par article (les œufs de la quiche et du poisson pané : « Œuf · 4 », avec les deux
+   **Liste de courses** : chaque ligne se retire d'un toucher sur sa croix (pas besoin de l'acheter) ; un bandeau
+   « Annuler » la remet aussitôt en cas d'erreur. L'article n'est pas effacé (colonne `removed_at`) : sur la fiche de la
+   recette, l'ingrédient porte une petite mention « Retiré de votre liste » avec un lien « Remettre » (fonction SQL
+   `recipe_shopping_state`), et il n'est plus compté « à acheter ». Une ligne par article (les œufs de la quiche et du poisson pané : « Œuf · 4 », avec les deux
    plats), quantités additionnées, nom sans la quantité de la recette (« 2 boîtes de tomates pelées » devient « Tomates
    pelées · 800 g ») ; cocher la ligne coche tous ses articles. L'accueil compte les lignes de la même façon.
 13. **Rappels** (cloche de l'accueil) : panneau qui monte du bas avec le menu du jour (ou le prochain), les minuteurs

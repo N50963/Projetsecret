@@ -19,7 +19,7 @@ import { pickDishPhoto } from "../../lib/photo";
 import { useHousehold } from "../../lib/session";
 import { clock, stepTimer } from "../../lib/steps";
 import { supabase } from "../../lib/supabase";
-import { addDays, loadPurchases, PURCHASE_WINDOW_DAYS, Stock, toIsoDate } from "../../modules/planning";
+import { addDays, loadPurchases, PURCHASE_WINDOW_DAYS, setShoppingItemsRemoved, Stock, toIsoDate } from "../../modules/planning";
 import { CARD_SHADOW, useColors } from "../../lib/theme";
 import { startTimer, stopTimer, timerId, useTimers } from "../../lib/timers";
 import {
@@ -176,9 +176,11 @@ export default function FicheRecette() {
   // Stock pas encore lu : aucune mention « à acheter » (pas de mention qui apparaît puis disparaît). Stock illisible : la
   // règle simple (acheté ces 7 derniers jours).
   const inStock = (n: IngredientShopping) => (stock ? stock.available(n.slug, today0).present : n.boughtRecently);
-  const missing = stock === undefined ? [] : needs.filter((n) => !n.onList && !inStock(n));
+  // Un article retiré de la liste par le foyer n'est plus « à acheter » : la fiche le signale et propose de le remettre.
+  const missing = stock === undefined ? [] : needs.filter((n) => !n.onList && !n.removed && !inStock(n));
   /** Ingrédients normalement à la maison (pas sur la liste) : le foyer peut dire qu'il n'en a plus. */
-  const atHome = stock === undefined ? [] : needs.filter((n) => !n.onList && inStock(n));
+  const atHome = stock === undefined ? [] : needs.filter((n) => !n.onList && !n.removed && inStock(n));
+  const removedOf = (slug: string | null | undefined) => (slug ? needs.find((n) => n.slug === slug && n.removed) : undefined);
   const toBuy = new Set(missing.map((n) => n.slug));
   const onList = new Set(needs.filter((n) => n.onList).map((n) => n.slug));
   const canPick = (slug: string | null | undefined) => Boolean(outOf && slug && atHome.some((n) => n.slug === slug));
@@ -203,6 +205,13 @@ export default function FicheRecette() {
     setNeeds(await getShoppingStatus(supabase, household.id, recipe.id, servings));
     refreshShoppingCount(household.id).catch(() => undefined);
     setInfo(added ? `${added} article${added > 1 ? "s" : ""} ajouté${added > 1 ? "s" : ""} à la liste de courses.` : "Tout est déjà sur la liste.");
+  });
+  /** Article retiré de la liste par le foyer : remis sur la liste (avec son menu), s'il le juge finalement nécessaire. */
+  const putBack = (item: IngredientShopping) => act(`un:${item.slug}`, async () => {
+    await setShoppingItemsRemoved(supabase, item.removedItems, false);
+    setNeeds(await getShoppingStatus(supabase, household.id, recipe.id, servings));
+    refreshShoppingCount(household.id).catch(() => undefined);
+    setInfo(`« ${item.label} » remis sur la liste de courses.`);
   });
   /** « Je n'en ai plus » pour un seul ingrédient acheté : il rejoint la liste aussitôt. */
   const addOne = (item: IngredientShopping) => act(`un:${item.slug}`, async () => {
@@ -374,11 +383,29 @@ export default function FicheRecette() {
                   : <View style={[styles.thumb, { backgroundColor: c.chip, alignItems: "center", justifyContent: "center" }]}>
                     <Icon name="cutlery" size={18} color={c.muted} />
                   </View>}
-                <Text style={{ flex: 1, color: c.muted, fontSize: 16, lineHeight: 21 }}>
-                  {i.label}{i.optional ? " (facultatif)" : ""}
-                  {i.slug && toBuy.has(i.slug) ? <Text style={{ color: c.orangeInk, fontSize: 15, fontWeight: "500" }}> · à acheter</Text> : null}
-                  {i.slug && onList.has(i.slug) ? <Text style={{ color: c.greenInk, fontSize: 15, fontWeight: "500" }}> · sur la liste</Text> : null}
-                </Text>
+                <View style={{ flex: 1, gap: 5 }}>
+                  <Text style={{ color: c.muted, fontSize: 16, lineHeight: 21 }}>
+                    {i.label}{i.optional ? " (facultatif)" : ""}
+                    {i.slug && toBuy.has(i.slug) ? <Text style={{ color: c.orangeInk, fontSize: 15, fontWeight: "500" }}> · à acheter</Text> : null}
+                    {i.slug && onList.has(i.slug) ? <Text style={{ color: c.greenInk, fontSize: 15, fontWeight: "500" }}> · sur la liste</Text> : null}
+                  </Text>
+                  {(() => {
+                    // Retiré de la liste par le foyer : mention discrète, et de quoi le remettre.
+                    const removed = removedOf(i.slug);
+                    if (!removed) return null;
+                    return (
+                      <View style={[styles.removedNote, { backgroundColor: c.chip }]}>
+                        <Icon name="info" size={13} color={c.orangeInk} />
+                        <Text style={{ color: c.orangeInk, fontSize: 13, lineHeight: 16 }}>Retiré de votre liste</Text>
+                        <Pressable onPress={() => putBack(removed)} disabled={busy !== null} hitSlop={8} accessibilityRole="button"
+                          accessibilityLabel={`Remettre ${i.label} sur la liste de courses`} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+                          {busy === `un:${removed.slug}` ? <ActivityIndicator size="small" color={c.primary} />
+                            : <Text style={{ color: c.primary, fontSize: 13, lineHeight: 16, fontWeight: "700", textDecorationLine: "underline" }}>Remettre</Text>}
+                        </Pressable>
+                      </View>
+                    );
+                  })()}
+                </View>
                 <Text style={{ color: c.text, fontSize: 16, fontWeight: "500", fontVariant: ["tabular-nums"] }}>{quantity(i.quantity, i.unit)}</Text>
                 {canPick(i.slug) ? <Icon name={outOf?.has(i.slug!) ? "checkCircle" : "circle"} size={24} color={outOf?.has(i.slug!) ? c.primary : c.muted} /> : null}
                 {(() => {
@@ -575,6 +602,8 @@ const styles = StyleSheet.create({
   section: { marginHorizontal: 17, marginTop: 12, gap: 10 },
   ingredient: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 52, paddingVertical: 6 },
   // Panier « Je n'en ai plus » d'un ingrédient acheté (ajout à la liste de cet ingrédient seul).
+  // Mention « Retiré de votre liste » sous l'ingrédient : petite pastille crème, texte orangé, lien « Remettre ».
+  removedNote: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
   addOne: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   addOnePlus: { position: "absolute", top: 4, right: 3, width: 13, height: 13, borderRadius: 7, alignItems: "center", justifyContent: "center" },
   // Vignette d'ingrédient sur fond blanc, bordée pour se détacher du fond crème de la fiche.
