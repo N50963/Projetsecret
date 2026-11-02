@@ -382,6 +382,23 @@ function normalizeRecipe(raw: any, refs: Ref[]): { recipe: any; issues: string[]
       last.base_unit = null;
     }
   }
+  // Plat donné « végétarien » alors qu'il contient de la viande ou du poisson (erreur fréquente des petits modèles) : la
+  // protéine principale est celle de l'ingrédient carné le plus important.
+  if (["vegetarien", "legumineuse", "oeuf"].includes(r.main_protein)) {
+    const categoryOf = new Map(refs.map((x) => [x.slug, x.category]));
+    const proteinOf = (slug: string): string | null => {
+      const cat = categoryOf.get(slug);
+      if (/^(crevette|moule|coque|saint_jacques|calamar|seiche|poulpe|palourde|huitre)/.test(slug)) return "fruits_de_mer";
+      if (cat === "poisson") return "poisson";
+      if (cat === "volaille" || slug === "cordon_bleu") return "volaille";
+      if (/^(boeuf_|veau_|corned_beef)/.test(slug)) return "boeuf";
+      if (/^(porc_|saucisse|boudin_blanc|jambon_|lardons|chorizo)/.test(slug)) return "porc";
+      return null;
+    };
+    const meat = r.ingredients.filter((i) => !i.optional && i.slug && proteinOf(i.slug))
+      .sort((a, b) => (b.base_quantity ?? b.quantity ?? 0) - (a.base_quantity ?? a.quantity ?? 0))[0];
+    if (meat) r.main_protein = proteinOf(meat.slug)!;
+  }
   if (!r.name) issues.push("nom manquant");
   if (r.ingredients.length < 3) issues.push("moins de 3 ingrédients");
   if (r.steps.length < 2) issues.push("moins de 2 étapes");
