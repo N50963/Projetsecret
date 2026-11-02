@@ -221,7 +221,8 @@ export async function listFavorites(supabase: SupabaseClient, householdId: strin
 
 /** Ingrédient de la recette à acheter (ni de placard, ni acheté ces 7 derniers jours). */
 export interface ShoppingNeed {
-  ingredientId: string;
+  /** null : ingrédient hors référentiel (ajouté à la liste sous son libellé). */
+  ingredientId: string | null;
   slug: string;
   label: string;
   quantity: number | null;
@@ -277,6 +278,32 @@ export async function addNeedsToShoppingList(supabase: SupabaseClient, household
   })));
   check(error, "Liste de courses non complétée");
   return rows.length;
+}
+
+/** Ce qui est déjà sur la liste de courses (à acheter) : ingrédients du référentiel et libellés (pour les autres). */
+export interface ListedIngredients {
+  ids: Set<string>;
+  labels: Set<string>;
+}
+
+const foldLabel = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+export const isLabelListed = (listed: ListedIngredients, label: string) => listed.labels.has(foldLabel(label));
+
+export async function getListedIngredients(supabase: SupabaseClient, householdId: string): Promise<ListedIngredients> {
+  const since = new Date(Date.now() - 21 * 86_400_000).toISOString();
+  const { data, error } = await supabase.from("shopping_list_status").select("ingredient_id, label")
+    .eq("household_id", householdId).eq("active", true).is("checked_at", null).is("bought_at", null).gte("created_at", since);
+  check(error, "Liste de courses illisible");
+  const rows = (data ?? []) as Row[];
+  return { ids: new Set(rows.map((r) => r.ingredient_id).filter(Boolean)), labels: new Set(rows.map((r) => foldLabel(String(r.label ?? "")))) };
+}
+
+/** Identifiants du référentiel des ingrédients d'une recette (pour mettre sur la liste un produit de placard, du sel…). */
+export async function ingredientIds(supabase: SupabaseClient, slugs: string[]): Promise<Map<string, string>> {
+  if (!slugs.length) return new Map();
+  const { data, error } = await supabase.from("ingredients").select("id, slug").in("slug", [...new Set(slugs)]);
+  check(error, "Ingrédients illisibles");
+  return new Map(((data ?? []) as Row[]).map((r) => [r.slug as string, r.id as string]));
 }
 
 export interface CandidateOptions {

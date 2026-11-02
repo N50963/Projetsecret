@@ -23,8 +23,8 @@ import { addDays, loadPurchases, PURCHASE_WINDOW_DAYS, setShoppingItemsRemoved, 
 import { CARD_SHADOW, useColors } from "../../lib/theme";
 import { startTimer, stopTimer, timerId, useTimers } from "../../lib/timers";
 import {
-  adaptRecipe, addNeedsToShoppingList, addRecipeVersion, archiveRecipe, getHouseholdPreferences, getLatestRating, getRecipe, getShoppingStatus, isFavorite, rateRecipe,
-  scaleIngredients, setFavorite, toPayload, validateRecipe, type IngredientShopping, type Recipe, type RecipeRating,
+  adaptRecipe, addNeedsToShoppingList, addRecipeVersion, archiveRecipe, getHouseholdPreferences, getLatestRating, getListedIngredients, getRecipe, getShoppingStatus, ingredientIds, isFavorite, isLabelListed, rateRecipe,
+  scaleIngredients, setFavorite, toPayload, validateRecipe, type IngredientShopping, type ListedIngredients, type Recipe, type RecipeIngredient, type RecipeRating,
 } from "../../modules/recipes";
 import { errorText } from "../../lib/errors";
 import { refreshShoppingCount } from "../../lib/shoppingCount";
@@ -83,6 +83,9 @@ export default function FicheRecette() {
    * dehors des menus prévus). null : pas de sélection en cours.
    */
   const [outOf, setOutOf] = useState<Set<string> | null>(null);
+  /** Déjà sur la liste (tous ingrédients, placard compris) et identifiants du référentiel des ingrédients de la recette. */
+  const [listed, setListed] = useState<ListedIngredients>({ ids: new Set(), labels: new Set() });
+  const [idOf, setIdOf] = useState<Map<string, string>>(new Map());
   /**
    * Stock estimé comme pour les propositions (achats des 30 derniers jours, conservation propre à chaque produit) : un
    * fromage acheté il y a 12 jours est encore à la maison, la fiche ne le dit pas « à acheter » quand le menu ne l'a pas
@@ -150,10 +153,23 @@ export default function FicheRecette() {
     ingredientPictureUrls().then((m) => setIngredientPics(m.size), () => undefined);
   }, []);
 
+  /** État de la liste pour la fiche : ingrédients à acheter, retirés, et tout ce qui est déjà sur la liste. */
+  const refreshShopping = useCallback(async (r: Recipe, n: number) => {
+    const [status, onTheList] = await Promise.all([
+      getShoppingStatus(supabase, household.id, r.id, n).catch(() => []),
+      getListedIngredients(supabase, household.id).catch(() => ({ ids: new Set<string>(), labels: new Set<string>() })),
+    ]);
+    setNeeds(status);
+    setListed(onTheList);
+  }, [household.id]);
   useEffect(() => {
     if (!recipe) return;
-    getShoppingStatus(supabase, household.id, recipe.id, servings).then(setNeeds, () => setNeeds([]));
-  }, [recipe, servings, household.id]);
+    refreshShopping(recipe, servings);
+  }, [recipe, servings, refreshShopping]);
+  useEffect(() => {
+    if (!recipe) return;
+    ingredientIds(supabase, recipe.ingredients.map((i) => i.slug).filter((s): s is string => Boolean(s))).then(setIdOf, () => undefined);
+  }, [recipe]);
 
   const act = async (name: string, fn: () => Promise<void>) => {
     setBusy(name);
@@ -183,6 +199,10 @@ export default function FicheRecette() {
   const removedOf = (slug: string | null | undefined) => (slug ? needs.find((n) => n.slug === slug && n.removed) : undefined);
   const toBuy = new Set(missing.map((n) => n.slug));
   const onList = new Set(needs.filter((n) => n.onList).map((n) => n.slug));
+  /** Sur la liste : d'après la fiche (ingrédients à acheter) ou d'après la liste elle-même (placard, facultatif, hors référentiel). */
+  const isListed = (i: RecipeIngredient) => i.slug
+    ? onList.has(i.slug) || listed.ids.has(idOf.get(i.slug) ?? "")
+    : isLabelListed(listed, i.label);
   const canPick = (slug: string | null | undefined) => Boolean(outOf && slug && atHome.some((n) => n.slug === slug));
 
   const share = () => {
@@ -202,21 +222,33 @@ export default function FicheRecette() {
   const addToList = (items: IngredientShopping[]) => act("list", async () => {
     const added = await addNeedsToShoppingList(supabase, household.id, recipe.id, items);
     setOutOf(null);
-    setNeeds(await getShoppingStatus(supabase, household.id, recipe.id, servings));
+    await refreshShopping(recipe, servings);
     refreshShoppingCount(household.id).catch(() => undefined);
     setInfo(added ? `${added} article${added > 1 ? "s" : ""} ajouté${added > 1 ? "s" : ""} à la liste de courses.` : "Tout est déjà sur la liste.");
   });
   /** Article retiré de la liste par le foyer : remis sur la liste (avec son menu), s'il le juge finalement nécessaire. */
   const putBack = (item: IngredientShopping) => act(`un:${item.slug}`, async () => {
     await setShoppingItemsRemoved(supabase, item.removedItems, false);
-    setNeeds(await getShoppingStatus(supabase, household.id, recipe.id, servings));
+    await refreshShopping(recipe, servings);
     refreshShoppingCount(household.id).catch(() => undefined);
     setInfo(`« ${item.label} » remis sur la liste de courses.`);
+  });
+  /**
+   * Un ingrédient de la recette va sur la liste à lui seul, quel qu'il soit : acheté mais épuisé, de placard (sel, ail,
+   * huile d'olive), facultatif ou hors référentiel ; avec la quantité affichée pour le nombre de personnes.
+   */
+  const addRow = (i: RecipeIngredient) => act(`un:${i.slug ?? i.label}`, async () => {
+    await addNeedsToShoppingList(supabase, household.id, recipe.id, [{
+      ingredientId: i.slug ? idOf.get(i.slug) ?? null : null, slug: i.slug ?? "", label: i.label, quantity: i.quantity, unit: i.unit, onList: false,
+    }]);
+    await refreshShopping(recipe, servings);
+    refreshShoppingCount(household.id).catch(() => undefined);
+    setInfo(`« ${i.label} » ajouté à la liste de courses.`);
   });
   /** « Je n'en ai plus » pour un seul ingrédient acheté : il rejoint la liste aussitôt. */
   const addOne = (item: IngredientShopping) => act(`un:${item.slug}`, async () => {
     await addNeedsToShoppingList(supabase, household.id, recipe.id, [item]);
-    setNeeds(await getShoppingStatus(supabase, household.id, recipe.id, servings));
+    await refreshShopping(recipe, servings);
     refreshShoppingCount(household.id).catch(() => undefined);
     setInfo(`« ${item.label} » ajouté à la liste de courses.`);
   });
@@ -387,7 +419,7 @@ export default function FicheRecette() {
                   <Text style={{ color: c.muted, fontSize: 16, lineHeight: 21 }}>
                     {i.label}{i.optional ? " (facultatif)" : ""}
                     {i.slug && toBuy.has(i.slug) ? <Text style={{ color: c.orangeInk, fontSize: 15, fontWeight: "500" }}> · à acheter</Text> : null}
-                    {i.slug && onList.has(i.slug) ? <Text style={{ color: c.greenInk, fontSize: 15, fontWeight: "500" }}> · sur la liste</Text> : null}
+                    {isListed(i) ? <Text style={{ color: c.greenInk, fontSize: 15, fontWeight: "500" }}> · sur la liste</Text> : null}
                   </Text>
                   {(() => {
                     // Retiré de la liste par le foyer : mention discrète, et de quoi le remettre.
@@ -409,14 +441,16 @@ export default function FicheRecette() {
                 <Text style={{ color: c.text, fontSize: 16, fontWeight: "500", fontVariant: ["tabular-nums"] }}>{quantity(i.quantity, i.unit)}</Text>
                 {canPick(i.slug) ? <Icon name={outOf?.has(i.slug!) ? "checkCircle" : "circle"} size={24} color={outOf?.has(i.slug!) ? c.primary : c.muted} /> : null}
                 {(() => {
-                  // Ingrédient acheté, normalement à la maison : « Je n'en ai plus », il va sur la liste à lui seul.
-                  const home = !outOf && i.slug ? atHome.find((x) => x.slug === i.slug) : undefined;
-                  if (!home) return null;
+                  // Tout ingrédient qui n'est pas déjà sur la liste (ni retiré par le foyer) a son panier : il va sur la liste à
+                  // lui seul (acheté mais épuisé, à acheter, de placard comme le sel ou l'huile, facultatif, hors référentiel).
+                  if (outOf || isListed(i) || removedOf(i.slug) || stock === undefined) return null;
+                  const home = i.slug ? atHome.find((x) => x.slug === i.slug) : undefined;
+                  const key = `un:${i.slug ?? i.label}`;
                   return (
-                    <Pressable onPress={() => addOne(home)} disabled={busy !== null} hitSlop={6} accessibilityRole="button"
-                      accessibilityLabel={`Je n'en ai plus : ajouter ${i.label} à la liste de courses`}
+                    <Pressable onPress={() => (home ? addOne(home) : addRow(i))} disabled={busy !== null} hitSlop={6} accessibilityRole="button"
+                      accessibilityLabel={home ? `Je n'en ai plus : ajouter ${i.label} à la liste de courses` : `Ajouter ${i.label} à la liste de courses`}
                       style={({ pressed }) => [styles.addOne, { borderColor: c.border, backgroundColor: c.card, opacity: pressed ? 0.6 : 1 }]}>
-                      {busy === `un:${home.slug}` ? <ActivityIndicator size="small" color={c.primary} /> : (
+                      {busy === key ? <ActivityIndicator size="small" color={c.primary} /> : (
                         <>
                           <Icon name="cart" size={19} color={c.text} />
                           <View style={[styles.addOnePlus, { backgroundColor: c.primary }]}><Icon name="plus" size={10} color="#FFFFFF" /></View>
@@ -428,6 +462,7 @@ export default function FicheRecette() {
               </Row_>
             ))}
           </View>
+          {!outOf ? <Muted>Un ingrédient vous manque (sel, ail, huile…) ? Touchez son panier pour l'ajouter à la liste.</Muted> : null}
           {outOf ? (
             <View style={{ gap: 8 }}>
               <Muted>Cochez ce qui manque à la maison (consommé en dehors des menus prévus) : il rejoint la liste de courses.</Muted>
@@ -436,10 +471,7 @@ export default function FicheRecette() {
               <Button title="Annuler" kind="secondary" onPress={() => setOutOf(null)} />
             </View>
           ) : missing.length ? (
-            <View style={{ gap: 8 }}>
-              {atHome.length ? <Muted>Vous n'avez plus un ingrédient acheté ? Touchez son panier pour l'ajouter à la liste.</Muted> : null}
-              <Button icon="cartFilled" title="Ajouter à ma liste" onPress={() => addToList(missing)} busy={busy === "list"} />
-            </View>
+            <Button icon="cartFilled" title="Ajouter à ma liste" onPress={() => addToList(missing)} busy={busy === "list"} />
           ) : atHome.length ? (
             // Tout est normalement à la maison : le foyer peut quand même ne plus en avoir.
             <Button icon="cartFilled" kind="secondary" title="Je n'en ai plus, j'ajoute à ma liste"
