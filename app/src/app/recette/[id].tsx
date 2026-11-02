@@ -31,6 +31,13 @@ import { refreshShoppingCount } from "../../lib/shoppingCount";
 
 type Tab = "ingredients" | "preparation";
 
+/** Ligne d'ingrédient : touchable (case à cocher) ou simple vue, pour ne pas désactiver les boutons qu'elle contient. */
+function Row_({ pressable, onPress, children, ...rest }: React.ComponentProps<typeof Pressable> & { pressable: boolean; children: React.ReactNode }) {
+  if (pressable) return <Pressable onPress={onPress} {...rest}>{children}</Pressable>;
+  const { style, accessibilityRole: _r, accessibilityState: _s, ...view } = rest;
+  return <View style={style as never} {...(view as object)}>{children}</View>;
+}
+
 /** Brouillon affiché dans l'éditeur : version proposée par Mistral après un avis, ou modification par le foyer. */
 interface Revision {
   kind: "mistral" | "edit";
@@ -197,6 +204,13 @@ export default function FicheRecette() {
     refreshShoppingCount(household.id).catch(() => undefined);
     setInfo(added ? `${added} article${added > 1 ? "s" : ""} ajouté${added > 1 ? "s" : ""} à la liste de courses.` : "Tout est déjà sur la liste.");
   });
+  /** « Je n'en ai plus » pour un seul ingrédient acheté : il rejoint la liste aussitôt. */
+  const addOne = (item: IngredientShopping) => act(`un:${item.slug}`, async () => {
+    await addNeedsToShoppingList(supabase, household.id, recipe.id, [item]);
+    setNeeds(await getShoppingStatus(supabase, household.id, recipe.id, servings));
+    refreshShoppingCount(household.id).catch(() => undefined);
+    setInfo(`« ${item.label} » ajouté à la liste de courses.`);
+  });
   const togglePick = (slug: string) => setOutOf((set) => {
     if (!set) return set;
     const next = new Set(set);
@@ -350,7 +364,8 @@ export default function FicheRecette() {
         <View style={styles.section}>
           <View>
             {ingredients.map((i, n) => (
-              <Pressable key={n} disabled={!canPick(i.slug)} onPress={() => i.slug && togglePick(i.slug)}
+              // Ligne touchable seulement en sélection « Je n'en ai plus » (sinon son panier reste seul actif).
+              <Row_ key={n} pressable={canPick(i.slug)} onPress={() => i.slug && togglePick(i.slug)}
                 accessibilityRole={canPick(i.slug) ? "checkbox" : undefined} accessibilityState={canPick(i.slug) ? { checked: outOf?.has(i.slug!) } : undefined}
                 style={[styles.ingredient, n < ingredients.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.border }]}>
                 {ingredientSource(i.slug)
@@ -366,7 +381,24 @@ export default function FicheRecette() {
                 </Text>
                 <Text style={{ color: c.text, fontSize: 16, fontWeight: "500", fontVariant: ["tabular-nums"] }}>{quantity(i.quantity, i.unit)}</Text>
                 {canPick(i.slug) ? <Icon name={outOf?.has(i.slug!) ? "checkCircle" : "circle"} size={24} color={outOf?.has(i.slug!) ? c.primary : c.muted} /> : null}
-              </Pressable>
+                {(() => {
+                  // Ingrédient acheté, normalement à la maison : « Je n'en ai plus », il va sur la liste à lui seul.
+                  const home = !outOf && i.slug ? atHome.find((x) => x.slug === i.slug) : undefined;
+                  if (!home) return null;
+                  return (
+                    <Pressable onPress={() => addOne(home)} disabled={busy !== null} hitSlop={6} accessibilityRole="button"
+                      accessibilityLabel={`Je n'en ai plus : ajouter ${i.label} à la liste de courses`}
+                      style={({ pressed }) => [styles.addOne, { borderColor: c.border, backgroundColor: c.card, opacity: pressed ? 0.6 : 1 }]}>
+                      {busy === `un:${home.slug}` ? <ActivityIndicator size="small" color={c.primary} /> : (
+                        <>
+                          <Icon name="cart" size={19} color={c.text} />
+                          <View style={[styles.addOnePlus, { backgroundColor: c.primary }]}><Icon name="plus" size={10} color="#FFFFFF" /></View>
+                        </>
+                      )}
+                    </Pressable>
+                  );
+                })()}
+              </Row_>
             ))}
           </View>
           {outOf ? (
@@ -377,7 +409,10 @@ export default function FicheRecette() {
               <Button title="Annuler" kind="secondary" onPress={() => setOutOf(null)} />
             </View>
           ) : missing.length ? (
-            <Button icon="cartFilled" title="Ajouter à ma liste" onPress={() => addToList(missing)} busy={busy === "list"} />
+            <View style={{ gap: 8 }}>
+              {atHome.length ? <Muted>Vous n'avez plus un ingrédient acheté ? Touchez son panier pour l'ajouter à la liste.</Muted> : null}
+              <Button icon="cartFilled" title="Ajouter à ma liste" onPress={() => addToList(missing)} busy={busy === "list"} />
+            </View>
           ) : atHome.length ? (
             // Tout est normalement à la maison : le foyer peut quand même ne plus en avoir.
             <Button icon="cartFilled" kind="secondary" title="Je n'en ai plus, j'ajoute à ma liste"
@@ -539,6 +574,9 @@ const styles = StyleSheet.create({
   tab: { flex: 1, height: 42, alignItems: "center", justifyContent: "center" },
   section: { marginHorizontal: 17, marginTop: 12, gap: 10 },
   ingredient: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 52, paddingVertical: 6 },
+  // Panier « Je n'en ai plus » d'un ingrédient acheté (ajout à la liste de cet ingrédient seul).
+  addOne: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  addOnePlus: { position: "absolute", top: 4, right: 3, width: 13, height: 13, borderRadius: 7, alignItems: "center", justifyContent: "center" },
   // Vignette d'ingrédient sur fond blanc, bordée pour se détacher du fond crème de la fiche.
   thumb: { width: 42, height: 42, borderRadius: 10, overflow: "hidden", backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E9DCC6" },
   step: { flexDirection: "row", gap: 12, borderRadius: 13, borderWidth: 1.5, borderColor: "transparent", padding: 8 },

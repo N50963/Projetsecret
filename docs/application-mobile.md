@@ -107,7 +107,9 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    liste » met sur la liste de courses les ingrédients marqués « à acheter » (ni de placard, ni encore à la maison selon
    le stock estimé des propositions). Quand tout est normalement à la maison, le bouton devient « Je n'en ai plus,
    j'ajoute à ma liste » : les ingrédients concernés se cochent (tous au départ) et rejoignent la liste, car le foyer a
-   pu les consommer en dehors des menus prévus (fonction SQL `recipe_shopping_status`).
+   pu les consommer en dehors des menus prévus (fonction SQL `recipe_shopping_status`). Chaque ingrédient acheté a aussi
+   son propre panier « Je n'en ai plus » au bout de sa ligne : un toucher l'ajoute seul à la liste, même quand d'autres
+   ingrédients sont à acheter.
    **Liste de courses** : une ligne par article (les œufs de la quiche et du poisson pané : « Œuf · 4 », avec les deux
    plats), quantités additionnées, nom sans la quantité de la recette (« 2 boîtes de tomates pelées » devient « Tomates
    pelées · 800 g ») ; cocher la ligne coche tous ses articles. L'accueil compte les lignes de la même façon.
