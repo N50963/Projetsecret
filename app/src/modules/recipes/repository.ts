@@ -245,6 +245,21 @@ export async function addRecipeToShoppingList(supabase: SupabaseClient, househol
   return Number(data ?? 0);
 }
 
+/** État d'un ingrédient de la recette pour la liste de courses (hors facultatifs et produits de placard). */
+export interface IngredientShopping extends ShoppingNeed {
+  /** Acheté ces 7 derniers jours (repli quand le stock estimé n'est pas lisible). */
+  boughtRecently: boolean;
+}
+
+export async function getShoppingStatus(supabase: SupabaseClient, householdId: string, recipeId: string, servings: number): Promise<IngredientShopping[]> {
+  const { data, error } = await supabase.rpc("recipe_shopping_status", { p_household: householdId, p_recipe_id: recipeId, p_servings: servings });
+  check(error, "Ingrédients à acheter illisibles");
+  return ((data ?? []) as Row[]).map((n) => ({
+    ingredientId: n.ingredient_id, slug: n.slug, label: n.label, quantity: n.quantity === null ? null : Number(n.quantity), unit: n.unit,
+    onList: n.on_list, boughtRecently: n.bought_recently,
+  }));
+}
+
 /**
  * Met sur la liste de courses les ingrédients choisis d'une recette (ceux que la fiche montre « à acheter », d'après le
  * même stock que les propositions) ; renvoie le nombre d'articles ajoutés.

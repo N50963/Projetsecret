@@ -23,8 +23,8 @@ import { addDays, loadPurchases, PURCHASE_WINDOW_DAYS, Stock, toIsoDate } from "
 import { CARD_SHADOW, useColors } from "../../lib/theme";
 import { startTimer, stopTimer, timerId, useTimers } from "../../lib/timers";
 import {
-  adaptRecipe, addNeedsToShoppingList, addRecipeVersion, archiveRecipe, getHouseholdPreferences, getLatestRating, getRecipe, getShoppingNeeds, isFavorite, rateRecipe,
-  scaleIngredients, setFavorite, toPayload, validateRecipe, type Recipe, type RecipeRating, type ShoppingNeed,
+  adaptRecipe, addNeedsToShoppingList, addRecipeVersion, archiveRecipe, getHouseholdPreferences, getLatestRating, getRecipe, getShoppingStatus, isFavorite, rateRecipe,
+  scaleIngredients, setFavorite, toPayload, validateRecipe, type IngredientShopping, type Recipe, type RecipeRating,
 } from "../../modules/recipes";
 import { errorText } from "../../lib/errors";
 
@@ -69,7 +69,12 @@ export default function FicheRecette() {
   const [image, setImage] = useState<Picture | null>(() => pictureOf(id));
   const [servings, setServings] = useState(household.defaultServings);
   const [tab, setTab] = useState<Tab>("ingredients");
-  const [needs, setNeeds] = useState<ShoppingNeed[]>([]);
+  const [needs, setNeeds] = useState<IngredientShopping[]>([]);
+  /**
+   * « Je n'en ai plus » : ingrédients normalement à la maison, cochés par le foyer pour la liste de courses (consommés en
+   * dehors des menus prévus). null : pas de sélection en cours.
+   */
+  const [outOf, setOutOf] = useState<Set<string> | null>(null);
   /**
    * Stock estimé comme pour les propositions (achats des 30 derniers jours, conservation propre à chaque produit) : un
    * fromage acheté il y a 12 jours est encore à la maison, la fiche ne le dit pas « à acheter » quand le menu ne l'a pas
@@ -139,7 +144,7 @@ export default function FicheRecette() {
 
   useEffect(() => {
     if (!recipe) return;
-    getShoppingNeeds(supabase, household.id, recipe.id, servings).then(setNeeds, () => setNeeds([]));
+    getShoppingStatus(supabase, household.id, recipe.id, servings).then(setNeeds, () => setNeeds([]));
   }, [recipe, servings, household.id]);
 
   const act = async (name: string, fn: () => Promise<void>) => {
@@ -160,10 +165,15 @@ export default function FicheRecette() {
   // Minuteurs de cette recette qui tournent encore : le plat ne peut pas être prêt avant leur fin.
   const cooking = timers.filter((t) => t.recipeId === recipe.id && !t.done);
   const today0 = toIsoDate(new Date());
-  // Stock pas encore lu : aucune mention « à acheter » (pas de mention qui apparaît puis disparaît).
-  const missing = stock === undefined ? [] : needs.filter((n) => !n.onList && !(stock?.available(n.slug, today0).present ?? false));
+  // Stock pas encore lu : aucune mention « à acheter » (pas de mention qui apparaît puis disparaît). Stock illisible : la
+  // règle simple (acheté ces 7 derniers jours).
+  const inStock = (n: IngredientShopping) => (stock ? stock.available(n.slug, today0).present : n.boughtRecently);
+  const missing = stock === undefined ? [] : needs.filter((n) => !n.onList && !inStock(n));
+  /** Ingrédients normalement à la maison (pas sur la liste) : le foyer peut dire qu'il n'en a plus. */
+  const atHome = stock === undefined ? [] : needs.filter((n) => !n.onList && inStock(n));
   const toBuy = new Set(missing.map((n) => n.slug));
   const onList = new Set(needs.filter((n) => n.onList).map((n) => n.slug));
+  const canPick = (slug: string | null | undefined) => Boolean(outOf && slug && atHome.some((n) => n.slug === slug));
 
   const share = () => {
     const text = [
@@ -178,10 +188,19 @@ export default function FicheRecette() {
     await setFavorite(supabase, household.id, recipe.id, !favorite);
     setFav(!favorite);
   });
-  const addToList = () => act("list", async () => {
-    const added = await addNeedsToShoppingList(supabase, household.id, recipe.id, missing);
-    setNeeds(await getShoppingNeeds(supabase, household.id, recipe.id, servings));
-    setInfo(added ? `${added} article${added > 1 ? "s" : ""} ajouté${added > 1 ? "s" : ""} à la liste de courses.` : "Tout est déjà sur la liste ou acheté récemment.");
+  /** Ajoute à la liste ce qui manque (à acheter), ou, en « Je n'en ai plus », les ingrédients cochés. */
+  const addToList = (items: IngredientShopping[]) => act("list", async () => {
+    const added = await addNeedsToShoppingList(supabase, household.id, recipe.id, items);
+    setOutOf(null);
+    setNeeds(await getShoppingStatus(supabase, household.id, recipe.id, servings));
+    setInfo(added ? `${added} article${added > 1 ? "s" : ""} ajouté${added > 1 ? "s" : ""} à la liste de courses.` : "Tout est déjà sur la liste.");
+  });
+  const togglePick = (slug: string) => setOutOf((set) => {
+    if (!set) return set;
+    const next = new Set(set);
+    if (next.has(slug)) next.delete(slug);
+    else next.add(slug);
+    return next;
   });
   const changePhoto = (camera: boolean) => act("photo", async () => {
     const photo = await pickDishPhoto(camera);
@@ -329,7 +348,9 @@ export default function FicheRecette() {
         <View style={styles.section}>
           <View>
             {ingredients.map((i, n) => (
-              <View key={n} style={[styles.ingredient, n < ingredients.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.border }]}>
+              <Pressable key={n} disabled={!canPick(i.slug)} onPress={() => i.slug && togglePick(i.slug)}
+                accessibilityRole={canPick(i.slug) ? "checkbox" : undefined} accessibilityState={canPick(i.slug) ? { checked: outOf?.has(i.slug!) } : undefined}
+                style={[styles.ingredient, n < ingredients.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.border }]}>
                 {ingredientSource(i.slug)
                   ? <Image source={ingredientSource(i.slug)!} cachePolicy="memory-disk" style={styles.thumb} contentFit="cover" transition={0}
                     accessibilityIgnoresInvertColors />
@@ -342,10 +363,26 @@ export default function FicheRecette() {
                   {i.slug && onList.has(i.slug) ? <Text style={{ color: c.greenInk, fontSize: 15, fontWeight: "500" }}> · sur la liste</Text> : null}
                 </Text>
                 <Text style={{ color: c.text, fontSize: 16, fontWeight: "500", fontVariant: ["tabular-nums"] }}>{quantity(i.quantity, i.unit)}</Text>
-              </View>
+                {canPick(i.slug) ? <Icon name={outOf?.has(i.slug!) ? "checkCircle" : "circle"} size={24} color={outOf?.has(i.slug!) ? c.primary : c.muted} /> : null}
+              </Pressable>
             ))}
           </View>
-          <Button icon="cartFilled" title="Ajouter à ma liste" onPress={addToList} busy={busy === "list"} disabled={stock === undefined} />
+          {outOf ? (
+            <View style={{ gap: 8 }}>
+              <Muted>Cochez ce qui manque à la maison (consommé en dehors des menus prévus) : il rejoint la liste de courses.</Muted>
+              <Button icon="cartFilled" title={outOf.size ? `Ajouter à ma liste (${outOf.size})` : "Cochez ce qui manque"} busy={busy === "list"}
+                disabled={!outOf.size} onPress={() => addToList(atHome.filter((n) => outOf.has(n.slug)))} />
+              <Button title="Annuler" kind="secondary" onPress={() => setOutOf(null)} />
+            </View>
+          ) : missing.length ? (
+            <Button icon="cartFilled" title="Ajouter à ma liste" onPress={() => addToList(missing)} busy={busy === "list"} />
+          ) : atHome.length ? (
+            // Tout est normalement à la maison : le foyer peut quand même ne plus en avoir.
+            <Button icon="cartFilled" kind="secondary" title="Je n'en ai plus, j'ajoute à ma liste"
+              onPress={() => setOutOf(new Set(atHome.map((n) => n.slug)))} disabled={stock === undefined} />
+          ) : (
+            <Button icon="cartFilled" title={needs.length ? "Tout est sur la liste" : "Ajouter à ma liste"} disabled onPress={() => undefined} />
+          )}
         </View>
       ) : (
         <View style={[styles.section, { gap: 10 }]}>

@@ -97,7 +97,10 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    l'éditeur avant d'enregistrer ; photo du plat facultative (appareil photo ou galerie), sinon Mistral crée une
    illustration.
 12. **Favoris** : cœur dans la bande verte de la fiche ; filtre « Favoris » dans l'onglet Recettes. « Ajouter à ma
-   liste » met sur la liste de courses les ingrédients ni de placard ni achetés ces 7 derniers jours.
+   liste » met sur la liste de courses les ingrédients marqués « à acheter » (ni de placard, ni encore à la maison selon
+   le stock estimé des propositions). Quand tout est normalement à la maison, le bouton devient « Je n'en ai plus,
+   j'ajoute à ma liste » : les ingrédients concernés se cochent (tous au départ) et rejoignent la liste, car le foyer a
+   pu les consommer en dehors des menus prévus (fonction SQL `recipe_shopping_status`).
    **Liste de courses** : une ligne par article (les œufs de la quiche et du poisson pané : « Œuf · 4 », avec les deux
    plats), quantités additionnées, nom sans la quantité de la recette (« 2 boîtes de tomates pelées » devient « Tomates
    pelées · 800 g ») ; cocher la ligne coche tous ses articles. L'accueil compte les lignes de la même façon.

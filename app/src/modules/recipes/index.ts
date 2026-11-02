@@ -6,7 +6,7 @@ export {
   type FoodGroup, type HouseholdPreferences, type SpiceLevel,
 } from "./preferences";
 export {
-  adaptRecipe, addNeedsToShoppingList, addRecipeToShoppingList, addRecipeVersion, archiveRecipe, createRecipe, currentSeason, getLatestRating, getRecipe, getRecipeCandidates, getShoppingNeeds, isFavorite, latestStars, listFavorites, listRecipes, rateRecipe,
+  adaptRecipe, addNeedsToShoppingList, addRecipeToShoppingList, addRecipeVersion, archiveRecipe, createRecipe, currentSeason, getLatestRating, getRecipe, getRecipeCandidates, getShoppingNeeds, getShoppingStatus, isFavorite, latestStars, listFavorites, listRecipes, rateRecipe,
   RecipeValidationError, setFavorite, slugify, starsToRating, toPayload, type CandidateOptions, type RecipeFilters, type RecipeSummary,
-  type ShoppingNeed,
+  type IngredientShopping, type ShoppingNeed,
 } from "./repository";
