@@ -40,7 +40,7 @@ export default function Connexion() {
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={{ height: insets.top, backgroundColor: c.statusBar }} />
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" bounces={false}>
-        <Image source={require("../../assets/connexion.jpg")} style={styles.photo} contentFit="cover" accessibilityIgnoresInvertColors />
+        <Image source={require("../../assets/connexion.webp")} style={styles.photo} contentFit="cover" accessibilityIgnoresInvertColors />
         <View style={[styles.sheet, { backgroundColor: c.background, paddingBottom: 26 + insets.bottom }]}>
           <View style={styles.brand}>
             <Logo />

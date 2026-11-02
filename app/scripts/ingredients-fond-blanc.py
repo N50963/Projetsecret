@@ -1,5 +1,5 @@
 """
-Vignettes des ingrédients sur fond blanc, embarquées dans l'application (assets/ingredients/<slug>.jpg, 160 px).
+Vignettes des ingrédients sur fond blanc, embarquées dans l'application (assets/ingredients/<slug>.webp, 160 px, WebP qualité 80).
 
 Usage (Python avec rembg et Pillow ; modèle isnet-general-use téléchargé au premier lancement) :
     python scripts/ingredients-fond-blanc.py <dossier des vignettes en ligne> assets/ingredients
@@ -50,7 +50,7 @@ def main(src: Path, dst: Path) -> None:
     for p in sorted(src.glob("*.jpg")):
         im = Image.open(p).convert("RGB")
         out = None if p.stem in TELLE_QUELLE else detoure(im, session)
-        (out or telle_quelle(im)).save(dst / p.name, "JPEG", quality=82, optimize=True)
+        (out or telle_quelle(im)).save(dst / f"{p.stem}.webp", "WEBP", quality=80, method=6)
         print(p.stem, "détouré" if out else "telle quelle")
 
 

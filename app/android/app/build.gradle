@@ -92,8 +92,8 @@ android {
         applicationId 'fr.foyer.menus'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 23
-        versionName "0.23.0"
+        versionCode 24
+        versionName "0.24.0"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -119,6 +119,16 @@ android {
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             def enablePngCrunchInRelease = findProperty('android.enablePngCrunchInReleaseBuilds') ?: 'true'
             crunchPngs enablePngCrunchInRelease.toBoolean()
+        }
+    }
+    // Un APK par architecture de processeur : les téléphones récents (64 bits) installent app-arm64-v8a-release.apk,
+    // qui n'embarque pas les bibliothèques 32 bits (≈ 16 Mo de moins) ; app-armeabi-v7a-release.apk pour un vieux téléphone.
+    splits {
+        abi {
+            enable true
+            reset()
+            include "arm64-v8a", "armeabi-v7a"
+            universalApk false
         }
     }
     packagingOptions {
