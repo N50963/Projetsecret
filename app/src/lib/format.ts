@@ -67,3 +67,32 @@ export function dateTime(iso: string | null): string {
   const d = new Date(iso);
   return `${d.getDate()} ${MONTHS[d.getMonth()]} à ${d.getHours()}h${String(d.getMinutes()).padStart(2, "0")}`;
 }
+
+/**
+ * Nom d'un article de la liste de courses sans la quantité de la recette, déjà donnée à droite en grammes ou en pièces
+ * (« 2 boîtes de tomates pelées · 800 g » devient « tomates pelées · 800 g », « 4 tomates · 600 g » devient « tomates »).
+ * Seulement quand la quantité est affichée : sinon le libellé reste entier.
+ */
+export function shoppingName(label: string, hasQuantity: boolean): string {
+  if (!hasQuantity) return label;
+  const name = label
+    // « 200 g de riz », « 50 cl de crème » : la mesure et son « de ».
+    .replace(/^\s*\d+([.,]\d+)?\s*(g|kg|mg|ml|cl|dl|l)\s+(de\s+|d['’])/i, "")
+    // « 4 tomates », « 1/2 citron », « une boîte de thon ».
+    .replace(/^\s*(\d+([.,]\d+)?|\d+\s*\/\s*\d+|½|¼|¾|un|une|deux|trois|quatre)\s+/i, "")
+    .replace(/^(boîtes?|sachets?|pots?|briques?|paquets?|bottes?|barquettes?)\s+(de\s+|d['’])/i, "");
+  return name.length >= 3 ? name : label;
+}
+
+/**
+ * Résumé coupé net par la fonction (300 caractères au plus) : ramené à ses phrases complètes, ou terminé par « … » s'il
+ * n'en contient aucune (« tout en gardant une cuis » n'est jamais affiché).
+ */
+export function wholeSentences(text: string): string {
+  const t = text.trim();
+  if (!t || /[.!?…)»]$/.test(t)) return t;
+  const end = Math.max(t.lastIndexOf(". "), t.lastIndexOf("! "), t.lastIndexOf("? "));
+  if (end > 0) return t.slice(0, end + 1);
+  const space = t.lastIndexOf(" ");
+  return `${(space > 0 ? t.slice(0, space) : t).replace(/[,;:]$/, "")}…`;
+}

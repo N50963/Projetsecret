@@ -1,5 +1,5 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Button, Chip, ErrorText, Field, Muted, Screen, SectionTitle, Tag } from "../components/ui";
@@ -182,10 +182,20 @@ export default function Produits() {
     setInfo(`${ready.length} produit${ready.length > 1 ? "s" : ""} validé${ready.length > 1 ? "s" : ""}.`);
   });
 
-  const find = async (text: string) => {
+  /** Numéro de la dernière recherche : une réponse plus ancienne, arrivée après, n'écrase pas les résultats. */
+  const latest = useRef(0);
+  const typing = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const find = (text: string) => {
     setSearch(text);
+    // Recherche lancée quand la saisie marque une pause (pas une requête par lettre tapée).
+    if (typing.current) clearTimeout(typing.current);
+    typing.current = setTimeout(() => lookup(text), 250);
+  };
+  const lookup = async (text: string) => {
+    const n = ++latest.current;
     try {
       const list = await searchProducts(household.id, text);
+      if (n !== latest.current) return;
       setFound(list);
       setEdits((prev) => ({ ...Object.fromEntries(list.map((p) => [p.id, editOf(p)])), ...prev }));
     } catch (e) {

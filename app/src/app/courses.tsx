@@ -7,6 +7,7 @@ import { Illustration } from "../components/Illustration";
 import { ErrorText, Muted, Screen, SectionTitle } from "../components/ui";
 import { quantity } from "../lib/format";
 import { illustrationUrls, pictureOf, type Picture } from "../lib/images";
+import { shoppingLines, type ShoppingLine } from "../lib/shopping";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { CARD_SHADOW, useColors } from "../lib/theme";
@@ -33,15 +34,18 @@ export default function Courses() {
   }, [household.id]);
   useFocusEffect(load);
 
-  const toggle = async (item: ShoppingItem) => {
-    const checked = !item.checkedAt;
-    setItems((list) => list.map((i) => (i.id === item.id ? { ...i, checkedAt: checked ? new Date().toISOString() : null } : i)));
-    setShoppingItemChecked(supabase, item.id, checked).catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  /** Coche (ou décoche) une ligne : tous les articles qu'elle regroupe. */
+  const toggle = async (line: ShoppingLine, checked: boolean) => {
+    const ids = new Set(line.items.filter((i) => !i.boughtAt).map((i) => i.id));
+    const at = checked ? new Date().toISOString() : null;
+    setItems((list) => list.map((i) => (ids.has(i.id) ? { ...i, checkedAt: at } : i)));
+    Promise.all([...ids].map((id) => setShoppingItemChecked(supabase, id, checked)))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   };
 
   // Seuls les articles des menus choisis à venir (ou d'une recette ajoutée depuis sa fiche) restent à acheter.
-  const toBuy = items.filter((i) => i.active && !i.boughtAt && !i.checkedAt);
-  const found = items.filter((i) => i.boughtAt || i.checkedAt);
+  const toBuy = shoppingLines(items.filter((i) => i.active && !i.boughtAt && !i.checkedAt));
+  const found = shoppingLines(items.filter((i) => i.boughtAt || i.checkedAt));
 
   return (
     <Screen title="Liste de courses" nav="courses" padded={false}>
@@ -54,38 +58,48 @@ export default function Courses() {
       <View style={styles.list}>
         <ErrorText>{error}</ErrorText>
         {toBuy.length === 0 && <Muted style={{ paddingHorizontal: 4 }}>Rien à acheter pour les menus choisis.</Muted>}
-        {toBuy.map((i) => (
-          <View key={i.id} style={[styles.item, { backgroundColor: c.card, borderColor: c.cardLine }, CARD_SHADOW]}>
-            <Pressable onPress={() => toggle(i)} accessibilityRole="checkbox" accessibilityState={{ checked: false }} accessibilityLabel={`Cocher : ${i.label}`}
-              style={styles.check}>
-              <Icon name="circle" size={26} color={c.orangeInk} />
-            </Pressable>
-            {i.recipeId ? <Illustration picture={images[i.recipeId] ?? pictureOf(i.recipeId)} height={64} width={74} rounded={9} /> : (
-              <View style={[styles.noPhoto, { backgroundColor: c.chip }]}><Icon name="image" size={24} color={c.muted} /></View>
-            )}
-            <View style={styles.text}>
-              <Text style={[styles.name, { color: c.text }]}>{i.label}</Text>
-              {i.recipeName ? <Text style={[styles.dish, { color: c.muted }]} numberOfLines={1}>{i.recipeName}</Text> : null}
+        {toBuy.map((line) => {
+          const photo = line.recipes[0]?.id;
+          return (
+            <View key={line.key} style={[styles.item, { backgroundColor: c.card, borderColor: c.cardLine }, CARD_SHADOW]}>
+              <Pressable onPress={() => toggle(line, true)} accessibilityRole="checkbox" accessibilityState={{ checked: false }}
+                accessibilityLabel={`Cocher : ${line.name}`} style={styles.check}>
+                <Icon name="circle" size={26} color={c.orangeInk} />
+              </Pressable>
+              {photo ? <Illustration picture={images[photo] ?? pictureOf(photo)} height={64} width={74} rounded={9} /> : (
+                <View style={[styles.noPhoto, { backgroundColor: c.chip }]}><Icon name="image" size={24} color={c.muted} /></View>
+              )}
+              <View style={styles.text}>
+                <Text style={[styles.name, { color: c.text }]}>{line.name}</Text>
+                {line.recipes.length ? (
+                  <Text style={[styles.dish, { color: c.muted }]} numberOfLines={line.recipes.length > 1 ? 2 : 1}>
+                    {line.recipes.map((r) => r.name).join(" · ")}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={[styles.qty, { color: c.text }]}>{quantity(line.quantity, line.unit)}</Text>
             </View>
-            <Text style={[styles.qty, { color: c.text }]}>{quantity(i.quantity, i.unit)}</Text>
-          </View>
-        ))}
+          );
+        })}
       </View>
 
       {found.length > 0 && (
         <>
           <View style={[styles.head, { marginTop: 2 }]}><SectionTitle icon="receipt" title="Trouvés sur vos tickets" /></View>
           <View style={styles.list}>
-            {found.map((i) => (
-              <View key={i.id} style={[styles.item, styles.foundItem, { backgroundColor: c.card, borderColor: c.cardLine }, CARD_SHADOW]}>
-                <Pressable onPress={() => toggle(i)} disabled={Boolean(i.boughtAt)} accessibilityRole="checkbox" accessibilityState={{ checked: true }}
-                  accessibilityLabel={`Décocher : ${i.label}`} style={styles.check}>
-                  <Icon name="checkCircle" size={26} color={c.primary} />
-                </Pressable>
-                <Text style={{ flex: 1, color: c.muted, fontSize: 16, textDecorationLine: "line-through" }}>{i.label}</Text>
-                <Text style={{ color: c.muted, fontSize: 16, paddingLeft: 8 }}>{quantity(i.quantity, i.unit)}</Text>
-              </View>
-            ))}
+            {found.map((line) => {
+              const bought = line.items.every((i) => i.boughtAt);
+              return (
+                <View key={line.key} style={[styles.item, styles.foundItem, { backgroundColor: c.card, borderColor: c.cardLine }, CARD_SHADOW]}>
+                  <Pressable onPress={() => toggle(line, false)} disabled={bought} accessibilityRole="checkbox" accessibilityState={{ checked: true }}
+                    accessibilityLabel={`Décocher : ${line.name}`} style={styles.check}>
+                    <Icon name="checkCircle" size={26} color={c.primary} />
+                  </Pressable>
+                  <Text style={{ flex: 1, color: c.muted, fontSize: 16, textDecorationLine: "line-through" }}>{line.name}</Text>
+                  <Text style={{ color: c.muted, fontSize: 16, paddingLeft: 8 }}>{quantity(line.quantity, line.unit)}</Text>
+                </View>
+              );
+            })}
           </View>
         </>
       )}

@@ -34,7 +34,8 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
 4. **Comparaison avec la liste de courses** : un article est coché tout seul quand son ingrédient apparaît sur un ticket
    postérieur à son ajout (vue `shopping_list_status`).
 5. **Accueil** : en grand, bord à bord avec un fondu à droite, le prochain repas (menu du jour ou, s'il n'y en a pas, le
-   prochain menu de la semaine ; croix pour l'annuler, toucher pour la fiche). Les autres menus choisis se retrouvent jour
+   prochain menu de la semaine ; après 15 h, le déjeuner du jour laisse la place au dîner ; croix pour l'annuler,
+   toucher pour la fiche). Les autres menus choisis se retrouvent jour
    par jour dans le ruban de la semaine (plus de liste séparée, pas de titre de section). Le ruban
    reprend la maquette Claude Design « Ruban de la semaine » (`components/WeekRibbon.tsx`) : les 7 jours en pastilles
    (jour abrégé, numéro, deux barrettes pour le déjeuner et le dîner : vert = menu choisi, vert clair = à proposer,
@@ -43,7 +44,8 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    Il est toujours affiché ; « Proposer les menus (n repas) » lance les propositions. Un menu choisi se déplace par
    appui long puis glisser : sur une pastille de jour (même repas de ce jour ; survolée un instant, la pastille ouvre son
    jour) ou sur l'autre repas de la carte ; un menu déjà prévu à cet endroit échange sa place avec lui (fonction SQL
-   `move_meal_choice`, les articles de courses suivent leur menu).
+   `move_meal_choice`, les articles de courses suivent leur menu). La photo du menu est transparente aux gestes : on peut
+   l'attraper par la photo comme par le texte.
 6. **Menu du jour avec un ingrédient** (carte principale de l'accueil) : le foyer tape un ingrédient (recherche parmi
    les ingrédients des recettes, sans suggestion avant la saisie), s'il l'a acheté ou va
    l'acheter, le repas (déjeuner ou dîner) et le temps disponible. Les propositions suivent les mêmes règles que les
@@ -56,8 +58,14 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
 7. **Propositions** (moteur `app/src/modules/planning`) : pour chaque repas, d'abord jusqu'à 5 recettes réalisables
    avec les courses, celles qui équilibrent et varient la semaine en tête. Swipe à droite pour choisir, à gauche pour
    passer (ou boutons). Si aucune ne convient : 3 recettes avec 1 à 3 ingrédients à acheter, puis 3 idées créées par
-   Mistral. Le choix d'un menu s'enregistre en arrière-plan : le repas suivant s'affiche aussitôt (seul ce repas est
-   calculé, la carte part par une animation native).
+   Mistral, préparées en arrière-plan dès que le foyer cherche encore (un refus parmi les recettes à acheter, la dernière
+   proposition, ou plus rien à proposer) : lancées dès l'arrivée des recettes à acheter, elles partaient pour presque
+   chaque repas et étaient perdues au premier choix (trois demandes à Mistral pour rien). « Repas 1 sur 2 » ne compte que
+   les repas demandés à l'ouverture. Le choix d'un menu s'enregistre en arrière-plan : le repas suivant s'affiche
+   aussitôt (seul ce repas est calculé, la carte part par une animation native). À l'ouverture, toutes les données du
+   moteur sont lues en même temps, et les ingrédients des recettes restent en mémoire pendant la session (une version de
+   recette ne change jamais) : la recherche par ingrédient de l'accueil les charge, les propositions s'ouvrent ensuite
+   sans les relire (5,9 s → 2,4 s mesurées depuis un serveur éloigné de Supabase).
    Les ingrédients manquants des recettes choisies vont sur la liste de courses.
 8. **Fiches recettes** : photo du plat (« Plus d'options » › Photo du plat : appareil photo ou galerie ; la photo prise
    avec le téléphone remplace l'image créée par Mistral, qui ne l'écrase jamais), temps de préparation, de cuisson et
@@ -67,13 +75,16 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    Profil › Crédits des photos), quantités pour le nombre de personnes, étapes « pas à pas » avec un seul minuteur par
    étape. Chaque minuteur dit ce qu'il minute (« Cuire le riz », étape 6) : on s'y retrouve quand plusieurs tournent ;
    « C'est prêt » reste grisé tant qu'un minuteur tourne.
-9. **Note et remarque** : une seule barre de notation, en haut de la fiche (5 étoiles, modifiables à tout moment).
+9. **Note et remarque** : une seule barre de notation, en haut de la fiche (5 étoiles, modifiables à tout moment ; la
+   note touchée s'affiche aussitôt, pendant son enregistrement).
    La note pondère toujours les propositions (4-5 comptent comme « aimé », 3 comme « bof », 1-2 comme « pas aimé ») et
    ne sollicite pas Mistral. Le jour où la recette est faite, une remarque sur le contenu (goût, quantités, cuisson)
    peut être envoyée : Mistral la lit et dit si la recette est améliorable ; si oui, la version proposée s'ouvre dans
    l'éditeur (nom, temps, ingrédients, étapes) et c'est l'utilisateur qui décide : il la corrige puis la garde, ou garde
-   la recette actuelle. Pas de demande de modification à Mistral sans remarque. « Bon appétit ! » propose aussi de mettre sa propre photo du plat.
-10. **Recettes** (onglet de la barre du bas) : recherche, filtre Favoris, filtre par note (5 étoiles, 4 et +, 3 et +,
+   la recette actuelle (le résumé des changements, coupé à 300 caractères par la fonction, est ramené à des phrases
+   entières). Pas de demande de modification à Mistral sans remarque. « Bon appétit ! » propose aussi de mettre sa propre photo du plat.
+10. **Recettes** (onglet de la barre du bas) : recherche (lancée quand la saisie marque une pause ; une réponse plus
+   ancienne n'écrase jamais les résultats), filtre Favoris, filtre par note (5 étoiles, 4 et +, 3 et +,
    non notées), note affichée sur chaque ligne. Les recettes ajoutées par le foyer se modifient ou se suppriment depuis
    leur fiche (« Plus d'options » › Modifier / Supprimer) ; les recettes de la base commune ne sont pas modifiables.
 11. **Ajout de recettes** : texte collé ou saisie libre, mis en forme par Mistral (durées de cuisson, feu et
@@ -82,6 +93,9 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    illustration.
 12. **Favoris** : cœur dans la bande verte de la fiche ; filtre « Favoris » dans l'onglet Recettes. « Ajouter à ma
    liste » met sur la liste de courses les ingrédients ni de placard ni achetés ces 7 derniers jours.
+   **Liste de courses** : une ligne par article (les œufs de la quiche et du poisson pané : « Œuf · 4 », avec les deux
+   plats), quantités additionnées, nom sans la quantité de la recette (« 2 boîtes de tomates pelées » devient « Tomates
+   pelées · 800 g ») ; cocher la ligne coche tous ses articles. L'accueil compte les lignes de la même façon.
 13. **Rappels** (cloche de l'accueil) : panneau qui monte du bas avec le menu du jour (ou le prochain), les minuteurs
    en cours et le nombre d'articles à acheter.
 
@@ -98,6 +112,8 @@ au plus, légumineuses au moins une fois, 1 à 2 soirs sans viande ni poisson (p
 repas ; pas la même protéine, le même féculent ou la même cuisine deux jours de suite ; une recette servie n'est pas
 reproposée avant 21 jours. Les produits frais sont utilisés avant leur fin de conservation (poisson 2 jours, viande 3,
 légumes 7…) ; un repas choisi réserve ses ingrédients. Les recettes aimées remontent, celles qui déplaisent disparaissent.
+Aliments exclus par le foyer : la viande principale du plat, mais aussi ses ingrédients (porc : jambon, lardons, chorizo,
+saucisses, charcuterie, cordon bleu ; bœuf : bœuf, veau, corned beef) ; un ingrédient facultatif peut être laissé de côté.
 
 ## Mistral (offre gratuite)
 
@@ -148,6 +164,23 @@ npx expo start          # même réseau Wi-Fi que le téléphone ; scanner le QR
   refus puis choix, repas suivant, fiche recette ; aucune erreur. Compte et données de test supprimés ensuite.
 - Fonction Mistral : clé valide, génération de recettes (Ministral 14B), création d'image (photo du poulet basquaise,
   1024 × 768), accès refusé sans compte ou hors du foyer.
+
+## Campagne de tests réels (2 novembre 2026, version 0.20.0)
+
+Parcours d'un utilisateur réel sur le compte du foyer (données sauvegardées avant, remises à l'identique après) :
+planification de la fin de semaine (repas cochés, temps changés, refus et choix), fiche recette (personnes, liste de
+courses, favori, note, minuteur, pas à pas, « C'est prêt », remarque envoyée à Mistral, version proposée refusée),
+glisser-déposer (vers un autre jour, échange midi/soir), annulation d'un menu, rappels, liste de courses (cocher,
+décocher, rechargement), onglet Recettes (recherche, favoris, filtres), ajout d'une recette collée (Mistral) puis
+suppression, menu du jour par ingrédient (à acheter ce midi ; acheté ce soir à la place d'un menu prévu), préférences
+(porc exclu puis remis), module produits, crédits, déconnexion, mauvais mot de passe, reconnexion, idées de Mistral
+(refus, choix d'une idée), modification d'une recette du foyer, photo de la galerie, partage.
+
+Corrigé : ouverture des propositions lente (requêtes à la suite), idées de Mistral lancées pour rien, glisser-déposer
+impossible en attrapant la photo (web), porc caché proposé malgré l'exclusion (cordon bleu au jambon), liste de courses
+en double, « Repas 6 sur 6 » pour un seul repas demandé, résumé de Mistral coupé au milieu d'un mot, note affichée avec
+retard, recherches qui affichaient une réponse périmée, erreur de veille de l'écran en quittant la fiche (web), déjeuner
+passé encore en tête de l'accueil le soir. Non essayé : récupération des tickets Lidl (elle importe de vrais tickets).
 
 ## Limites connues
 

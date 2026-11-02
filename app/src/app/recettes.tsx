@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Icon } from "../components/icons";
@@ -42,15 +42,22 @@ export default function Recettes() {
   const [images, setImages] = useState<Record<string, Picture | null>>({});
   const [error, setError] = useState("");
 
+  /** Numéro de la dernière recherche : une réponse plus ancienne, arrivée après, n'écrase pas les résultats. */
+  const latest = useRef(0);
+  const typing = useRef<ReturnType<typeof setTimeout> | null>(null);
   const load = useCallback(async (text: string) => {
+    const n = ++latest.current;
     try {
       const [list, favs, notes] = await Promise.all([
         listRecipes(supabase, { search: text.trim() || undefined, limit: 300 }), listFavorites(supabase, household.id), latestStars(supabase, household.id),
       ]);
+      if (n !== latest.current) return;
+      setError("");
       setRecipes(list);
       setFavorites(favs);
       setStars(notes);
-      setImages(await illustrationUrls(list.map((r) => r.id)));
+      const urls = await illustrationUrls(list.map((r) => r.id));
+      if (n === latest.current) setImages(urls);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -75,7 +82,9 @@ export default function Recettes() {
       <View>
         <Field value={search} placeholder="Rechercher une recette" style={{ paddingLeft: 44 }} onChangeText={(t) => {
           setSearch(t);
-          load(t);
+          // Recherche lancée quand la saisie marque une pause (pas une requête par lettre tapée).
+          if (typing.current) clearTimeout(typing.current);
+          typing.current = setTimeout(() => load(t), 250);
         }} />
         <View style={styles.searchIcon} pointerEvents="none"><Icon name="search" size={20} color={c.muted} /></View>
       </View>

@@ -128,7 +128,9 @@ function DishRow({ slot, meal, pic, busy, dimmed, aimed, onOpen, onCancel, drag 
         accessibilityHint={drag ? "Appui long puis glisser pour déplacer ce menu" : undefined}
         accessibilityActions={[{ name: "activate" }]} onAccessibilityAction={() => onOpen(slot)}
         style={[styles.dishLink, { opacity: pressed ? 0.85 : 1 }]}>
-        <View style={styles.dishPhoto}>
+        {/* Photo transparente aux gestes : sur le web, attraper l'image lançait le glisser natif du navigateur (l'image
+            elle-même), qui interrompait le déplacement du menu dès le premier mouvement. */}
+        <View style={styles.dishPhoto} pointerEvents="none">
           {pic
             ? <Image source={sourceOf(pic, true)} placeholder={pic.fallback} placeholderContentFit="cover" cachePolicy="memory-disk"
               style={StyleSheet.absoluteFill} contentFit="cover" transition={0} />

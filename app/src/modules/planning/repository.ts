@@ -30,15 +30,42 @@ async function fetchAll(build: (from: number, to: number) => PromiseLike<{ data:
   }
 }
 
+/**
+ * Ingrédients des versions de recettes, gardés en mémoire pendant la session : une version ne change jamais (modifier une
+ * recette en crée une nouvelle). Seules les versions encore inconnues sont lues, par paquets envoyés ensemble : la
+ * recherche de menu par ingrédient de l'accueil les charge, et les propositions s'ouvrent ensuite sans les relire.
+ */
+const versionIngredients = new Map<string, Row[]>();
+let ingredientsLoading: Promise<unknown> = Promise.resolve();
+const VERSIONS_PER_REQUEST = 60;
+
+async function ingredientsOfVersions(supabase: SupabaseClient, versionIds: string[]): Promise<Map<string, Row[]>> {
+  // Lectures l'une après l'autre : deux écrans qui demandent les mêmes versions ne les lisent pas deux fois.
+  const run = ingredientsLoading.then(async () => {
+    const missing = [...new Set(versionIds)].filter((v) => !versionIngredients.has(v));
+    const chunks: string[][] = [];
+    for (let i = 0; i < missing.length; i += VERSIONS_PER_REQUEST) chunks.push(missing.slice(i, i + VERSIONS_PER_REQUEST));
+    const pages = await Promise.all(chunks.map((ids) => fetchAll((a, b) => supabase.from("recipe_ingredients")
+      .select("version_id, position, label, quantity, unit, base_quantity, base_unit, optional, scale_mode, ingredients(slug, name, category, is_pantry_staple)")
+      .in("version_id", ids).order("version_id").order("position").range(a, b), "Ingrédients des recettes illisibles")));
+    const found = new Map<string, Row[]>(missing.map((v) => [v, []]));
+    for (const rows of pages) for (const r of rows) found.get(r.version_id)?.push(r);
+    for (const [v, rows] of found) versionIngredients.set(v, rows);
+  });
+  ingredientsLoading = run.catch(() => undefined);
+  await run;
+  return versionIngredients;
+}
+
 export async function loadRecipesForPlanning(supabase: SupabaseClient, householdId: string): Promise<PlannerRecipe[]> {
-  const catalog = await fetchAll((a, b) => supabase.from("recipe_catalog")
-    .select("id, version_id, name, total_min, servings, main_protein, meal_types, seasons, cuisine, tags, allergens, spiciness")
-    .order("id").range(a, b), "Recettes illisibles");
-  const ingredients = await fetchAll((a, b) => supabase.from("recipe_ingredients")
-    .select("version_id, position, label, quantity, unit, base_quantity, base_unit, optional, scale_mode, ingredients(slug, category, is_pantry_staple)")
-    .in("version_id", catalog.map((r) => r.version_id)).order("version_id").order("position").range(a, b), "Ingrédients des recettes illisibles");
-  const ratings = await fetchAll((a, b) => supabase.from("recipe_ratings").select("recipe_id, rating")
-    .eq("household_id", householdId).range(a, b), "Avis illisibles");
+  const [catalog, ratings] = await Promise.all([
+    fetchAll((a, b) => supabase.from("recipe_catalog")
+      .select("id, version_id, name, total_min, servings, main_protein, meal_types, seasons, cuisine, tags, allergens, spiciness")
+      .order("id").range(a, b), "Recettes illisibles"),
+    fetchAll((a, b) => supabase.from("recipe_ratings").select("recipe_id, rating").eq("household_id", householdId).range(a, b), "Avis illisibles"),
+  ]);
+  const known = await ingredientsOfVersions(supabase, catalog.map((r) => r.version_id));
+  const ingredients = catalog.flatMap((r) => known.get(r.version_id) ?? []);
 
   const byVersion = new Map<string, PlannerIngredient[]>();
   for (const i of ingredients) {
@@ -74,20 +101,19 @@ export async function loadPurchases(supabase: SupabaseClient, householdId: strin
 
 /** Données du moteur pour une planification commençant à `start` (repas servis les 21 jours précédents, achats des 30 jours). */
 export async function loadPlannerContext(supabase: SupabaseClient, householdId: string, start: IsoDate, planId?: string): Promise<PlannerContext> {
-  const [recipes, purchases, prefs] = await Promise.all([
+  // Tout est lu en même temps (une seule attente réseau au lieu de cinq à la suite).
+  const [recipes, purchases, prefs, meals, proposals] = await Promise.all([
     loadRecipesForPlanning(supabase, householdId),
     loadPurchases(supabase, householdId, addDays(start, -PURCHASE_WINDOW_DAYS)),
     getHouseholdPreferences(supabase, householdId),
+    fetchAll((a, b) => supabase.from("meal_slots").select("id, plan_id, recipe_id, meal_date, meal_type, servings")
+      .eq("household_id", householdId).eq("status", "accepted").gte("meal_date", addDays(start, -21)).order("id").range(a, b), "Repas passés illisibles"),
+    fetchAll((a, b) => supabase.from("meal_proposals").select("slot_id, recipe_id, decision")
+      .eq("household_id", householdId).eq("decision", "rejected").order("slot_id").range(a, b), "Refus illisibles"),
   ]);
-  const { data: served, error } = await supabase.from("meal_slots").select("id, plan_id, recipe_id, meal_date, meal_type, servings")
-    .eq("household_id", householdId).eq("status", "accepted").gte("meal_date", addDays(start, -21));
-  check(error, "Repas passés illisibles");
-  const meals = (served ?? []) as Row[];
   const toMeal = (m: Row): ServedMeal => ({ recipeId: m.recipe_id, date: m.meal_date, servings: m.servings, slotId: m.id, mealType: m.meal_type });
   const inPlan = (m: Row) => planId !== undefined && m.plan_id === planId;
 
-  const proposals = await fetchAll((a, b) => supabase.from("meal_proposals").select("slot_id, recipe_id, decision")
-    .eq("household_id", householdId).eq("decision", "rejected").range(a, b), "Refus illisibles");
   const rejected: Record<string, string[]> = {};
   const rejectionCounts: Record<string, number> = {};
   for (const p of proposals) {
@@ -127,10 +153,16 @@ export async function savePlan(supabase: SupabaseClient, householdId: string, st
     .upsert({ household_id: householdId, start_date: start, end_date: end }, { onConflict: "household_id,start_date" }).select("id").single();
   check(error, "Planification non enregistrée");
   const planId = (plan as Row).id as string;
-  const { data: slots, error: e2 } = await supabase.from("meal_slots").upsert(requests.map((r) => ({
-    plan_id: planId, household_id: householdId, meal_date: r.date, meal_type: r.mealType, max_total_min: r.maxTotalMin, servings: r.servings,
-  })), { onConflict: "household_id,meal_date,meal_type" }).select("*");
+  // Repas déjà enregistrés de la planification lus pendant l'enregistrement des repas demandés (une attente de moins) :
+  // ceux qui ne sont plus demandés et pas encore choisis seront retirés.
+  const [{ data: slots, error: e2 }, { data: existing, error: e3 }] = await Promise.all([
+    supabase.from("meal_slots").upsert(requests.map((r) => ({
+      plan_id: planId, household_id: householdId, meal_date: r.date, meal_type: r.mealType, max_total_min: r.maxTotalMin, servings: r.servings,
+    })), { onConflict: "household_id,meal_date,meal_type" }).select("*"),
+    supabase.from("meal_slots").select("id, status").eq("plan_id", planId),
+  ]);
   check(e2, "Repas non enregistrés");
+  check(e3, "Repas illisibles");
   const keep = new Set(((slots ?? []) as Row[]).map((s) => s.id));
   // Un repas passé auparavant puis de nouveau demandé redevient à pourvoir.
   const reopened = ((slots ?? []) as Row[]).filter((s) => s.status === "skipped").map((s) => s.id);
@@ -139,8 +171,6 @@ export async function savePlan(supabase: SupabaseClient, householdId: string, st
     check(e5, "Repas non rouverts");
     for (const s of (slots ?? []) as Row[]) if (reopened.includes(s.id)) s.status = "open";
   }
-  const { data: existing, error: e3 } = await supabase.from("meal_slots").select("id, status").eq("plan_id", planId);
-  check(e3, "Repas illisibles");
   const stale = ((existing ?? []) as Row[]).filter((s) => !keep.has(s.id) && s.status !== "accepted").map((s) => s.id);
   if (stale.length) {
     const { error: e4 } = await supabase.from("meal_slots").delete().in("id", stale);
@@ -212,8 +242,8 @@ let recipeIngredients: Promise<RecipeIngredientOption[]> | null = null;
 export function ingredientsInRecipes(supabase: SupabaseClient): Promise<RecipeIngredientOption[]> {
   recipeIngredients ??= (async () => {
     const catalog = await fetchAll((a, b) => supabase.from("recipe_catalog").select("version_id").order("version_id").range(a, b), "Recettes illisibles");
-    const rows = await fetchAll((a, b) => supabase.from("recipe_ingredients").select("version_id, optional, ingredients(slug, name, category, is_pantry_staple)")
-      .in("version_id", catalog.map((r) => r.version_id)).eq("optional", false).order("version_id").order("position").range(a, b), "Ingrédients illisibles");
+    const known = await ingredientsOfVersions(supabase, catalog.map((r) => r.version_id));
+    const rows = catalog.flatMap((r) => known.get(r.version_id) ?? []).filter((r) => !r.optional);
     const bySlug = new Map<string, RecipeIngredientOption & { versions: Set<string> }>();
     for (const r of rows) {
       const i = r.ingredients;

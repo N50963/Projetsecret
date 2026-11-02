@@ -204,3 +204,16 @@ describe("menu du jour d'après un ingrédient", () => {
     expect(planMeals(ctx, [slot("mar", "2026-10-27")], options)[0]!.proposals.map((p) => p.recipeId)).toEqual(["omelette"]);
   });
 });
+
+describe("aliments exclus par le foyer", () => {
+  it("écarte le porc caché dans un plat de volaille (cordon bleu au jambon), mais pas un ingrédient facultatif", () => {
+    const cordon = recipe("cordon-bleu", "volaille", ["cordon_bleu", "riz"]);
+    const quiche = recipe("quiche-legumes", "vegetarien", ["oeuf", "courgette"], { ingredients: [ing("oeuf"), ing("courgette"), ing("lardons", 100, { optional: true })] });
+    const curry = recipe("curry-poulet", "volaille", ["poulet_filet", "riz"]);
+    const ctx = context([cordon, quiche, curry], ["cordon_bleu", "riz", "oeuf", "courgette", "poulet_filet"].map((s) => buy(s, SHOP)));
+    const noPork = { ...ctx, prefs: { ...ctx.prefs, excludedFoodGroups: ["porc"] as typeof ctx.prefs.excludedFoodGroups } };
+    const ids = (c: PlannerContext) => planMeals(c, [slot("s1", "2026-10-27")])[0]!.proposals.map((p) => p.recipeId).sort();
+    expect(ids(ctx)).toContain("cordon-bleu");
+    expect(ids(noPork)).toEqual(["curry-poulet", "quiche-legumes"]);
+  });
+});

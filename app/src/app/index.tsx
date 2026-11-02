@@ -13,6 +13,7 @@ import { WeekRibbon } from "../components/WeekRibbon";
 import { BottomNav, Button, ErrorText } from "../components/ui";
 import { dayLabel, mealLabel, minutes } from "../lib/format";
 import { illustrationUrls, pictureOf, preloadPictures, sourceOf, type Picture } from "../lib/images";
+import { shoppingLines } from "../lib/shopping";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { BRAND_FONT, CARD_SHADOW, useColors } from "../lib/theme";
@@ -26,6 +27,8 @@ import type { MealType } from "../modules/recipes";
 const MEALS: MealType[] = ["dejeuner", "diner"];
 const DEFAULT_TIME = 60;
 const LEVEL = ["", "Facile", "Moyen", "Difficile"];
+/** Heure à partir de laquelle le déjeuner du jour est passé (le prochain repas est le dîner). */
+const LUNCH_OVER_HOUR = 15;
 
 interface DayChoice {
   dejeuner: boolean;
@@ -116,7 +119,9 @@ export default function Accueil() {
   // Menus choisis, dans l'ordre de la semaine : le premier (aujourd'hui, sinon le prochain) s'affiche en grand en tête ;
   // tous les menus choisis se retrouvent ensuite jour par jour dans le ruban de la semaine.
   const menus = days.flatMap((d) => MEALS.map((m) => slots[`${d}:${m}`]).filter((s): s is WeekSlot => s?.status === "accepted"));
-  const hero = menus[0];
+  // Le déjeuner du jour passé (après 15 h), le menu en tête est le suivant : le dîner, ou le prochain jour.
+  const lunchOver = new Date().getHours() >= LUNCH_OVER_HOUR;
+  const hero = menus.find((s) => !(lunchOver && s.date === today && s.mealType === "dejeuner")) ?? menus[0];
 
   const requests: SlotRequest[] = days.flatMap((d) => MEALS
     .filter((m) => choiceOf(d)[m] && !isChosen(d, m))
@@ -188,7 +193,8 @@ export default function Accueil() {
     await load();
   };
 
-  const toBuy = shopping.filter((i) => i.active && !i.boughtAt && !i.checkedAt);
+  // Même décompte que la liste de courses : un article demandé par deux plats compte une fois.
+  const toBuy = shoppingLines(shopping.filter((i) => i.active && !i.boughtAt && !i.checkedAt));
   const open = (s: WeekSlot) => router.push(`/recette/${s.recipeId}`);
 
   const notifications = () => setReminders(true);
@@ -225,7 +231,7 @@ export default function Accueil() {
               <Pressable onPress={() => open(hero)} accessibilityRole="button"
                 accessibilityLabel={`${dayLabel(hero.date, today)}, ${mealLabel(hero.mealType)} : ${hero.name}`}>
                 {heroPicture
-                  ? <Image source={sourceOf(heroPicture)} placeholder={heroPicture.fallback} placeholderContentFit="cover" cachePolicy="memory-disk" priority="high"
+                  ? <Image source={sourceOf(heroPicture)} placeholder={heroPicture.fallback ?? heroPicture.mini} placeholderContentFit="cover" cachePolicy="memory-disk" priority="high"
                     style={styles.heroImage} contentFit="cover" transition={0} />
                   : <View style={[styles.heroImage, styles.heroWaiting]}><Icon name="image" size={44} color={c.muted} /></View>}
                 <LinearGradient colors={["rgba(20,24,12,0.66)", "rgba(20,24,12,0.34)", "rgba(20,24,12,0.08)"]} locations={[0, 0.58, 1]}

@@ -1,5 +1,5 @@
 import { Image } from "expo-image";
-import { useKeepAwake } from "expo-keep-awake";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -19,11 +19,11 @@ import { pickDishPhoto } from "../../lib/photo";
 import { useHousehold } from "../../lib/session";
 import { clock, stepTimer } from "../../lib/steps";
 import { supabase } from "../../lib/supabase";
-import { toIsoDate } from "../../modules/planning";
+import { addDays, loadPurchases, PURCHASE_WINDOW_DAYS, Stock, toIsoDate } from "../../modules/planning";
 import { CARD_SHADOW, useColors } from "../../lib/theme";
 import { startTimer, stopTimer, timerId, useTimers } from "../../lib/timers";
 import {
-  adaptRecipe, addRecipeToShoppingList, addRecipeVersion, archiveRecipe, getLatestRating, getRecipe, getShoppingNeeds, isFavorite, rateRecipe,
+  adaptRecipe, addNeedsToShoppingList, addRecipeVersion, archiveRecipe, getHouseholdPreferences, getLatestRating, getRecipe, getShoppingNeeds, isFavorite, rateRecipe,
   scaleIngredients, setFavorite, toPayload, validateRecipe, type Recipe, type RecipeRating, type ShoppingNeed,
 } from "../../modules/recipes";
 
@@ -69,6 +69,12 @@ export default function FicheRecette() {
   const [servings, setServings] = useState(household.defaultServings);
   const [tab, setTab] = useState<Tab>("ingredients");
   const [needs, setNeeds] = useState<ShoppingNeed[]>([]);
+  /**
+   * Stock estimé comme pour les propositions (achats des 30 derniers jours, conservation propre à chaque produit) : un
+   * fromage acheté il y a 12 jours est encore à la maison, la fiche ne le dit pas « à acheter » quand le menu ne l'a pas
+   * mis sur la liste. Sans achats lisibles, la règle simple de la base (rien acheté depuis 7 jours) s'applique seule.
+   */
+  const [stock, setStock] = useState<Stock | null | undefined>(undefined);
   const [favorite, setFav] = useState(false);
   const [previous, setPrevious] = useState<RecipeRating | null>(null);
   const [comment, setComment] = useState("");
@@ -83,16 +89,24 @@ export default function FicheRecette() {
   const [info, setInfo] = useState("");
   /** Étape en cours (toutes faites quand elle vaut le nombre d'étapes). */
   const [current, setCurrent] = useState(0);
-  // En cuisine, l'écran ne s'éteint pas tant que la fiche est ouverte.
-  useKeepAwake();
+  /** Note touchée, affichée tout de suite pendant son enregistrement. */
+  const [pendingStars, setPendingStars] = useState<number | null>(null);
+  // En cuisine, l'écran ne s'éteint pas tant que la fiche est ouverte (sans erreur si le navigateur refuse).
+  useEffect(() => {
+    const tag = `fiche-${id}`;
+    activateKeepAwakeAsync(tag).catch(() => undefined);
+    return () => {
+      deactivateKeepAwake(tag).catch(() => undefined);
+    };
+  }, [id]);
 
   const load = useCallback(async () => {
     try {
-      const r = await getRecipe(supabase, id);
-      setRecipe(r);
-      const [urls, rating, fav] = await Promise.all([
-        illustrationUrls([r.id]), getLatestRating(supabase, household.id, r.id), isFavorite(supabase, household.id, r.id),
+      // Recette, note, favori et photo lus ensemble (une seule attente réseau).
+      const [r, urls, rating, fav] = await Promise.all([
+        getRecipe(supabase, id), illustrationUrls([id]), getLatestRating(supabase, household.id, id), isFavorite(supabase, household.id, id),
       ]);
+      setRecipe(r);
       setImage(urls[r.id] ?? null);
       setPrevious(rating);
       // L'avis du jour seulement (l'avis se donne le jour où la recette est faite).
@@ -109,6 +123,12 @@ export default function FicheRecette() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const day = toIsoDate(new Date());
+    Promise.all([loadPurchases(supabase, household.id, addDays(day, -PURCHASE_WINDOW_DAYS)), getHouseholdPreferences(supabase, household.id)])
+      .then(([purchases, prefs]) => setStock(Stock.fromPurchases(purchases, { freezes: prefs.freezesFreshMeatFish })), () => setStock(null));
+  }, [household.id]);
 
   // Vignettes des ingrédients (gardées sur le téléphone) : nouvel affichage quand la liste est connue.
   const [, setIngredientPics] = useState(0);
@@ -138,7 +158,10 @@ export default function FicheRecette() {
   const ingredients = scaleIngredients(recipe.ingredients, recipe.servings, servings);
   // Minuteurs de cette recette qui tournent encore : le plat ne peut pas être prêt avant leur fin.
   const cooking = timers.filter((t) => t.recipeId === recipe.id && !t.done);
-  const toBuy = new Set(needs.filter((n) => !n.onList).map((n) => n.slug));
+  const today0 = toIsoDate(new Date());
+  // Stock pas encore lu : aucune mention « à acheter » (pas de mention qui apparaît puis disparaît).
+  const missing = stock === undefined ? [] : needs.filter((n) => !n.onList && !(stock?.available(n.slug, today0).present ?? false));
+  const toBuy = new Set(missing.map((n) => n.slug));
   const onList = new Set(needs.filter((n) => n.onList).map((n) => n.slug));
 
   const share = () => {
@@ -155,7 +178,7 @@ export default function FicheRecette() {
     setFav(!favorite);
   });
   const addToList = () => act("list", async () => {
-    const added = await addRecipeToShoppingList(supabase, household.id, recipe.id, servings);
+    const added = await addNeedsToShoppingList(supabase, household.id, recipe.id, missing);
     setNeeds(await getShoppingNeeds(supabase, household.id, recipe.id, servings));
     setInfo(added ? `${added} article${added > 1 ? "s" : ""} ajouté${added > 1 ? "s" : ""} à la liste de courses.` : "Tout est déjà sur la liste ou acheté récemment.");
   });
@@ -252,11 +275,16 @@ export default function FicheRecette() {
         {/* Note de la recette, modifiable à tout moment (les observations, elles, se donnent en fin de recette faite). */}
         <View style={styles.note}>
           <Text style={{ color: c.muted, fontSize: 14.2 }}>{previous?.stars ? "Votre note" : "Noter"}</Text>
-          <StarRating value={previous?.stars ?? null} size={26} onChange={(n) => {
-            if (n === previous?.stars) return;
+          <StarRating value={pendingStars ?? previous?.stars ?? null} size={26} onChange={(n) => {
+            if (n === (pendingStars ?? previous?.stars)) return;
+            setPendingStars(n);
             act("note", async () => {
-              await rateRecipe(supabase, household.id, recipe, n, previous?.comment ?? null, previous);
-              setPrevious(await getLatestRating(supabase, household.id, recipe.id));
+              try {
+                await rateRecipe(supabase, household.id, recipe, n, previous?.comment ?? null, previous);
+                setPrevious(await getLatestRating(supabase, household.id, recipe.id));
+              } finally {
+                setPendingStars(null);
+              }
             });
           }} />
           {busy === "note" ? <ActivityIndicator color={c.primary} /> : null}
@@ -316,7 +344,7 @@ export default function FicheRecette() {
               </View>
             ))}
           </View>
-          <Button icon="cartFilled" title="Ajouter à ma liste" onPress={addToList} busy={busy === "list"} />
+          <Button icon="cartFilled" title="Ajouter à ma liste" onPress={addToList} busy={busy === "list"} disabled={stock === undefined} />
         </View>
       ) : (
         <View style={[styles.section, { gap: 10 }]}>

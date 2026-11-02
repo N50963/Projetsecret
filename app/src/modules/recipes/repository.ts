@@ -221,6 +221,7 @@ export async function listFavorites(supabase: SupabaseClient, householdId: strin
 
 /** Ingrédient de la recette à acheter (ni de placard, ni acheté ces 7 derniers jours). */
 export interface ShoppingNeed {
+  ingredientId: string;
   slug: string;
   label: string;
   quantity: number | null;
@@ -233,7 +234,7 @@ export async function getShoppingNeeds(supabase: SupabaseClient, householdId: st
   const { data, error } = await supabase.rpc("recipe_shopping_needs", { p_household: householdId, p_recipe_id: recipeId, p_servings: servings });
   check(error, "Ingrédients à acheter illisibles");
   return ((data ?? []) as Row[]).map((n) => ({
-    slug: n.slug, label: n.label, quantity: n.quantity === null ? null : Number(n.quantity), unit: n.unit, onList: n.on_list,
+    ingredientId: n.ingredient_id, slug: n.slug, label: n.label, quantity: n.quantity === null ? null : Number(n.quantity), unit: n.unit, onList: n.on_list,
   }));
 }
 
@@ -242,6 +243,21 @@ export async function addRecipeToShoppingList(supabase: SupabaseClient, househol
   const { data, error } = await supabase.rpc("add_recipe_to_shopping_list", { p_household: householdId, p_recipe_id: recipeId, p_servings: servings });
   check(error, "Liste de courses non complétée");
   return Number(data ?? 0);
+}
+
+/**
+ * Met sur la liste de courses les ingrédients choisis d'une recette (ceux que la fiche montre « à acheter », d'après le
+ * même stock que les propositions) ; renvoie le nombre d'articles ajoutés.
+ */
+export async function addNeedsToShoppingList(supabase: SupabaseClient, householdId: string, recipeId: string, needs: ShoppingNeed[]): Promise<number> {
+  const rows = needs.filter((n) => !n.onList);
+  if (!rows.length) return 0;
+  const { error } = await supabase.from("shopping_list_items").insert(rows.map((n) => ({
+    household_id: householdId, recipe_id: recipeId, ingredient_id: n.ingredientId, label: n.label.slice(0, 200),
+    quantity: n.quantity && n.quantity > 0 ? n.quantity : null, unit: n.quantity && n.quantity > 0 ? n.unit : null,
+  })));
+  check(error, "Liste de courses non complétée");
+  return rows.length;
 }
 
 export interface CandidateOptions {

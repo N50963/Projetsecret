@@ -4,6 +4,7 @@ import { FunctionsHttpError } from "@supabase/supabase-js";
 
 import type { MainProtein, MealType, RecipeInput, RecipeSource, Season } from "../modules/recipes";
 import { supabase } from "./supabase";
+import { wholeSentences } from "./format";
 
 /** Recette au format de la base (snake_case), telle que renvoyée par la fonction. */
 export interface DraftRecipe {
@@ -64,8 +65,10 @@ export const generateRecipes = (householdId: string, req: GenerateRequest, signa
 /** Version améliorée d'après l'avis du foyer, ou `improvable: false` si Mistral ne voit rien à changer. */
 export type Adaptation = { improvable: false } | (Draft & { improvable: true; change_note: string });
 
-export const adaptRecipeDraft = (householdId: string, recipe: unknown, feedback: string) =>
-  call<Adaptation>({ action: "adapt_recipe", household_id: householdId, recipe, feedback });
+export const adaptRecipeDraft = async (householdId: string, recipe: unknown, feedback: string): Promise<Adaptation> => {
+  const out = await call<Adaptation>({ action: "adapt_recipe", household_id: householdId, recipe, feedback });
+  return out.improvable ? { ...out, change_note: wholeSentences(out.change_note ?? "") } : out;
+};
 
 export const illustrateRecipe = (householdId: string, recipeId: string, signal?: AbortSignal) =>
   call<{ path: string }>({ action: "illustrate", household_id: householdId, recipe_id: recipeId }, signal);

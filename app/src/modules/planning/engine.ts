@@ -30,9 +30,18 @@ const STARCH_FAMILY: Record<string, string> = {
   tortilla_wrap: "pain", galette_sarrasin: "pain",
 };
 /** Groupes exclus par le foyer, reconnus d'après la protéine principale ou les ingrédients. */
+/** Ingrédients du référentiel qui contiennent du porc (charcuterie, saucisses, cordon bleu au jambon…) ou du bœuf / veau. */
+const PORK = /^(porc_|jambon_|lardons|chorizo|saucisson|saucisse|rillettes|charcuterie_tranchee|boudin_blanc|cordon_bleu)/;
+const BEEF = /^(boeuf_|corned_beef|veau_)/;
+const uses = (r: PlannerRecipe, pattern: RegExp) => r.ingredients.some((i) => !i.optional && pattern.test(i.slug ?? ""));
+
+/**
+ * Aliments que le foyer ne veut jamais : la viande principale du plat, mais aussi ses ingrédients (un cordon bleu de
+ * volaille contient du jambon, une quiche des lardons). Un ingrédient facultatif peut être laissé de côté.
+ */
 const FOOD_GROUP_TEST: Record<string, (r: PlannerRecipe) => boolean> = {
-  porc: (r) => r.mainProtein === "porc",
-  boeuf: (r) => r.mainProtein === "boeuf",
+  porc: (r) => r.mainProtein === "porc" || uses(r, PORK),
+  boeuf: (r) => r.mainProtein === "boeuf" || uses(r, BEEF),
   poisson: (r) => r.mainProtein === "poisson" || r.allergens.includes("poisson"),
   crustaces: (r) => r.allergens.includes("crustaces"),
   champignons: (r) => r.ingredients.some((i) => !i.optional && (i.slug ?? "").startsWith("champignon")),

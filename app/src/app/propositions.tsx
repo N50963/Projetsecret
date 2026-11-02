@@ -93,6 +93,8 @@ export default function Propositions() {
   const today = toIsoDate(new Date());
 
   const [slots, setSlots] = useState<PlannedSlot[] | null>(null);
+  /** Repas à pourvoir à l'ouverture de l'écran : « Repas 1 sur 2 » ne compte pas les menus choisis auparavant. */
+  const [asked, setAsked] = useState<string[]>([]);
   const [ctx, setCtx] = useState<PlannerContext | null>(null);
   const [round, setRound] = useState<1 | 2>(1);
   const [deck, setDeck] = useState<Proposal[]>([]);
@@ -152,6 +154,7 @@ export default function Propositions() {
           setFocus({ slotId: target.id, ingredient, toBuy: params.buy === "1" });
           setPending([target.id]);
         }
+        setAsked(s.filter((x) => x.status === "open").map((x) => x.id));
         setSlots(s);
         setCtx(ready);
       } catch (e) {
@@ -162,7 +165,7 @@ export default function Propositions() {
 
   const ordered = useMemo(() => (slots ?? []).slice().sort((a, b) => a.date.localeCompare(b.date) || (a.mealType === "dejeuner" ? -1 : 1)), [slots]);
   const current = focus ? (shortages.length ? null : ordered.find((s) => s.id === pending[0]) ?? null) : ordered.find((s) => s.status === "open") ?? null;
-  const done = ordered.filter((s) => s.status !== "open").length;
+  const done = ordered.filter((s) => asked.includes(s.id) && s.status !== "open").length;
   /** Menu du jour : repas de la semaine (déjà choisis et celui-ci), pour les repères d'équilibre. */
   const weekMeals = useMemo(() => {
     if (!focus || !ctx || !current) return ordered.length;
@@ -349,11 +352,16 @@ export default function Propositions() {
     }, n * IDEA_STAGGER_MS)));
   }, [household.id, ordered.length, focus, weekMeals]);
 
-  // Dès les propositions avec achats (ou quand il n'y a plus rien à proposer), les idées sont préparées en arrière-plan.
+  // Idées de Mistral préparées en arrière-plan quand le foyer cherche encore : propositions avec achats après un refus pour
+  // ce repas, dernière proposition, ou plus rien à proposer. Lancées dès l'arrivée des propositions avec achats, elles
+  // partaient pour presque chaque repas (sans stock adapté) et étaient perdues dès le premier menu choisi : trois demandes
+  // à Mistral consommées pour rien sur le quota gratuit à chaque fois.
+  const refusedHere = current && ctx ? (ctx.rejected[current.id] ?? []).length : 0;
   useEffect(() => {
-    if (current && ctx && (round === 2 || exhausted) && ideas?.slotId !== current.id) startIdeas(current, ctx);
+    if (!current || !ctx || ideas?.slotId === current.id) return;
+    if (exhausted || (round === 2 && (refusedHere > 0 || deck.length <= 1))) startIdeas(current, ctx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id, round, exhausted]);
+  }, [current?.id, round, exhausted, refusedHere, deck.length]);
 
   // Repas suivant (ou écran quitté) : les idées encore en préparation pour ce repas sont abandonnées.
   useEffect(() => () => {
@@ -472,9 +480,10 @@ export default function Propositions() {
       : <Tag label={`${toBuyLabels.length} à acheter`} tone="orange" />;
   const card = (name: string, picture: Picture | null | undefined, duration: number, protein: string, ingredients: string, toBuy?: string) => (
     <View style={[styles.card, { backgroundColor: c.background, borderColor: c.border }]}>
-      <View style={{ flex: 1, minHeight: 160, backgroundColor: c.chip }}>
+      {/* Photo transparente aux gestes : le glisser de la carte n'est pas pris par celui de l'image (web). */}
+      <View style={{ flex: 1, minHeight: 160, backgroundColor: c.chip }} pointerEvents="none">
         {picture
-          ? <Image source={sourceOf(picture)} placeholder={picture.fallback} placeholderContentFit="cover" cachePolicy="memory-disk"
+          ? <Image source={sourceOf(picture)} placeholder={picture.fallback ?? picture.mini} placeholderContentFit="cover" cachePolicy="memory-disk"
             style={StyleSheet.absoluteFill} contentFit="cover" transition={0} accessibilityLabel={name} />
           : (
             <View style={styles.placeholder} accessibilityLabel="Photo du plat en préparation">
@@ -506,7 +515,7 @@ export default function Propositions() {
         <Text style={{ color: c.muted, fontSize: 15 }}>
           {isFocusSlot ? (focus?.ingredient ? `Menu du jour avec ${focus.ingredient.name.toLowerCase()}${focus.toBuy ? " (à acheter)" : ""}` : "Menu du jour")
             : focus ? `Nouveau menu (il manquerait : ${(replacing[current.id] ?? []).map((m) => m.label).join(", ")})`
-              : `Repas ${done + 1} sur ${ordered.length}`} · {current.maxTotalMin ? `${minutes(current.maxTotalMin)} au plus` : "sans limite"} ·
+              : `Repas ${done + 1} sur ${Math.max(asked.length, done + 1)}`} · {current.maxTotalMin ? `${minutes(current.maxTotalMin)} au plus` : "sans limite"} ·
         </Text>
         {tag}
       </View>
