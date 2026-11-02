@@ -170,6 +170,10 @@ saucisses, charcuterie, cordon bleu ; bœuf : bœuf, veau, corned beef) ; un ing
 
 ## Installer l'application sur les téléphones
 
+Depuis la version 0.24.0, la compilation produit un APK par architecture : `app-arm64-v8a-release.apk` (≈ 28 Mo) pour
+les téléphones 64 bits, c'est-à-dire presque tous, et `app-armeabi-v7a-release.apk` pour un vieux téléphone 32 bits
+(détail du poids dans `docs/poids-application.md`).
+
 **APK Android** (application installée, sans ordinateur allumé) : compilation dans Android Studio, voir
 `docs/android-apk.md`.
 

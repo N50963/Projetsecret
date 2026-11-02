@@ -27,6 +27,17 @@ démarrage plus rapide), puis des photos embarquées pour un affichage instantan
   vignettes d'ingrédients 80, photo de la connexion 75 : 10,8 Mo → 7,5 Mo, sans différence visible.
 - Déjà en place : R8 (code Java/Kotlin réduit), Hermes (bytecode précompilé).
 
+**Résultat (mesuré)** : 65,9 Mo → **27,8 Mo** pour un téléphone 64 bits (`app-arm64-v8a-release.apk`, −58 %), 26,7 Mo
+pour un téléphone 32 bits.
+
+| Partie (APK 64 bits) | 0.23.0 | 0.24.0 |
+|---|---|---|
+| Bibliothèques natives | 40,3 Mo (64 et 32 bits, non compressées) | 7,9 Mo (64 bits, compressées) |
+| Images embarquées | 11,6 Mo | 8,4 Mo |
+| Code JavaScript (Hermes) | 4,3 Mo | 4,3 Mo |
+| Code Java/Kotlin (dex) | 3,7 Mo | 3,7 Mo |
+| Ressources Android et divers | 2 Mo | 2 Mo |
+
 Pistes écartées, faute de pouvoir les vérifier sur un vrai téléphone ou pour un gain trop faible :
 - retirer Reanimated (≈ 2,8 Mo de bibliothèques) : `expo-router` l'embarque et le code JavaScript le charge ; sans son
   module natif, l'application risquerait de planter au démarrage ;
