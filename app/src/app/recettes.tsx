@@ -11,6 +11,7 @@ import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { CARD_SHADOW, useColors } from "../lib/theme";
 import { latestStars, listFavorites, listRecipes, type RecipeSummary, type Stars } from "../modules/recipes";
+import { errorText } from "../lib/errors";
 
 /** Filtre par note : toutes, au moins N étoiles, ou pas encore notées. */
 type RatingFilter = "toutes" | 5 | 4 | 3 | "non_notees";
@@ -59,7 +60,7 @@ export default function Recettes() {
       const urls = await illustrationUrls(list.map((r) => r.id));
       if (n === latest.current) setImages(urls);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     }
   }, [household.id]);
 

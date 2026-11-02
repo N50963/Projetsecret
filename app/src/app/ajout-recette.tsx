@@ -13,11 +13,12 @@ import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { useColors } from "../lib/theme";
 import { createRecipe, validateRecipe } from "../modules/recipes";
+import { errorText } from "../lib/errors";
 
 /** Photo du plat, facultative : appareil photo ou galerie. Sans photo, Mistral crée une illustration. */
 function PhotoPicker({ photo, onChange, onError }: { photo: PickedPhoto | null; onChange: (p: PickedPhoto | null) => void; onError: (m: string) => void }) {
   const c = useColors();
-  const pick = (camera: boolean) => pickDishPhoto(camera).then((p) => p && onChange(p), (e) => onError(e instanceof Error ? e.message : String(e)));
+  const pick = (camera: boolean) => pickDishPhoto(camera).then((p) => p && onChange(p), (e) => onError(errorText(e)));
   return (
     <Card>
       <H2>Photo du plat</H2>
@@ -69,7 +70,7 @@ export default function AjoutRecette() {
     try {
       setDraft(await importRecipe(household.id, source, household.defaultServings));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(null);
     }
@@ -99,7 +100,7 @@ export default function AjoutRecette() {
       }
       router.replace(`/recette/${id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(null);
     }

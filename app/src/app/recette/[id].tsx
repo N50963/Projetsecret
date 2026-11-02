@@ -26,6 +26,7 @@ import {
   adaptRecipe, addNeedsToShoppingList, addRecipeVersion, archiveRecipe, getHouseholdPreferences, getLatestRating, getRecipe, getShoppingNeeds, isFavorite, rateRecipe,
   scaleIngredients, setFavorite, toPayload, validateRecipe, type Recipe, type RecipeRating, type ShoppingNeed,
 } from "../../modules/recipes";
+import { errorText } from "../../lib/errors";
 
 type Tab = "ingredients" | "preparation";
 
@@ -116,7 +117,7 @@ export default function FicheRecette() {
       setFav(fav);
       AsyncStorage.getItem(cookedKey(r.id)).then(setCookedOn, () => undefined);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     }
   }, [id, household.id]);
 
@@ -148,7 +149,7 @@ export default function FicheRecette() {
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(null);
     }

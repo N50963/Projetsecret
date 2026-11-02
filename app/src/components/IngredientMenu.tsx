@@ -19,6 +19,7 @@ import type { MealType } from "../modules/recipes";
 import { Icon } from "./icons";
 import { TimeWheel } from "./TimeWheel";
 import { Button, Chip, ErrorText, Field } from "./ui";
+import { errorText } from "../lib/errors";
 
 export interface IngredientMenuRequest {
   ingredient: RecipeIngredientOption;
@@ -52,7 +53,7 @@ export function IngredientMenu({ householdId, today, todaySlots, busy, onFind }:
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    ingredientsInRecipes(supabase).then(setOptions, (e) => setError(e instanceof Error ? e.message : String(e)));
+    ingredientsInRecipes(supabase).then(setOptions, (e) => setError(errorText(e)));
     // Achats des 7 derniers jours : un ingrédient acheté récemment est proposé comme « déjà acheté ».
     loadPurchases(supabase, householdId, addDays(today, -7))
       .then((list) => setRecent([...new Set(list.sort((a, b) => b.purchasedAt.localeCompare(a.purchasedAt)).map((p) => p.slug))]))

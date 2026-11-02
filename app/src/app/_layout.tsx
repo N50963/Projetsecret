@@ -2,6 +2,7 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { Button, ErrorText, Loading, Muted, Screen } from "../components/ui";
@@ -66,12 +67,15 @@ function Gate() {
 export default function RootLayout() {
   // Police du nom MenuBily ; le reste du texte utilise Roboto, la police du système Android.
   useFonts({ [BRAND_FONT]: require("../../assets/fonts/Cabin-BoldItalic.ttf") });
+  // Gestes natifs (déplacement des menus de la semaine) : la racine de l'application les reçoit.
   return (
-    <SafeAreaProvider>
-      <SessionProvider>
-        <StatusBar style="light" />
-        <Gate />
-      </SessionProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <SessionProvider>
+          <StatusBar style="light" />
+          <Gate />
+        </SessionProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

@@ -7,6 +7,7 @@ import { Logo } from "../components/icons";
 import { Button, ErrorText, Field, Muted } from "../components/ui";
 import { useSession } from "../lib/session";
 import { BRAND_FONT, useColors } from "../lib/theme";
+import { errorText } from "../lib/errors";
 
 /** Connexion MenuBily : photo d'un plat en haut, panneau crème avec le logo, l'e-mail et le mot de passe du compte du foyer. */
 export default function Connexion() {
@@ -28,7 +29,7 @@ export default function Connexion() {
     try {
       await signIn(email, password);
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = errorText(e);
       setError(/invalid|credentials|incorrect/i.test(message) ? "E-mail ou mot de passe incorrect." : message);
     } finally {
       setBusy(false);

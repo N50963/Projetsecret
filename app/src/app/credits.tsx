@@ -8,6 +8,7 @@ import {
   type IngredientCredit, type Picture,
 } from "../lib/images";
 import { CARD_SHADOW, useColors } from "../lib/theme";
+import { errorText } from "../lib/errors";
 
 const credit = (c: { author: string | null; license: string }) => `Photo : ${c.author ? `${c.author} · ` : ""}${c.license} · Wikimedia Commons`;
 
@@ -38,7 +39,7 @@ export default function Credits() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
+    const fail = (e: unknown) => setError(errorText(e));
     dishCredits().then((list) => {
       setDishes(list);
       illustrationUrls(list.map((d) => d.recipeId)).then(setDishPictures, () => undefined);

@@ -12,6 +12,7 @@ import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { CARD_SHADOW, useColors } from "../lib/theme";
 import { getShoppingList, setShoppingItemChecked, type ShoppingItem } from "../modules/planning";
+import { errorText } from "../lib/errors";
 
 /**
  * Liste de courses MenuBily : « À acheter » (article, plat concerné et sa photo, quantité) et « Trouvés sur vos tickets »
@@ -30,7 +31,7 @@ export default function Courses() {
         setItems(list);
         setImages(await illustrationUrls(list.map((i) => i.recipeId).filter((id): id is string => id !== null)));
       })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => setError(errorText(e)));
   }, [household.id]);
   useFocusEffect(load);
 
@@ -40,7 +41,7 @@ export default function Courses() {
     const at = checked ? new Date().toISOString() : null;
     setItems((list) => list.map((i) => (ids.has(i.id) ? { ...i, checkedAt: at } : i)));
     Promise.all([...ids].map((id) => setShoppingItemChecked(supabase, id, checked)))
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => setError(errorText(e)));
   };
 
   // Seuls les articles des menus choisis à venir (ou d'une recette ajoutée depuis sa fiche) restent à acheter.

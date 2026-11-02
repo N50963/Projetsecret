@@ -10,6 +10,7 @@ import {
 } from "../lib/products";
 import { useHousehold } from "../lib/session";
 import { CARD_SHADOW, useColors } from "../lib/theme";
+import { errorText } from "../lib/errors";
 
 interface Edit {
   name: string;
@@ -128,7 +129,7 @@ export default function Produits() {
         })).catch(() => undefined);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     }
   }, [household.id]);
 
@@ -143,7 +144,7 @@ export default function Produits() {
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(null);
     }
@@ -199,7 +200,7 @@ export default function Produits() {
       setFound(list);
       setEdits((prev) => ({ ...Object.fromEntries(list.map((p) => [p.id, editOf(p)])), ...prev }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     }
   };
 

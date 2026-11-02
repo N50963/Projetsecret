@@ -4,6 +4,7 @@ import { StyleSheet, TextInput } from "react-native";
 import { Button, Card, ErrorText, H1, Muted, Screen } from "../components/ui";
 import { useSession } from "../lib/session";
 import { useColors } from "../lib/theme";
+import { errorText } from "../lib/errors";
 
 export default function Foyer() {
   const { joinHousehold, signOut } = useSession();
@@ -18,7 +19,7 @@ export default function Foyer() {
     try {
       await joinHousehold(code);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }

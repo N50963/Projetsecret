@@ -18,6 +18,7 @@ import {
   type MissingIngredient, type PlannedSlot, type PlannerContext, type Proposal, type ServedMeal, type Shortage,
 } from "../modules/planning";
 import { createRecipe, currentSeason, type MainProtein } from "../modules/recipes";
+import { errorText, isNetworkError, retryQuietly } from "../lib/errors";
 
 /** Résumé de l'équilibre de la semaine pour orienter les idées de Mistral. */
 function balanceBrief(ctx: PlannerContext, mealsInPlan: number): string {
@@ -158,7 +159,7 @@ export default function Propositions() {
         setSlots(s);
         setCtx(ready);
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        setError(errorText(e));
       }
     })();
   }, [planId, start, household.id]);
@@ -255,7 +256,9 @@ export default function Propositions() {
   const track = (write: Promise<unknown>, slotId: string) => {
     writes.current.push(write.catch((e) => {
       failures.current += 1;
-      setError(`Choix non enregistré (${e instanceof Error ? e.message : String(e)}) : choisissez de nouveau ce repas.`);
+      setError(isNetworkError(e)
+        ? "Pas de connexion Internet : ce choix n'a pas été enregistré. Choisissez de nouveau ce repas quand le réseau revient."
+        : `Choix non enregistré (${errorText(e)}) : choisissez de nouveau ce repas.`);
       markSlot(slotId, "open");
       setCtx((c) => (c ? { ...c, accepted: c.accepted.filter((m) => m.slotId !== slotId) } : c));
       if (focus) {
@@ -302,7 +305,9 @@ export default function Propositions() {
     if (direction === "left") {
       setCtx({ ...ctx, rejected: { ...ctx.rejected, [current.id]: [...(ctx.rejected[current.id] ?? []), p.recipeId] } });
       next();
-      rejectProposal(supabase, household.id, current.id, p).catch((e) => setError(String(e)));
+      // Refus enregistré en arrière-plan, réessayé en silence (sans réseau, il n'empêche pas de continuer).
+      const slotId = current.id;
+      retryQuietly(() => rejectProposal(supabase, household.id, slotId, p));
       return;
     }
     if (Date.now() - lastChoice.current < 450) return;
@@ -347,7 +352,7 @@ export default function Propositions() {
         .then(({ recipes }) => forSlot((i) => ({ ...i, pending: i.pending - 1,
           drafts: [...i.drafts, ...recipes.filter((d) => d.recipe.name && d.recipe.ingredients.length >= 3)] })))
         .catch((e) => {
-          if (!ctrl.signal.aborted) forSlot((i) => ({ ...i, pending: i.pending - 1, failed: e instanceof Error ? e.message : String(e) }));
+          if (!ctrl.signal.aborted) forSlot((i) => ({ ...i, pending: i.pending - 1, failed: errorText(e) }));
         });
     }, n * IDEA_STAGGER_MS)));
   }, [household.id, ordered.length, focus, weekMeals]);
@@ -390,7 +395,7 @@ export default function Propositions() {
       illustrateRecipe(household.id, recipeId).catch(() => undefined);
       chosen(recipeId, { ...ctx, recipes });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(null);
     }
@@ -402,7 +407,7 @@ export default function Propositions() {
     if (focus && replacing[slotId]) {
       // Repas qu'on pensait remplacer, finalement gardé : ce qui lui manquera va sur la liste de courses.
       writes.current.push(addShoppingItems(supabase, household.id, slotId, replacing[slotId]!)
-        .catch((e) => setError(e instanceof Error ? e.message : String(e))));
+        .catch((e) => setError(errorText(e))));
       setReplacing(({ [slotId]: _kept, ...rest }) => rest);
     } else if (current.status === "open") {
       markSlot(slotId, "skipped");
@@ -427,7 +432,7 @@ export default function Propositions() {
       setShortages((list) => list.filter((x) => x.slotId !== s.slotId));
       setInfo(`Ajouté à la liste de courses : ${s.missing.map((m) => m.label).join(", ")}.`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(null);
     }

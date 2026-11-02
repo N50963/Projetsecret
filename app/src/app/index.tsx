@@ -2,7 +2,9 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+// Défilement qui s'accorde avec les gestes natifs : un menu détaché n'est jamais repris par la page.
+import { ScrollView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon, Logo } from "../components/icons";
@@ -23,6 +25,7 @@ import {
   type WeekSlot,
 } from "../modules/planning";
 import type { MealType } from "../modules/recipes";
+import { errorText } from "../lib/errors";
 
 const MEALS: MealType[] = ["dejeuner", "diner"];
 const DEFAULT_TIME = 60;
@@ -103,7 +106,7 @@ export default function Accueil() {
       setImages(await illustrationUrls(ids.filter((id): id is string => id !== null)));
       preloadPictures(ids);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     }
   }, [household.id, today, days]);
 
@@ -134,7 +137,7 @@ export default function Accueil() {
       const { planId } = await savePlan(supabase, household.id, today, addDays(today, 6), requests);
       router.push({ pathname: "/propositions", params: { plan: planId, start: today } });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(null);
     }
@@ -150,7 +153,7 @@ export default function Accueil() {
         plan: slot.planId, start: today, slot: slot.id, ingredient: r.ingredient.slug, buy: r.toBuy ? "1" : "0",
       } });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(null);
     }
@@ -163,7 +166,7 @@ export default function Accueil() {
       await cancelMealChoice(supabase, s.slotId);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(null);
     }
@@ -188,7 +191,7 @@ export default function Accueil() {
     try {
       await moveMealChoice(supabase, s.slotId, date, meal);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     }
     await load();
   };

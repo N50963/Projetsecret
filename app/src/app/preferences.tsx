@@ -6,6 +6,7 @@ import { useHousehold, useSession } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { useColors } from "../lib/theme";
 import { getHouseholdPreferences, saveHouseholdPreferences, type FoodGroup, type HouseholdPreferences, type SpiceLevel } from "../modules/recipes";
+import { errorText } from "../lib/errors";
 
 const GROUPS: Array<[FoodGroup, string]> = [
   ["abats", "Abats"], ["coquillages", "Coquillages"], ["crustaces", "Crustacés"], ["porc", "Porc"], ["boeuf", "Bœuf"],
@@ -29,7 +30,7 @@ export default function Preferences() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    getHouseholdPreferences(supabase, household.id).then(setPrefs).catch((e) => setError(String(e)));
+    getHouseholdPreferences(supabase, household.id).then(setPrefs).catch((e) => setError(errorText(e)));
   }, [household.id]);
 
   if (!prefs) return error ? <Screen title="Préférences"><ErrorText>{error}</ErrorText></Screen> : <Loading />;
@@ -54,7 +55,7 @@ export default function Preferences() {
       await saveHouseholdPreferences(supabase, household.id, prefs);
       setMessage("Préférences enregistrées.");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -70,7 +71,7 @@ export default function Preferences() {
       setConfirm("");
       setPasswordMessage("Mot de passe changé : utilisez-le aussi sur l'autre téléphone.");
     } catch (e) {
-      setPasswordMessage(e instanceof Error ? e.message : String(e));
+      setPasswordMessage(errorText(e));
     }
   };
   const input = [styles.input, { backgroundColor: c.background, borderColor: c.field, color: c.text }];

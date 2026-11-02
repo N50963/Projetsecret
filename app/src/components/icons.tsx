@@ -70,6 +70,12 @@ const ICONS = {
   /** Coche et croix fines des cartes de la semaine (maquette « Ruban de la semaine »). */
   tick: { viewBox: "0 0 16 16", draw: ({ color }) => <Path d="M3.2 8.4l3.2 3.2 6.4-7" {...stroke(color, 2.4)} /> },
   cross: { viewBox: "0 0 16 16", draw: ({ color }) => <Path d="M3 3l10 10M13 3L3 13" {...stroke(color)} /> },
+  // Poignée de déplacement : deux colonnes de trois points.
+  grip: {
+    viewBox: "0 0 16 16", draw: ({ color }) => <>
+      {[3.5, 8, 12.5].flatMap((y) => [5.5, 10.5].map((x) => <Circle key={`${x}-${y}`} cx={x} cy={y} r={1.45} fill={color} />))}
+    </>,
+  },
   sun: {
     viewBox: "0 0 24 24", draw: ({ color }) => <>
       <Circle cx={12} cy={12} r={4.2} {...stroke(color)} />

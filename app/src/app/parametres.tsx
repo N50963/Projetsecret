@@ -11,6 +11,7 @@ import { useHousehold, useSession } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { CARD_SHADOW, useColors } from "../lib/theme";
 import { getHouseholdPreferences, type HouseholdPreferences } from "../modules/recipes";
+import { errorText } from "../lib/errors";
 
 interface LidlStatus {
   connected: boolean;
@@ -60,7 +61,7 @@ export default function Parametres() {
       setLidl({ connected, lastReceipt: receipt.data?.purchased_at ?? null, lastSync: sync.data?.finished_at ?? null });
       setPrefs(preferences);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     }
   }, [home.id]);
 
@@ -88,7 +89,7 @@ export default function Parametres() {
       // Import terminé : les nouveaux produits non vérifiés s'ouvrent dans le module de correction.
       if (result.status !== "error" && result.status !== "reauth_required" && (await countToReview(home.id)) > 0) router.push("/produits");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setSyncing(false);
     }

@@ -41,11 +41,16 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    (jour abrégé, numéro, deux barrettes pour le déjeuner et le dîner : vert = menu choisi, vert clair = à proposer,
    beige = libre), puis la carte du jour touché. Un menu choisi y apparaît avec sa photo (toucher : fiche ; croix :
    annuler) ; un repas libre se coche (« À proposer ») et reçoit son temps disponible (30 min, 1 h ou sans limite).
-   Il est toujours affiché ; « Proposer les menus (n repas) » lance les propositions. Un menu choisi se déplace par
-   appui long puis glisser : sur une pastille de jour (même repas de ce jour ; survolée un instant, la pastille ouvre son
-   jour) ou sur l'autre repas de la carte ; un menu déjà prévu à cet endroit échange sa place avec lui (fonction SQL
-   `move_meal_choice`, les articles de courses suivent leur menu). La photo du menu est transparente aux gestes : on peut
-   l'attraper par la photo comme par le texte.
+   Il est toujours affiché ; « Proposer les menus (n repas) » lance les propositions. Un menu choisi se déplace en
+   faisant glisser sa poignée (six points, à droite de la ligne : le menu se détache dès que le doigt bouge) ou par appui
+   long sur le menu (250 ms, le téléphone vibre quand il se détache) ; glisser tout de suite ailleurs sur la ligne fait
+   défiler la page, un toucher bref ouvre la fiche. Le menu détaché suit le doigt, au-dessus du pouce. On le dépose sur
+   une pastille de jour (même repas de ce jour, à quelques points près ; survolée un instant, la pastille ouvre son jour)
+   ou sur l'autre repas de la carte (« Déposer le menu ici ») ; un menu déjà prévu à cet endroit échange sa place avec
+   lui (fonction SQL `move_meal_choice`, les articles de courses suivent leur menu). Gestes natifs
+   (react-native-gesture-handler, défilement de l'accueil compris) : une fois le menu détaché, la page ne reprend plus le
+   geste (avec le système de gestes de React Native, Android reprenait le doigt pour faire défiler et le menu retombait) ;
+   la carte du jour de départ reste montée, invisible, quand un autre jour s'ouvre (le menu retombait aussi à ce moment).
 6. **Menu du jour avec un ingrédient** (carte principale de l'accueil) : le foyer tape un ingrédient (recherche parmi
    les ingrédients des recettes, sans suggestion avant la saisie), s'il l'a acheté ou va
    l'acheter, le repas (déjeuner ou dîner) et le temps disponible. Les propositions suivent les mêmes règles que les
@@ -181,6 +186,12 @@ impossible en attrapant la photo (web), porc caché proposé malgré l'exclusion
 en double, « Repas 6 sur 6 » pour un seul repas demandé, résumé de Mistral coupé au milieu d'un mot, note affichée avec
 retard, recherches qui affichaient une réponse périmée, erreur de veille de l'écran en quittant la fiche (web), déjeuner
 passé encore en tête de l'accueil le soir. Non essayé : récupération des tickets Lidl (elle importe de vrais tickets).
+
+## Erreurs et absence de réseau
+
+Les messages d'erreur sont en français, sans détail technique (`app/src/lib/errors.ts`) : sans réseau, « Pas de
+connexion Internet. Vérifiez le Wi-Fi ou les données mobiles, puis réessayez. », précédé de l'action concernée. Un choix
+de menu non enregistré le dit et rouvre le repas ; un refus de proposition est réessayé en silence (3 s, 10 s, 30 s).
 
 ## Limites connues
 

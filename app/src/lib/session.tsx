@@ -4,6 +4,7 @@ import type { Session } from "@supabase/supabase-js";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { supabase } from "./supabase";
+import { errorText } from "./errors";
 
 export interface Household {
   id: string;
@@ -59,7 +60,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setHousehold(await loadHousehold(userId));
       setHouseholdUser(userId);
     } catch (e) {
-      setHouseholdError(e instanceof Error ? e.message : String(e));
+      setHouseholdError(errorText(e));
     }
   }, [userId]);
 

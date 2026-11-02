@@ -6,6 +6,7 @@ import { WebView } from "react-native-webview";
 import { Body, Button, Card, ErrorText, Loading, Muted, Screen } from "../components/ui";
 import { finishLidlLogin, startLidlLogin, type PkceLogin } from "../lib/lidl";
 import { extractCode, isLidlCallback } from "../modules/lidl-sync";
+import { errorText } from "../lib/errors";
 
 /**
  * Connexion Lidl Plus : la page officielle de Lidl s'ouvre dans l'application, la personne s'y connecte elle-même
@@ -19,7 +20,7 @@ export default function LidlConnexion() {
   const handled = useRef(false);
 
   useEffect(() => {
-    startLidlLogin().then(setLogin).catch((e) => setError(String(e)));
+    startLidlLogin().then(setLogin).catch((e) => setError(errorText(e)));
   }, []);
 
   const onCallback = (url: string) => {
@@ -36,7 +37,7 @@ export default function LidlConnexion() {
       .catch((e) => {
         handled.current = false;
         setState("page");
-        setError(e instanceof Error ? e.message : String(e));
+        setError(errorText(e));
       });
   };
 
