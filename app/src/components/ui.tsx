@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useShoppingCount } from "../lib/shoppingCount";
 import { CARD_SHADOW, PRIMARY_GRADIENT, PRIMARY_GRADIENT_STOPS, useColors } from "../lib/theme";
 import { Icon, type IconName } from "./icons";
 
@@ -45,9 +46,10 @@ const TABS: Array<{ tab: NavTab; label: string; path: "/" | "/courses" | "/recet
   { tab: "profil", label: "Profil", path: "/parametres", icon: "profile", active: "profileFilled" },
 ];
 
-/** Barre de navigation du bas : onglet actif en vert. */
+/** Barre de navigation du bas : onglet actif en vert ; pastille du nombre d'articles à acheter sur Courses. */
 export function BottomNav({ active }: { active: NavTab }) {
   const c = useColors();
+  const toBuy = useShoppingCount();
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -56,15 +58,24 @@ export function BottomNav({ active }: { active: NavTab }) {
       {TABS.map((t) => {
         const on = t.tab === active;
         const color = on ? c.navActive : c.text;
+        const badge = t.tab === "courses" && toBuy > 0 ? toBuy : 0;
         return (
-          <Pressable key={t.tab} accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={t.label}
+          <Pressable key={t.tab} accessibilityRole="tab" accessibilityState={{ selected: on }}
+            accessibilityLabel={badge ? `${t.label}, ${badge} article${badge > 1 ? "s" : ""} à acheter` : t.label}
             onPress={() => {
               if (pathname === t.path) return;
               if (t.path === "/") router.dismissTo("/");
               else router.navigate(t.path);
             }}
             style={({ pressed }) => [styles.tab, { opacity: pressed ? 0.6 : 1 }]}>
-            <Icon name={on ? t.active : t.icon} size={24} color={color} />
+            <View>
+              <Icon name={on ? t.active : t.icon} size={24} color={color} />
+              {badge ? (
+                <View style={[styles.badge, { backgroundColor: c.danger, borderColor: c.nav }]}>
+                  <Text style={styles.badgeText}>{badge > 99 ? "99+" : badge}</Text>
+                </View>
+              ) : null}
+            </View>
             <Text style={[styles.tabLabel, { color, fontWeight: on ? "700" : "400" }]}>{t.label}</Text>
           </Pressable>
         );
@@ -261,4 +272,10 @@ const styles = StyleSheet.create({
   nav: { flexDirection: "row", justifyContent: "space-around", borderTopWidth: 1, paddingTop: 3 },
   tab: { width: 72, height: 50, alignItems: "center", justifyContent: "center", gap: 2 },
   tabLabel: { fontSize: 11, lineHeight: 14 },
+  // Pastille du nombre d'articles à acheter, en haut à droite de l'icône du panier.
+  badge: {
+    position: "absolute", top: -6, right: -11, minWidth: 19, height: 19, borderRadius: 10, borderWidth: 1.5, paddingHorizontal: 4,
+    alignItems: "center", justifyContent: "center",
+  },
+  badgeText: { color: "#FFFFFF", fontSize: 11, lineHeight: 13, fontWeight: "700", fontVariant: ["tabular-nums"] },
 });

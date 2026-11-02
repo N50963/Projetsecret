@@ -27,6 +27,7 @@ import {
   scaleIngredients, setFavorite, toPayload, validateRecipe, type IngredientShopping, type Recipe, type RecipeRating,
 } from "../../modules/recipes";
 import { errorText } from "../../lib/errors";
+import { refreshShoppingCount } from "../../lib/shoppingCount";
 
 type Tab = "ingredients" | "preparation";
 
@@ -193,6 +194,7 @@ export default function FicheRecette() {
     const added = await addNeedsToShoppingList(supabase, household.id, recipe.id, items);
     setOutOf(null);
     setNeeds(await getShoppingStatus(supabase, household.id, recipe.id, servings));
+    refreshShoppingCount(household.id).catch(() => undefined);
     setInfo(added ? `${added} article${added > 1 ? "s" : ""} ajouté${added > 1 ? "s" : ""} à la liste de courses.` : "Tout est déjà sur la liste.");
   });
   const togglePick = (slug: string) => setOutOf((set) => {

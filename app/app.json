@@ -3,7 +3,7 @@
     "name": "MenuBily",
     "slug": "menus-du-foyer",
     "scheme": "menusdufoyer",
-    "version": "0.21.0",
+    "version": "0.22.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -12,7 +12,7 @@
     },
     "android": {
       "package": "fr.foyer.menus",
-      "versionCode": 21,
+      "versionCode": 22,
       "adaptiveIcon": {
         "backgroundColor": "#FEF3E3",
         "foregroundImage": "./assets/android-icon-foreground.png",

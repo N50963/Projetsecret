@@ -1,5 +1,5 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Icon } from "../components/icons";
@@ -8,6 +8,7 @@ import { ErrorText, Muted, Screen, SectionTitle } from "../components/ui";
 import { quantity } from "../lib/format";
 import { illustrationUrls, pictureOf, type Picture } from "../lib/images";
 import { shoppingLines, type ShoppingLine } from "../lib/shopping";
+import { setShoppingCount, toBuyLines } from "../lib/shoppingCount";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { CARD_SHADOW, useColors } from "../lib/theme";
@@ -45,8 +46,12 @@ export default function Courses() {
   };
 
   // Seuls les articles des menus choisis à venir (ou d'une recette ajoutée depuis sa fiche) restent à acheter.
-  const toBuy = shoppingLines(items.filter((i) => i.active && !i.boughtAt && !i.checkedAt));
+  const toBuy = toBuyLines(items);
   const found = shoppingLines(items.filter((i) => i.boughtAt || i.checkedAt));
+  // Pastille de l'onglet Courses : même décompte que la liste affichée (à jour à chaque article coché).
+  useEffect(() => {
+    setShoppingCount(toBuy.length);
+  }, [toBuy.length]);
 
   return (
     <Screen title="Liste de courses" nav="courses" padded={false}>

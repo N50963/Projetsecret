@@ -41,7 +41,14 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    (jour abrégé, numéro, deux barrettes pour le déjeuner et le dîner : vert = menu choisi, vert clair = à proposer,
    beige = libre), puis la carte du jour touché. Un menu choisi y apparaît avec sa photo (toucher : fiche ; croix :
    annuler) ; un repas libre se coche (« À proposer ») et reçoit son temps disponible (30 min, 1 h ou sans limite).
-   Il est toujours affiché ; « Proposer les menus (n repas) » lance les propositions. Un menu choisi se déplace en
+   Il est toujours affiché ; « Proposer les menus (n repas) » lance les propositions. Les repas du jour passés ne sont
+   plus à prévoir : le déjeuner après 14 h, le dîner après 20 h (ils disparaissent de la carte du jour, du décompte et du
+   menu du jour par ingrédient). Une fois la semaine choisie (des menus choisis, plus rien à proposer), les repas à
+   prévoir sont repliés : la carte d'un jour ne montre que ses menus, le bouton des propositions disparaît, et un lien
+   discret « Prévoir un autre repas » rouvre les repas à cocher (rien n'est alors coché d'avance ; ils se replient de
+   nouveau au retour sur l'accueil s'ils n'ont pas été cochés). Semaine encore vide : le dîner de chaque jour est coché
+   d'avance. La liste de courses n'a plus de carte sur l'accueil : une pastille rouge sur l'onglet Courses de la barre du
+   bas donne le nombre d'articles à acheter (mis à jour par l'accueil, la liste et la fiche recette). Un menu choisi se déplace en
    faisant glisser sa poignée (six points, à droite de la ligne : le menu se détache dès que le doigt bouge) ou par appui
    long sur le menu (250 ms, le téléphone vibre quand il se détache) ; glisser tout de suite ailleurs sur la ligne fait
    défiler la page, un toucher bref ouvre la fiche. Le menu détaché suit le doigt, au-dessus du pouce. On le dépose sur

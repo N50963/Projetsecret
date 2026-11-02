@@ -15,10 +15,10 @@ import { WeekRibbon } from "../components/WeekRibbon";
 import { BottomNav, Button, ErrorText } from "../components/ui";
 import { dayLabel, mealLabel, minutes } from "../lib/format";
 import { illustrationUrls, pictureOf, preloadPictures, sourceOf, type Picture } from "../lib/images";
-import { shoppingLines } from "../lib/shopping";
+import { setShoppingCount, toBuyLines } from "../lib/shoppingCount";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
-import { BRAND_FONT, CARD_SHADOW, useColors } from "../lib/theme";
+import { BRAND_FONT, useColors } from "../lib/theme";
 import { useTimers } from "../lib/timers";
 import {
   addDays, cancelMealChoice, ensureSlot, getShoppingList, getWeekSlots, moveMealChoice, savePlan, toIsoDate, weekDates, type ShoppingItem, type SlotRequest,
@@ -30,8 +30,8 @@ import { errorText } from "../lib/errors";
 const MEALS: MealType[] = ["dejeuner", "diner"];
 const DEFAULT_TIME = 60;
 const LEVEL = ["", "Facile", "Moyen", "Difficile"];
-/** Heure à partir de laquelle le déjeuner du jour est passé (le prochain repas est le dîner). */
-const LUNCH_OVER_HOUR = 15;
+/** Heures à partir desquelles le déjeuner et le dîner du jour sont passés : plus rien à prévoir pour eux. */
+const OVER_HOUR: Record<MealType, number> = { dejeuner: 14, diner: 20 };
 
 interface DayChoice {
   dejeuner: boolean;
@@ -40,7 +40,11 @@ interface DayChoice {
   time: Record<MealType, number | null>;
 }
 
-const defaultChoice = (): DayChoice => ({ dejeuner: false, diner: true, time: { dejeuner: DEFAULT_TIME, diner: DEFAULT_TIME } });
+/**
+ * Sélection d'un jour sans repas enregistré : le dîner coché quand la semaine est encore vide (on la prévoit) ; rien une
+ * fois des menus choisis (le foyer coche lui-même un repas de plus).
+ */
+const defaultChoice = (fresh: boolean): DayChoice => ({ dejeuner: false, diner: fresh, time: { dejeuner: DEFAULT_TIME, diner: DEFAULT_TIME } });
 
 /** Temps enregistré ramené aux choix de la roue (30 min, 1 h, sans limite). */
 const snapTime = (t: number | null) => (t === null ? null : t <= 30 ? 30 : t <= 60 ? 60 : null);
@@ -73,6 +77,10 @@ export default function Accueil() {
   const [loaded, setLoaded] = useState(false);
   const [reminders, setReminders] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  /** Heure courante (relue chaque minute) : les repas du jour passés disparaissent d'eux-mêmes. */
+  const [hour, setHour] = useState(() => new Date().getHours());
+  /** Repas à prévoir affichés à la demande, une fois la semaine choisie (« Prévoir un autre repas »). */
+  const [planning, setPlanning] = useState(false);
   /** Menu en cours de déplacement : la page ne défile pas pendant le glisser-déposer. */
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
@@ -89,11 +97,13 @@ export default function Accueil() {
       preloadPictures(ids);
       setSlots(byKey);
       setShopping(list);
+      setShoppingCount(toBuyLines(list).length);
       setLoaded(true);
+      const fresh = !week.some((s) => s.status === "accepted");
       // Les repas enregistrés fixent la sélection de leur jour ; les autres jours gardent la sélection en cours.
       setChoices((prev) => Object.fromEntries(days.map((d) => {
         const saved = MEALS.map((m) => byKey[`${d}:${m}`]).filter((s): s is WeekSlot => s !== undefined);
-        if (!saved.length) return [d, prev[d] ?? defaultChoice()];
+        if (!saved.length) return [d, prev[d] ?? defaultChoice(fresh)];
         const wanted = (m: MealType) => (byKey[`${d}:${m}`] ? byKey[`${d}:${m}`]!.status !== "skipped" : false);
         // Temps propre à chaque repas : celui du repas enregistré, sinon la sélection en cours.
         const timeOf = (m: MealType) => {
@@ -112,23 +122,33 @@ export default function Accueil() {
 
   useFocusEffect(useCallback(() => {
     load();
+    // Retour à l'accueil : les repas à prévoir dévoilés se replient (sauf repas cochés, qui restent à proposer).
+    setPlanning(false);
+    setHour(new Date().getHours());
+    const tick = setInterval(() => setHour(new Date().getHours()), 60_000);
+    return () => clearInterval(tick);
   }, [load]));
 
   const picture = (recipeId: string | null) => (recipeId ? images[recipeId] ?? pictureOf(recipeId) : null);
-  const choiceOf = (d: string): DayChoice => choices[d] ?? defaultChoice();
+  const fresh = !Object.values(slots).some((s) => s.status === "accepted");
+  const choiceOf = (d: string): DayChoice => choices[d] ?? defaultChoice(fresh);
+  /** Repas du jour passé : le déjeuner après 14 h, le dîner après 20 h. */
+  const isPast = (d: string, m: MealType) => d === today && hour >= OVER_HOUR[m];
   const update = (d: string, patch: Partial<DayChoice>) => setChoices((p) => ({ ...p, [d]: { ...choiceOf(d), ...patch } }));
   const isChosen = (d: string, m: MealType) => slots[`${d}:${m}`]?.status === "accepted";
 
   // Menus choisis, dans l'ordre de la semaine : le premier (aujourd'hui, sinon le prochain) s'affiche en grand en tête ;
   // tous les menus choisis se retrouvent ensuite jour par jour dans le ruban de la semaine.
   const menus = days.flatMap((d) => MEALS.map((m) => slots[`${d}:${m}`]).filter((s): s is WeekSlot => s?.status === "accepted"));
-  // Le déjeuner du jour passé (après 15 h), le menu en tête est le suivant : le dîner, ou le prochain jour.
-  const lunchOver = new Date().getHours() >= LUNCH_OVER_HOUR;
-  const hero = menus.find((s) => !(lunchOver && s.date === today && s.mealType === "dejeuner")) ?? menus[0];
+  // Le déjeuner du jour passé (après 14 h), le menu en tête est le suivant : le dîner, ou le prochain jour.
+  const hero = menus.find((s) => !(s.mealType === "dejeuner" && isPast(s.date, s.mealType))) ?? menus[0];
 
   const requests: SlotRequest[] = days.flatMap((d) => MEALS
-    .filter((m) => choiceOf(d)[m] && !isChosen(d, m))
+    .filter((m) => choiceOf(d)[m] && !isChosen(d, m) && !isPast(d, m))
     .map((m) => ({ date: d, mealType: m, maxTotalMin: choiceOf(d).time[m], servings: household.defaultServings })));
+
+  // Semaine choisie (des menus, plus rien à proposer) : les repas à prévoir sont repliés, un lien discret les rouvre.
+  const compact = menus.length > 0 && requests.length === 0 && !planning;
 
   const propose = async () => {
     setBusy("plan");
@@ -197,7 +217,7 @@ export default function Accueil() {
   };
 
   // Même décompte que la liste de courses : un article demandé par deux plats compte une fois.
-  const toBuy = shoppingLines(shopping.filter((i) => i.active && !i.boughtAt && !i.checkedAt));
+  const toBuy = toBuyLines(shopping);
   const open = (s: WeekSlot) => router.push(`/recette/${s.recipeId}`);
 
   const notifications = () => setReminders(true);
@@ -264,28 +284,19 @@ export default function Accueil() {
             todaySlots={{ dejeuner: slots[`${today}:dejeuner`], diner: slots[`${today}:diner`] }} />
         )}
 
-        {/* Ruban de la semaine, toujours affiché, sans titre ni lien pour le replier. */}
+        {/* Ruban de la semaine, toujours affiché, sans titre. */}
         {loaded && (
           <View style={styles.planning}>
             <WeekRibbon days={days} today={today} planOf={choiceOf} slotOf={(d, m) => slots[`${d}:${m}`]} picture={picture}
-              busy={busy !== null} onChange={update} onOpen={open} onCancel={cancel} onMove={move} onDragChange={setDragging} />
+              busy={busy !== null} onChange={update} onOpen={open} onCancel={cancel} onMove={move} onDragChange={setDragging}
+              isPast={isPast} compact={compact} onPlanMore={() => setPlanning(true)} />
           </View>
         )}
 
-        <Pressable onPress={() => router.navigate("/courses")} accessibilityRole="button"
-          style={({ pressed }) => [styles.shopping, { backgroundColor: c.card, borderColor: c.cardLine, opacity: pressed ? 0.8 : 1 }, CARD_SHADOW]}>
-          <View style={[styles.shoppingIcon, { backgroundColor: c.chip }]}><Icon name="cartFilled" width={24} height={22} color={c.text} /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.rowName, { color: c.text }]}>Liste de courses</Text>
-            <Text style={[styles.rowMeta, { color: toBuy.length ? c.orangeInk : c.muted, fontWeight: "500" }]}>
-              {toBuy.length ? `${toBuy.length} article${toBuy.length > 1 ? "s" : ""} à acheter` : "Rien à acheter"}
-            </Text>
-          </View>
-          <Icon name="chevronRight" width={9} height={15} color={c.text} />
-        </Pressable>
       </ScrollView>
 
-      {loaded && (
+      {/* Bouton des propositions : seulement s'il y a des repas à prévoir affichés. */}
+      {loaded && !compact && (
         <View style={styles.cta}>
           <Button icon="wand" title={requests.length ? `Proposer les menus (${requests.length} repas)` : "Cochez les repas"}
             onPress={propose} busy={busy === "plan"} disabled={!requests.length} />
@@ -324,13 +335,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF", fontSize: 16, fontWeight: "500", marginRight: 12,
     textShadowColor: "rgba(0,0,0,0.4)", textShadowRadius: 2, textShadowOffset: { width: 0, height: 1 },
   },
-  rowName: { fontSize: 15.5, lineHeight: 19, fontWeight: "700", marginTop: 1 },
-  rowMeta: { fontSize: 14.2, lineHeight: 18 },
   planning: { marginTop: 12 },
-  shopping: {
-    flexDirection: "row", alignItems: "center", gap: 12, minHeight: 66, marginTop: 12, marginLeft: 12.8, marginRight: 9.2,
-    paddingVertical: 8, paddingLeft: 12, paddingRight: 9, borderRadius: 12, borderWidth: 1,
-  },
-  shoppingIcon: { width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   cta: { paddingTop: 8, paddingBottom: 6, paddingLeft: 14, paddingRight: 9 },
 });

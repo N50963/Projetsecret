@@ -169,7 +169,7 @@ function DishRow({ slot, meal, pic, busy, dimmed, aimed, onOpen, onCancel, drag 
   );
 }
 
-export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChange, onOpen, onCancel, onMove, onDragChange }: {
+export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChange, onOpen, onCancel, onMove, onDragChange, isPast, compact = false, onPlanMore }: {
   days: string[]; today: string; planOf: (date: string) => DayPlan; slotOf: (date: string, meal: MealType) => WeekSlot | undefined;
   picture: (recipeId: string | null) => Picture | null; busy: boolean;
   onChange: (date: string, patch: Partial<DayPlan>) => void; onOpen: (slot: WeekSlot) => void; onCancel: (slot: WeekSlot) => void;
@@ -177,7 +177,13 @@ export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChang
   onMove?: (slot: WeekSlot, date: string, meal: MealType) => void;
   /** Déplacement en cours : la page ne défile plus pendant ce temps. */
   onDragChange?: (dragging: boolean) => void;
+  /** Repas du jour déjà passé (déjeuner après 14 h, dîner après 20 h) : plus rien à prévoir pour lui. */
+  isPast?: (date: string, meal: MealType) => boolean;
+  /** Semaine choisie : seuls les menus choisis s'affichent ; un lien discret rouvre les repas à prévoir. */
+  compact?: boolean;
+  onPlanMore?: () => void;
 }) {
+  const past = (d: string, m: MealType) => isPast?.(d, m) ?? false;
   const c = useColors();
   const chosen = (d: string, m: MealType) => {
     const s = slotOf(d, m);
@@ -185,7 +191,10 @@ export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChang
   };
   // Jour affiché : celui touché, sinon le premier qui a encore un repas libre.
   const [picked, setPicked] = useState<string | null>(null);
-  const selected = picked && days.includes(picked) ? picked : days.find((d) => MEALS.some((m) => !chosen(d, m))) ?? days[0]!;
+  // Jour affiché par défaut : le premier qui a encore un repas à prévoir ; semaine choisie : le premier menu à venir.
+  const selected = picked && days.includes(picked) ? picked
+    : (compact ? days.find((d) => MEALS.some((m) => chosen(d, m) && !past(d, m))) : days.find((d) => MEALS.some((m) => !chosen(d, m) && !past(d, m))))
+      ?? days[0]!;
 
   // --- Déplacement d'un menu --------------------------------------------------------------------------------------------
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -221,7 +230,9 @@ export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChang
   const measureMeals = async () => {
     for (const m of MEALS) {
       const r = await measure(mealViews.current.get(m));
+      // Repas masqué (passé, semaine repliée) : plus une cible.
       if (r) mealRects.current.set(m, r);
+      else mealRects.current.delete(m);
     }
   };
   const measureAll = async () => {
@@ -262,7 +273,8 @@ export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChang
   const targetAt = (d: Drag, x: number, y: number): Target | null => {
     for (const m of MEALS) if (inside(mealRects.current.get(m), x, y, 4, 4)) return { date: selectedRef.current, meal: m };
     const day = chipAt(x, y);
-    return day ? { date: day, meal: d.slot.mealType } : null;
+    // Pas de dépôt sur un repas du jour déjà passé.
+    return day && !past(day, d.slot.mealType) ? { date: day, meal: d.slot.mealType } : null;
   };
   const follow = (x: number, y: number) => {
     const d = dragRef.current;
@@ -329,6 +341,8 @@ export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChang
                 </View>
               );
             }
+            // Repas à prévoir masqué : déjà passé aujourd'hui, ou semaine choisie (repliée).
+            if (past(day, m) || compact) return null;
             const on = plan[m];
             return (
               <View key={m} ref={visible ? (v) => { mealViews.current.set(m, v); } : undefined}
@@ -368,6 +382,15 @@ export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChang
             <Text style={[styles.hint, { color: c.primary, fontWeight: "600" }]}>Déposez le menu sur un jour ou sur l'autre repas.</Text>
           ) : MEALS.some((m) => chosen(day, m)) && onMove ? (
             <Text style={[styles.hint, { color: c.muted }]}>Pour déplacer un menu, faites glisser sa poignée (ou appui long dessus) vers un autre jour ou un autre repas.</Text>
+          ) : !compact && MEALS.every((m) => past(day, m)) ? (
+            <Text style={[styles.hint, { color: c.muted }]}>Plus de repas à prévoir aujourd'hui.</Text>
+          ) : null}
+          {/* Semaine choisie : les repas à prévoir restent accessibles par ce lien discret. */}
+          {visible && compact && !drag && onPlanMore && MEALS.some((m) => !chosen(day, m) && !past(day, m)) ? (
+            <Pressable onPress={onPlanMore} accessibilityRole="button" hitSlop={8} style={({ pressed }) => [styles.more, { opacity: pressed ? 0.6 : 1 }]}>
+              <Icon name="plus" size={15} color={c.muted} />
+              <Text style={[styles.moreText, { color: c.muted }]}>Prévoir un autre repas</Text>
+            </Pressable>
           ) : null}
         </View>
     );
@@ -460,6 +483,8 @@ const styles = StyleSheet.create({
   time: { flex: 1, minWidth: 0, height: 48, borderRadius: 12, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
   timeText: { fontSize: 15 },
   hint: { fontSize: 13, lineHeight: 17, paddingHorizontal: 3 },
+  more: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start", minHeight: 32, paddingHorizontal: 3 },
+  moreText: { fontSize: 13.5, textDecorationLine: "underline" },
   ghost: {
     position: "absolute", width: GHOST_W, height: 58, borderRadius: 12, borderWidth: 2, flexDirection: "row", alignItems: "center", gap: 8,
     overflow: "hidden", zIndex: 20, elevation: 12, shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 },

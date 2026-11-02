@@ -72,6 +72,8 @@ export function IngredientMenu({ householdId, today, todaySlots, busy, onFind }:
     setToBuy(!recent.includes(o.slug));
   };
 
+  // Ouvert avant 14 h et resté à l'écran : le déjeuner passé laisse la place au dîner.
+  if (mealType === "dejeuner" && new Date().getHours() >= 14) setMealType("diner");
   const existing = todaySlots[mealType]?.status === "accepted" ? todaySlots[mealType] : undefined;
 
   return (
@@ -126,7 +128,8 @@ export function IngredientMenu({ householdId, today, todaySlots, busy, onFind }:
           </View>
           <View style={styles.plan}>
             <View style={{ flex: 1, gap: 8 }}>
-              {(["dejeuner", "diner"] as MealType[]).map((m) => {
+              {/* Après 14 h, le déjeuner du jour est passé : seul le dîner reste proposé. */}
+              {(["dejeuner", "diner"] as MealType[]).filter((m) => m === "diner" || new Date().getHours() < 14).map((m) => {
                 const on = mealType === m;
                 return (
                   <Pressable key={m} onPress={() => setMealType(m)} accessibilityRole="radio" accessibilityState={{ checked: on }}
