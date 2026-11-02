@@ -52,6 +52,18 @@ export const mistralStatus = (householdId: string) =>
 export const importRecipe = (householdId: string, text: string, servings: number) =>
   call<Draft>({ action: "import_recipe", household_id: householdId, text, servings });
 
+/** Recette importée d'une photo, d'une page ou de la voix : le texte lu (ou transcrit) accompagne le brouillon. */
+export type ImportedDraft = Draft & { source_text?: string; source_url?: string };
+
+export const importPhoto = (householdId: string, images: string[], servings: number) =>
+  call<ImportedDraft>({ action: "import_photo", household_id: householdId, images, servings });
+
+export const importUrl = (householdId: string, url: string, servings: number) =>
+  call<ImportedDraft>({ action: "import_url", household_id: householdId, url, servings });
+
+export const importAudio = (householdId: string, audio: string, mime: string, servings: number) =>
+  call<ImportedDraft>({ action: "import_audio", household_id: householdId, audio, mime, servings });
+
 export interface GenerateRequest {
   brief: string;
   count?: number;

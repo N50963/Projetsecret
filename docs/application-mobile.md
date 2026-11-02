@@ -99,8 +99,18 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    ancienne n'écrase jamais les résultats), filtre Favoris, filtre par note (5 étoiles, 4 et +, 3 et +,
    non notées), note affichée sur chaque ligne. Les recettes ajoutées par le foyer se modifient ou se suppriment depuis
    leur fiche (« Plus d'options » › Modifier / Supprimer) ; les recettes de la base commune ne sont pas modifiables.
-11. **Ajout de recettes** : texte collé ou saisie libre, mis en forme par Mistral (durées de cuisson, feu et
-   température précisés : chaque étape avec une durée aura son minuteur). L'utilisateur relit et corrige tout dans
+11. **Ajout de recettes** : cinq sources, mises en forme par Mistral (durées de cuisson, feu et température précisés :
+   chaque étape avec une durée aura son minuteur) :
+   - **Photo** de la recette (livre, fiche, écran, papier manuscrit), jusqu'à 4 pages (appareil photo ou galerie,
+     réduites à 1 600 px) : un modèle de vision de Mistral lit le texte (action `import_photo`) ;
+   - **Lien internet** de la page : la fonction lit ses données structurées schema.org « Recipe » (la plupart des sites
+     de recettes), sinon son texte à partir des ingrédients (`import_url` ; adresses publiques seulement, 20 s et 3 Mo
+     au plus) ;
+   - **À voix haute** : la personne lit la recette, l'application l'enregistre (micro, m4a mono 32 kb/s, 8 minutes au
+     plus) et Mistral la transcrit (Voxtral, `import_audio`) ;
+   - **Coller un texte** ou **Saisir**.
+   Le brouillon montre, repliable, ce que MenuBily a lu ou entendu, pour vérifier que rien ne manque. Une protéine
+   principale « végétarienne » donnée à un plat de viande ou de poisson est corrigée d'après ses ingrédients. L'utilisateur relit et corrige tout dans
    l'éditeur avant d'enregistrer ; photo du plat facultative (appareil photo ou galerie), sinon Mistral crée une
    illustration.
 12. **Favoris** : cœur dans la bande verte de la fiche ; filtre « Favoris » dans l'onglet Recettes. « Ajouter à ma
@@ -151,6 +161,11 @@ saucisses, charcuterie, cordon bleu ; bœuf : bœuf, veau, corned beef) ; un ing
 - Ingrédients sur fond blanc : sujet détouré (rembg) et centré sur un carré blanc, ou photo telle quelle (non recadrée)
   sur fond blanc pour les graines, poudres et photos mal détourées (`app/scripts/ingredients-fond-blanc.py`) ; vignette bordée sur la fiche.
 - Limite : 40 appels par heure et par foyer (journal `ai_calls`).
+- Déploiement de la fonction `mistral` : son point d'entrée déployé importe `supabase/functions/mistral/index.ts` du
+  dépôt GitHub à un commit figé (`https://raw.githubusercontent.com/n50963/projetsecret/<commit>/…`) ; le module est
+  intégré au paquet de la fonction au déploiement (aucun accès à GitHub ensuite). Pour une nouvelle version : pousser
+  le commit, puis redéployer la fonction avec ce numéro de commit (sans vérification de jeton, la fonction contrôle
+  elle-même le compte et le jeton des tâches planifiées).
 - Plan gratuit Supabase : voir `docs/plan-gratuit-supabase.md`.
 
 ## Installer l'application sur les téléphones

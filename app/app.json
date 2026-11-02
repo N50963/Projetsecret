@@ -3,7 +3,7 @@
     "name": "MenuBily",
     "slug": "menus-du-foyer",
     "scheme": "menusdufoyer",
-    "version": "0.22.0",
+    "version": "0.23.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -12,7 +12,7 @@
     },
     "android": {
       "package": "fr.foyer.menus",
-      "versionCode": 22,
+      "versionCode": 23,
       "adaptiveIcon": {
         "backgroundColor": "#FEF3E3",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -34,7 +34,8 @@
           "photosPermission": "Choisir une photo pour illustrer une recette.",
           "cameraPermission": "Prendre en photo un plat pour illustrer sa recette."
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true

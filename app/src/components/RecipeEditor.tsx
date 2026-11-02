@@ -93,7 +93,7 @@ export function RecipeEditor({ value, onChange }: { value: DraftRecipe; onChange
           <View key={n} style={{ gap: 4 }}>
             <View style={styles.ingredient}>
               <TextInput value={i.label} onChangeText={(label) => setIngredient(n, { label })} placeholder="Ingrédient" placeholderTextColor={c.muted}
-                style={[input, { flex: 1 }]} />
+                style={[input, { flex: 1, minWidth: 0 }]} />
               <NumberField value={i.quantity} decimals onChange={(q) => changeQuantity(i, n, q)} placeholder="qté" style={{ width: 62 }} />
               <Pressable onPress={() => cycleUnit(i, n)} accessibilityRole="button" accessibilityLabel={`Unité : ${i.unit ? UNIT_LABEL[i.unit as RecipeUnit] : "aucune"}`}
                 style={[styles.unit, { backgroundColor: c.chip }]}>
@@ -156,7 +156,8 @@ export function cleanDraft(d: DraftRecipe): DraftRecipe {
 
 const styles = StyleSheet.create({
   input: { minHeight: 48, borderWidth: 1.5, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 8, fontSize: 16, textAlignVertical: "top" },
-  ingredient: { flexDirection: "row", alignItems: "center", gap: 8 },
+  // Le libellé rétrécit (minWidth 0) : quantité, unité et croix restent dans l'écran.
+  ingredient: { flexDirection: "row", alignItems: "center", gap: 6 },
   unit: { minWidth: 58, height: 48, borderRadius: 13, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
   badge: { width: 32, height: 32, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   timerLine: { flexDirection: "row", alignItems: "center", gap: 6 },
