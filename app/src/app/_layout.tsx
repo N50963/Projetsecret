@@ -2,11 +2,13 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
+import { AppState } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { Button, ErrorText, Loading, Muted, Screen } from "../components/ui";
 import { warmIllustrations } from "../lib/images";
+import { REOPEN_AFTER_MS, refreshWeather } from "../lib/weather";
 import { SessionProvider, useSession } from "../lib/session";
 import { BRAND_FONT, useColors } from "../lib/theme";
 
@@ -22,6 +24,21 @@ function Gate() {
   // Dès l'ouverture : liste des photos lue sur le téléphone, puis toutes les photos téléchargées en avance.
   useEffect(() => {
     if (member) warmIllustrations();
+  }, [member]);
+  // Météo relue seulement à l'ouverture : au lancement, puis au retour au premier plan après au moins 30 minutes
+  // en arrière-plan (compté comme une nouvelle ouverture). Pendant l'utilisation, aucun nouvel appel.
+  useEffect(() => {
+    if (!member) return;
+    refreshWeather().catch(() => undefined);
+    let leftAt: number | null = null;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "background") leftAt = Date.now();
+      else if (state === "active" && leftAt !== null) {
+        if (Date.now() - leftAt >= REOPEN_AFTER_MS) refreshWeather().catch(() => undefined);
+        leftAt = null;
+      }
+    });
+    return () => sub.remove();
   }, [member]);
 
   if (!ready) {

@@ -15,7 +15,7 @@ import { WeekRibbon } from "../components/WeekRibbon";
 import { BottomNav, Button, ErrorText } from "../components/ui";
 import { dayLabel, mealLabel, minutes } from "../lib/format";
 import { illustrationUrls, pictureOf, preloadPictures, placeholderOf, sourceOf, type Picture } from "../lib/images";
-import { loadWeather } from "../lib/weather";
+import { useWeather } from "../lib/weather";
 import { setShoppingCount, toBuyLines } from "../lib/shoppingCount";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
@@ -23,7 +23,7 @@ import { BRAND_FONT, useColors } from "../lib/theme";
 import { useTimers } from "../lib/timers";
 import {
   addDays, cancelMealChoice, ensureSlot, getShoppingList, getWeekSlots, moveMealChoice, savePlan, toIsoDate, weekDates, type ShoppingItem, type SlotRequest,
-  type DayWeather, type WeekSlot,
+  type WeekSlot,
 } from "../modules/planning";
 import type { MealType } from "../modules/recipes";
 import { errorText } from "../lib/errors";
@@ -121,11 +121,8 @@ export default function Accueil() {
     }
   }, [household.id, today, days]);
 
-  // Prévisions de Rochefort-du-Gard (lues au plus une fois par heure) : météo sur les cartes des jours.
-  const [weather, setWeather] = useState<Record<string, DayWeather>>({});
-  useFocusEffect(useCallback(() => {
-    loadWeather().then(setWeather, () => undefined);
-  }, []));
+  // Prévision de Rochefort-du-Gard lue à l'ouverture de l'application : météo sur les cartes des jours.
+  const weather = useWeather();
 
   useFocusEffect(useCallback(() => {
     load();

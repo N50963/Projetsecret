@@ -151,8 +151,10 @@ saucisses, charcuterie, cordon bleu ; bœuf : bœuf, veau, corned beef) ; un ing
 - **Prévision** : Open-Meteo (gratuit, sans compte ni clé ; modèles de Météo-France pour la France), 16 jours, lue
   chaque heure par Supabase (tâches planifiées `meteo-demande` à hh:12 et `meteo-enregistrement` à hh:14, table
   `weather_days`) ; le téléphone lit cette table et n'interroge Open-Meteo lui-même qu'en secours (table vide ou
-  prévision de plus de 6 heures), car le quota gratuit d'Open-Meteo est compté par adresse internet. Hors réseau, la
-  dernière prévision gardée sur le téléphone sert encore deux jours ; sans prévision, la météo ne compte pas.
+  prévision de plus de 6 heures), car le quota gratuit d'Open-Meteo est compté par adresse internet. L'application ne
+  relit la prévision qu'à son ouverture : au lancement, et au retour au premier plan après au moins 30 minutes en
+  arrière-plan ; pendant l'utilisation, tous les écrans se servent de cette lecture. Hors réseau, la dernière prévision
+  gardée sur le téléphone sert encore deux jours ; sans prévision, la météo ne compte pas.
 - **Classement des recettes par temps** (Profil › Recettes selon la météo) : pour chaque recette, cinq boutons — temps
   froid, plutôt froid, tout temps, plutôt chaud, temps chaud —, recherche, filtres avec le nombre de recettes et filtre
   « À vérifier ». Le choix est enregistré pour le foyer (table `recipe_weather`) ; sans choix, une suggestion déduite du

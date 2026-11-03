@@ -1,11 +1,17 @@
 /**
  * Prévisions de Rochefort-du-Gard (Open-Meteo : gratuit, sans compte ni clé ; modèles de Météo-France pour la France).
- * Supabase les lit chaque heure et les garde (table weather_days) : le téléphone lit cette table, et n'interroge
- * Open-Meteo lui-même qu'en secours (table vide ou prévision de plus de 6 heures). Gardées sur le téléphone : hors
- * réseau, la dernière prévision sert encore deux jours, sinon la météo ne compte pas dans le choix des menus.
+ * Supabase les lit chaque heure et les garde (table weather_days).
+ *
+ * L'application ne relit la prévision qu'à son ouverture : au lancement, et au retour au premier plan après au moins
+ * 30 minutes en arrière-plan (`refreshWeather`, appelé par la racine de l'application). Pendant l'utilisation, tous les
+ * écrans se servent de cette lecture (`loadWeather`, `useWeather`), sans nouvel appel réseau.
+ * Le téléphone lit la table de Supabase, et n'interroge Open-Meteo lui-même qu'en secours (table vide ou prévision de
+ * plus de 6 heures). Gardée sur le téléphone : hors réseau, la dernière prévision sert encore deux jours, sinon la météo
+ * ne compte pas dans le choix des menus.
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useSyncExternalStore } from "react";
 
 import type { DayWeather } from "../modules/planning";
 import { supabase } from "./supabase";
@@ -15,9 +21,10 @@ export const PLACE = { key: "rochefort-du-gard", name: "Rochefort-du-Gard", lati
 /** Prévision de Supabase trop ancienne au-delà : lecture directe d'Open-Meteo. */
 const SERVER_STALE_MS = 6 * 60 * 60 * 1000;
 const KEY = "meteo-v1";
-const FRESH_MS = 60 * 60 * 1000;
 const STALE_MS = 2 * 24 * 60 * 60 * 1000;
 const TIMEOUT_MS = 8000;
+/** Retour au premier plan après cette absence : compté comme une nouvelle ouverture. */
+export const REOPEN_AFTER_MS = 30 * 60 * 1000;
 
 const URL = "https://api.open-meteo.com/v1/forecast"
   + `?latitude=${PLACE.latitude}&longitude=${PLACE.longitude}`
@@ -29,8 +36,18 @@ interface Saved {
   days: Record<string, DayWeather>;
 }
 
+const EMPTY: Record<string, DayWeather> = {};
 let memory: Saved | null = null;
-let loading: Promise<Record<string, DayWeather>> | null = null;
+/** Prévision en usage (celle de la dernière ouverture), pour les écrans. */
+let current: Record<string, DayWeather> = EMPTY;
+/** Lecture de la dernière ouverture (en cours ou terminée). */
+let opening: Promise<Record<string, DayWeather>> | null = null;
+const listeners = new Set<() => void>();
+
+function publish(days: Record<string, DayWeather>) {
+  current = days;
+  listeners.forEach((l) => l());
+}
 
 /** Prévision gardée par Supabase (null si absente, trop ancienne ou illisible). */
 async function serverDays(): Promise<Record<string, DayWeather> | null> {
@@ -65,9 +82,12 @@ async function fetchDays(): Promise<Record<string, DayWeather>> {
   }
 }
 
-/** Prévisions par jour (vide si elles n'ont jamais pu être lues). */
-export function loadWeather(): Promise<Record<string, DayWeather>> {
-  loading ??= (async () => {
+/**
+ * Ouverture de l'application : prévision relue (Supabase, sinon Open-Meteo), publiée pour tous les écrans. La prévision
+ * gardée sur le téléphone s'affiche tout de suite en attendant.
+ */
+export function refreshWeather(): Promise<Record<string, DayWeather>> {
+  opening = (async () => {
     if (!memory) {
       try {
         const raw = await AsyncStorage.getItem(KEY);
@@ -75,21 +95,37 @@ export function loadWeather(): Promise<Record<string, DayWeather>> {
       } catch {
         // Pas de prévision gardée.
       }
+      if (memory && Date.now() - memory.at < STALE_MS && current === EMPTY) publish(memory.days);
     }
-    if (memory && Date.now() - memory.at < FRESH_MS) return memory.days;
     try {
       const days = (await serverDays().catch(() => null)) ?? (await fetchDays());
       memory = { at: Date.now(), days };
       AsyncStorage.setItem(KEY, JSON.stringify(memory)).catch(() => undefined);
+      publish(days);
       return days;
     } catch {
-      return memory && Date.now() - memory.at < STALE_MS ? memory.days : {};
+      const kept = memory && Date.now() - memory.at < STALE_MS ? memory.days : EMPTY;
+      publish(kept);
+      return kept;
     }
-  })().finally(() => {
-    loading = null;
-  });
-  return loading;
+  })();
+  return opening;
+}
+
+/** Prévision de la dernière ouverture (attend sa lecture si elle est en cours ; aucune nouvelle lecture). */
+export function loadWeather(): Promise<Record<string, DayWeather>> {
+  return opening ?? refreshWeather();
+}
+
+/** Prévision en usage, mise à jour à chaque ouverture de l'application. */
+export function useWeather(): Record<string, DayWeather> {
+  return useSyncExternalStore((l) => {
+    listeners.add(l);
+    return () => {
+      listeners.delete(l);
+    };
+  }, () => current);
 }
 
 /** Prévision déjà connue d'un jour, sans attendre. */
-export const weatherOf = (date: string): DayWeather | undefined => memory?.days[date];
+export const weatherOf = (date: string): DayWeather | undefined => current[date];
