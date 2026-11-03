@@ -81,7 +81,7 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    Les ingrédients manquants des recettes choisies vont sur la liste de courses.
 8. **Fiches recettes** : photo du plat (« Plus d'options » › Photo du plat : appareil photo ou galerie ; la photo prise
    avec le téléphone remplace l'image créée par Mistral, qui ne l'écrase jamais), temps de préparation, de cuisson et
-   total en haut de la fiche (photo libre de Commons, image créée par Mistral ou visuel fourni par le foyer : 75 plats,
+   total en haut de la fiche (photo libre de Commons, image créée par Mistral ou visuel fourni par le foyer : 107 plats,
    fichiers de data/photos-plats copiés en ligne par la fonction foyer-photos ; miniatures de 240 px embarquées pour les
    listes et le ruban, image embarquée affichée pendant le téléchargement d'une image plus récente), ingrédients avec leur vignette (photo libre de droits de Wikimedia Commons, crédits dans
    Profil › Crédits des photos), quantités pour le nombre de personnes, étapes « pas à pas » avec un seul minuteur par
