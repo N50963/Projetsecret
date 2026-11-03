@@ -52,6 +52,9 @@ avec l'application : elles sont toutes dans Supabase et téléchargées une fois
 jour), puis gardées dans le dossier de l'application. L'APK ne grossit plus avec le nombre de recettes ; une nouvelle
 illustration n'oblige plus à publier une nouvelle version.
 
+**Résultat (mesuré)** : 26,8 Mo → **19,7 Mo** pour un téléphone 64 bits (`app-arm64-v8a-release.apk`), 18,6 Mo pour un
+téléphone 32 bits. Au premier lancement, l'application télécharge ≈ 20 Mo d'illustrations (une seule fois).
+
 ## Réécrire l'application en Rust ?
 
 **Possible, mais pas souhaitable.** Rust sait produire une application Android (interface native dessinée par Slint,
