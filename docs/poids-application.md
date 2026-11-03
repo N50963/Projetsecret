@@ -45,6 +45,13 @@ Pistes écartées, faute de pouvoir les vérifier sur un vrai téléphone ou pou
   par leur nom à l'exécution ;
 - compresser le bytecode JavaScript : démarrage plus lent pour ≈ 2 Mo.
 
+## Illustrations hors de l'application (version 0.27.0)
+
+Les photos des plats, leurs miniatures et les vignettes des ingrédients (≈ 8 Mo dans l'APK 0.26.0) ne sont plus livrées
+avec l'application : elles sont toutes dans Supabase et téléchargées une fois par téléphone au lancement (barre de mise à
+jour), puis gardées dans le dossier de l'application. L'APK ne grossit plus avec le nombre de recettes ; une nouvelle
+illustration n'oblige plus à publier une nouvelle version.
+
 ## Réécrire l'application en Rust ?
 
 **Possible, mais pas souhaitable.** Rust sait produire une application Android (interface native dessinée par Slint,

@@ -82,8 +82,8 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
 8. **Fiches recettes** : photo du plat (« Plus d'options » › Photo du plat : appareil photo ou galerie ; la photo prise
    avec le téléphone remplace l'image créée par Mistral, qui ne l'écrase jamais), temps de préparation, de cuisson et
    total en haut de la fiche (photo libre de Commons, image créée par Mistral ou visuel fourni par le foyer : 108 plats,
-   fichiers de data/photos-plats copiés en ligne par la fonction foyer-photos ; miniatures de 240 px embarquées pour les
-   listes et le ruban, image embarquée affichée pendant le téléchargement d'une image plus récente), ingrédients avec leur vignette (photo libre de droits de Wikimedia Commons, crédits dans
+   fichiers de data/photos-plats copiés en ligne par la fonction foyer-photos ; photo gardée sur le téléphone, affichée
+   dès l'ouverture de la fiche, avant même la lecture de la recette), ingrédients avec leur vignette (photo libre de droits de Wikimedia Commons, crédits dans
    Profil › Crédits des photos), quantités pour le nombre de personnes, étapes « pas à pas » avec un seul minuteur par
    étape. Chaque minuteur dit ce qu'il minute (« Cuire le riz », étape 6) : on s'y retrouve quand plusieurs tournent ;
    « C'est prêt » reste grisé tant qu'un minuteur tourne.
@@ -155,12 +155,23 @@ saucisses, charcuterie, cordon bleu ; bœuf : bœuf, veau, corned beef) ; un ing
   en pause 6 heures et l'application crée les images manquantes au fil de l'usage. Sans image, un dessin d'après les
   ingrédients s'affiche ; une photo prise par le foyer remplace l'image.
 - Plats restés sans image : photo libre de Wikimedia Commons (licence libre, crédits dans Profil › Crédits des photos).
-- Photos embarquées : les photos des plats (640 px, ≈ 4,4 Mo) et les vignettes des ingrédients (160 px, ≈ 1,5 Mo) sont
-  dans l'application (`app/assets/plats`, `app/assets/ingredients`, table `app/src/lib/bundled.ts` générée par
-  `app/scripts/photos-embarquees.mjs`) : affichage instantané, sans réseau. Une image en ligne plus récente (même recette,
-  autre date) ou une recette ajoutée depuis est téléchargée à la place ; une photo du foyer reste prioritaire.
+- Illustrations toutes dans Supabase (version 0.27.0) : photos des plats (`recipe-images`, ≈ 1 173 px), photos du foyer
+  (`household-photos`, privé) et vignettes des ingrédients sur fond blanc (`ingredient-images`, 160 px). Aucune n'est
+  livrée avec l'application. Au lancement, l'application compare la liste en ligne (date de chaque image = sa version)
+  aux fichiers du téléphone et télécharge les illustrations nouvelles ou modifiées dans son dossier permanent
+  (`Paths.document/illustrations`, 6 téléchargements en parallèle), avec une barre discrète au-dessus des onglets
+  (« Mise à jour des illustrations · 37 / 363 », puis « Illustrations à jour » et fondu). Les miniatures de 240 px des
+  listes sont créées sur le téléphone. Ensuite tout s'affiche depuis le téléphone, instantanément et sans réseau ; une
+  nouvelle illustration ne demande pas de nouvelle version de l'application. Première ouverture : ≈ 20 Mo (145 photos
+  de plats et 217 vignettes). Liste relue toutes les 2 minutes au plus quand un écran demande des images (nouvel essai
+  10 minutes après une coupure réseau). Code : `app/src/lib/images.ts`, barre `app/src/components/UpdateBar.tsx`.
+- Ajouter ou remplacer des illustrations : visuels de plats dans `data/photos-plats/<id de recette>.jpg` (JPEG ≤ 400 Ko),
+  vignettes d'ingrédients dans `data/ingredients/<slug>.jpg` (JPEG ≤ 100 Ko) ; commit, push, puis appel de la fonction
+  `foyer-photos` (jeton `x-cron-token`) avec `{ ref: "<commit>", recipes: [...], ingredients: [...] }`. Les téléphones
+  les téléchargent au lancement suivant.
 - Ingrédients sur fond blanc : sujet détouré (rembg) et centré sur un carré blanc, ou photo telle quelle (non recadrée)
-  sur fond blanc pour les graines, poudres et photos mal détourées (`app/scripts/ingredients-fond-blanc.py`) ; vignette bordée sur la fiche.
+  sur fond blanc pour les graines, poudres et photos mal détourées (`app/scripts/ingredients-fond-blanc.py`, sortie dans
+  `data/ingredients`) ; vignette bordée sur la fiche.
 - Limite : 40 appels par heure et par foyer (journal `ai_calls`).
 - Déploiement de la fonction `mistral` : son point d'entrée déployé importe `supabase/functions/mistral/index.ts` du
   dépôt GitHub à un commit figé (`https://raw.githubusercontent.com/n50963/projetsecret/<commit>/…`) ; le module est

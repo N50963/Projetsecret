@@ -1,4 +1,4 @@
-import { Image } from "expo-image";
+import { Image, type ImageSource } from "expo-image";
 import { useEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -12,7 +12,7 @@ import { errorText } from "../lib/errors";
 
 const credit = (c: { author: string | null; license: string }) => `Photo : ${c.author ? `${c.author} · ` : ""}${c.license} · Wikimedia Commons`;
 
-function CreditRow({ name, text, source, url }: { name: string; text: string; source: number | { uri: string } | null; url: string }) {
+function CreditRow({ name, text, source, url }: { name: string; text: string; source: ImageSource | null; url: string }) {
   const c = useColors();
   return (
     <Pressable onPress={() => Linking.openURL(url).catch(() => undefined)} accessibilityRole="link" accessibilityLabel={`${name} : ${text}`}

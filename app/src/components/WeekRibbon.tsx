@@ -21,7 +21,7 @@ import { Animated, Pressable, StyleSheet, Text, Vibration, View, type HostInstan
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 import { dayLabel, mealLabel, minutes } from "../lib/format";
-import { sourceOf, type Picture } from "../lib/images";
+import { placeholderOf, sourceOf, type Picture } from "../lib/images";
 import { CARD_SHADOW, useColors } from "../lib/theme";
 import type { WeekSlot } from "../modules/planning";
 import type { MealType } from "../modules/recipes";
@@ -141,7 +141,7 @@ function DishRow({ slot, meal, pic, busy, dimmed, aimed, onOpen, onCancel, drag 
           {/* Photo transparente aux gestes : sur le web, attraper l'image lançait le glisser natif du navigateur. */}
           <View style={styles.dishPhoto} pointerEvents="none">
             {pic
-              ? <Image source={sourceOf(pic, true)} placeholder={pic.fallback} placeholderContentFit="cover" cachePolicy="memory-disk"
+              ? <Image source={sourceOf(pic, true)} placeholder={placeholderOf(pic, true)} placeholderContentFit="cover" cachePolicy="memory-disk"
                 style={StyleSheet.absoluteFill} contentFit="cover" transition={0} />
               : <View style={[StyleSheet.absoluteFill, styles.dishWaiting, { backgroundColor: c.chip }]}><Icon name="image" size={26} color={c.muted} /></View>}
             <LinearGradient colors={PHOTO_FADE} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.dishFade} />

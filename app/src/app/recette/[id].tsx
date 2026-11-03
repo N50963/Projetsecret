@@ -11,7 +11,7 @@ import { Illustration } from "../../components/Illustration";
 import { cleanDraft, RecipeEditor } from "../../components/RecipeEditor";
 import { StarRating } from "../../components/StarRating";
 import { StepText, TimersBar } from "../../components/Steps";
-import { Body, Button, Card, ErrorText, Field, H1, H2, HeaderIcon, Loading, Muted, Pill, Row, Screen } from "../../components/ui";
+import { Body, Button, Card, ErrorText, Field, H1, H2, HeaderIcon, Muted, Pill, Row, Screen } from "../../components/ui";
 import { minutes, proteinLabel, quantity } from "../../lib/format";
 import { ingredientPictureUrls, ingredientSource, illustrationUrls, pictureOf, uploadRecipePhoto, type Picture } from "../../lib/images";
 import { adaptRecipeDraft, draftToInput, type DraftRecipe } from "../../lib/mistral";
@@ -184,7 +184,20 @@ export default function FicheRecette() {
     }
   };
 
-  if (!recipe) return error ? <Screen title="Recette"><ErrorText>{error}</ErrorText></Screen> : <Loading />;
+  if (!recipe) {
+    if (error) return <Screen title="Recette"><ErrorText>{error}</ErrorText></Screen>;
+    // Photo du plat tout de suite (fichier du téléphone) pendant la lecture de la recette.
+    return (
+      <Screen title="Recette" padded={false} scroll={false}>
+        <View>
+          <Illustration picture={image} height={210} rounded={0} />
+          <LinearGradient colors={["rgba(254,243,227,0)", "rgba(254,243,227,0.7)", c.background]} locations={[0, 0.6, 1]}
+            style={styles.photoFade} pointerEvents="none" />
+        </View>
+        <ActivityIndicator color={c.primary} style={{ marginTop: 28 }} />
+      </Screen>
+    );
+  }
   const ingredients = scaleIngredients(recipe.ingredients, recipe.servings, servings);
   // Minuteurs de cette recette qui tournent encore : le plat ne peut pas être prêt avant leur fin.
   const cooking = timers.filter((t) => t.recipeId === recipe.id && !t.done);

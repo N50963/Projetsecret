@@ -11,6 +11,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { useShoppingCount } from "../lib/shoppingCount";
 import { CARD_SHADOW, PRIMARY_GRADIENT, PRIMARY_GRADIENT_STOPS, useColors } from "../lib/theme";
+import { UpdateBar } from "./UpdateBar";
 import { Icon, type IconName } from "./icons";
 
 export type NavTab = "accueil" | "courses" | "recettes" | "profil";
@@ -54,6 +55,9 @@ export function BottomNav({ active }: { active: NavTab }) {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   return (
+    <View>
+    {/* Barre discrète de mise à jour des illustrations, juste au-dessus des onglets. */}
+    <UpdateBar />
     <View accessibilityRole="tablist" style={[styles.nav, { backgroundColor: c.nav, borderTopColor: c.navLine, paddingBottom: insets.bottom }]}>
       {TABS.map((t) => {
         const on = t.tab === active;
@@ -80,6 +84,7 @@ export function BottomNav({ active }: { active: NavTab }) {
           </Pressable>
         );
       })}
+    </View>
     </View>
   );
 }

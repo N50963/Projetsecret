@@ -14,7 +14,7 @@ import { TimersBar } from "../components/Steps";
 import { WeekRibbon } from "../components/WeekRibbon";
 import { BottomNav, Button, ErrorText } from "../components/ui";
 import { dayLabel, mealLabel, minutes } from "../lib/format";
-import { illustrationUrls, pictureOf, preloadPictures, sourceOf, type Picture } from "../lib/images";
+import { illustrationUrls, pictureOf, preloadPictures, placeholderOf, sourceOf, type Picture } from "../lib/images";
 import { setShoppingCount, toBuyLines } from "../lib/shoppingCount";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
@@ -254,7 +254,7 @@ export default function Accueil() {
               <Pressable onPress={() => open(hero)} accessibilityRole="button"
                 accessibilityLabel={`${dayLabel(hero.date, today)}, ${mealLabel(hero.mealType)} : ${hero.name}`}>
                 {heroPicture
-                  ? <Image source={sourceOf(heroPicture)} placeholder={heroPicture.fallback ?? heroPicture.mini} placeholderContentFit="cover" cachePolicy="memory-disk" priority="high"
+                  ? <Image source={sourceOf(heroPicture)} placeholder={placeholderOf(heroPicture)} placeholderContentFit="cover" cachePolicy="memory-disk" priority="high"
                     style={styles.heroImage} contentFit="cover" transition={0} />
                   : <View style={[styles.heroImage, styles.heroWaiting]}><Icon name="image" size={44} color={c.muted} /></View>}
                 <LinearGradient colors={["rgba(20,24,12,0.66)", "rgba(20,24,12,0.34)", "rgba(20,24,12,0.08)"]} locations={[0, 0.58, 1]}

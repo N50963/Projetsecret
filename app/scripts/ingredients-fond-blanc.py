@@ -1,9 +1,10 @@
 """
-Vignettes des ingrédients sur fond blanc, embarquées dans l'application (assets/ingredients/<slug>.webp, 160 px, WebP qualité 80).
+Vignettes des ingrédients sur fond blanc (data/ingredients/<slug>.jpg, 160 px, JPEG qualité 90), copiées ensuite dans
+Supabase par la fonction foyer-photos (liste « ingredients ») : l'application les télécharge au lancement.
 
 Usage (Python avec rembg et Pillow ; modèle isnet-general-use téléchargé au premier lancement) :
-    python scripts/ingredients-fond-blanc.py <dossier des vignettes en ligne> assets/ingredients
-puis : node scripts/photos-embarquees.mjs
+    python scripts/ingredients-fond-blanc.py <dossier des photos d'origine> ../data/ingredients
+puis : commit, push, et appel de foyer-photos avec { ref, ingredients: [...] } (voir docs/application-mobile.md).
 
 - Sujet détouré (rembg), recadré et centré sur un carré blanc.
 - Photo telle quelle, carrée et non recadrée en rond, posée au centre d'un fond blanc, quand il n'y a pas de sujet à
@@ -50,7 +51,7 @@ def main(src: Path, dst: Path) -> None:
     for p in sorted(src.glob("*.jpg")):
         im = Image.open(p).convert("RGB")
         out = None if p.stem in TELLE_QUELLE else detoure(im, session)
-        (out or telle_quelle(im)).save(dst / f"{p.stem}.webp", "WEBP", quality=80, method=6)
+        (out or telle_quelle(im)).save(dst / f"{p.stem}.jpg", "JPEG", quality=90, optimize=True)
         print(p.stem, "détouré" if out else "telle quelle")
 
 

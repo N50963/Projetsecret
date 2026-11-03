@@ -1,178 +1,411 @@
 /**
- * Photos des plats, affichées immédiatement.
- * - Photos embarquées dans l'application (src/lib/bundled.ts) : affichées sans réseau tant que l'image en ligne n'a pas
- *   changé (même date) ; une image plus récente (recréée, nouvelle recette) est téléchargée à la place.
- * - Images créées par Mistral ou photos libres (seau public recipe-images) : lien public stable, mis en cache par le CDN de
- *   Supabase et par le téléphone, téléchargées en avance une seule fois par téléphone.
- * - Photos prises par le foyer (seau privé household-photos) : liens temporaires de 7 jours, cache sous une clé stable.
- * La liste des images est gardée sur le téléphone (AsyncStorage) : à l'ouverture, les photos s'affichent sans attendre
- * Supabase ; la liste est rafraîchie en arrière-plan (nouvelles images de la tâche planifiée).
- * Plan gratuit Supabase (5 Go de sortie réseau par mois) : chaque image n'est téléchargée qu'une fois par téléphone.
+ * Illustrations : photos des plats et vignettes des ingrédients. Toutes sont dans Supabase ; aucune n'est livrée avec
+ * l'application.
+ * - Au lancement (et quand la liste en ligne change), les illustrations nouvelles ou modifiées sont téléchargées une fois
+ *   dans le dossier permanent de l'application, avec une barre de mise à jour discrète en bas de l'écran
+ *   (`useIllustrationUpdate`). Elles s'affichent ensuite depuis le téléphone : instantanément et sans réseau. Une nouvelle
+ *   illustration ne demande donc pas de nouvelle version de l'application.
+ * - Photos des plats : la photo en ligne (≈ 1 173 px, pour la fiche et les grandes cartes) et une miniature de 240 px
+ *   créée sur le téléphone (listes, ruban de la semaine, liste de courses) : décodage rapide des petites images.
+ * - Photos prises par le foyer (seau privé household-photos) : téléchargées par lien temporaire, gardées comme les autres.
+ * - Tant qu'une illustration n'est pas encore sur le téléphone, son lien en ligne est affiché (avec l'ancienne version
+ *   du téléphone en attendant, s'il y en a une).
+ * - Version web (aperçus) : pas de fichiers ; les images sont lues en ligne et gardées par le navigateur.
+ * Plan gratuit Supabase (5 Go de sortie réseau par mois) : chaque illustration n'est téléchargée qu'une fois par téléphone.
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Image } from "expo-image";
+import { Image, type ImageSource } from "expo-image";
+import { Directory, File, Paths } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { useSyncExternalStore } from "react";
+import { Platform } from "react-native";
 
-import { BUNDLED_DISHES, BUNDLED_INGREDIENTS } from "./bundled";
 import { supabase } from "./supabase";
 
 const PUBLIC_BUCKET = "recipe-images";
-const IMAGE_PAGE = 1000;
 const PHOTO_BUCKET = "household-photos";
+const INGREDIENT_BUCKET = "ingredient-images";
+const PAGE = 1000;
 const LINK_SECONDS = 7 * 24 * 3600;
 const PHOTO_MAX_WIDTH = 1024;
-/** La liste des images est relue après ce délai (images créées entre-temps par la tâche planifiée). */
+const MINI_WIDTH = 240;
+/** Téléchargements en parallèle pendant la mise à jour. */
+const PARALLEL = 6;
+/** La liste en ligne est relue après ce délai (images créées entre-temps par la tâche planifiée ou par le foyer). */
 const REFRESH_MS = 2 * 60 * 1000;
-const STORAGE_KEY = "illustrations-v2";
+/** Après une mise à jour interrompue (réseau), nouvel essai au plus tôt après ce délai. */
+const RETRY_MS = 10 * 60 * 1000;
+const ONLINE_KEY = "illustrations-en-ligne-v1";
+const LOCAL_KEY = "illustrations-telephone-v1";
+const WEB = Platform.OS === "web";
 
-/** Image à afficher : image embarquée (asset) ou lien ; la clé de cache n'est utile qu'aux liens temporaires (photos du foyer). */
+/** Image à afficher : fichier du téléphone ou lien en ligne (clé de cache stable pour les liens temporaires). */
 export interface Picture {
   uri: string;
   cacheKey?: string;
-  /** Image embarquée dans l'application (affichage instantané, sans réseau). */
-  asset?: number;
-  /** Date de l'image en ligne (comparée à celle de l'image embarquée). */
+  /** Date de l'image en ligne : sa version. */
   version?: string;
   /** Photo du foyer (seau privé). */
   photo?: boolean;
-  /** Miniature embarquée (240 px) pour les petits affichages : listes, ruban de la semaine, liste de courses. */
-  mini?: number;
-  /**
-   * Image embarquée affichée tout de suite pendant le téléchargement d'une image en ligne plus récente (image recréée ou
-   * photo du foyer) : rien ne reste vide.
-   */
-  fallback?: number;
+  /** Miniature de 240 px (fichier du téléphone) pour les petits affichages. */
+  mini?: string;
+  /** Ancienne version gardée sur le téléphone, affichée pendant le téléchargement de la nouvelle : rien ne reste vide. */
+  fallback?: string;
+  /** Image lue sur le téléphone (sans réseau). */
+  local?: boolean;
 }
 
-/**
- * Source d'image pour expo-image : l'image embarquée si elle existe (sa miniature pour un petit affichage), sinon le lien.
- */
-export const sourceOf = (p: Picture, small = false) => (small && p.mini) || p.asset || { uri: p.uri, cacheKey: p.cacheKey };
+/** Source pour expo-image : la miniature pour un petit affichage quand elle existe, sinon l'image. */
+export const sourceOf = (p: Picture, small = false): ImageSource =>
+  small && p.mini ? { uri: p.mini } : { uri: p.uri, cacheKey: p.cacheKey };
 
-/** Image embarquée si l'image en ligne est la même (ou pas encore connue), sinon l'image en ligne, avec l'image embarquée
- * en attente de son téléchargement. */
-function resolve(recipeId: string, remote: Picture | undefined): Picture | null {
-  const bundled = BUNDLED_DISHES[recipeId];
-  if (bundled && (!remote || (!remote.photo && remote.version === bundled.version))) return { uri: "", asset: bundled.asset, mini: bundled.mini };
-  if (remote && bundled) return { ...remote, fallback: bundled.mini };
-  return remote ?? null;
+/** Image d'attente : l'ancienne version du téléphone, sinon (grand affichage) la miniature, décodée plus vite. */
+export function placeholderOf(p: Picture, small = false): ImageSource | undefined {
+  const uri = p.fallback ?? (small ? undefined : p.mini);
+  return uri ? { uri } : undefined;
+}
+
+// --- Listes : en ligne et sur le téléphone --------------------------------------------------------------------------
+
+/** Illustration en ligne (seau, chemin, version). */
+interface Online {
+  bucket: string;
+  path: string;
+  version: string;
+  /** Lien de téléchargement (public, ou temporaire pour les photos du foyer). */
+  url: string;
+  photo?: boolean;
+}
+
+/** Illustration gardée sur le téléphone. */
+interface Local {
+  version: string;
+  file: string;
+  mini?: string;
 }
 
 interface ImageRow {
   recipe_id: string;
   household_id: string | null;
   storage_path: string;
-  source: "mistral" | "photo" | "commons" | "gemini" | "pollinations";
+  source: string;
   created_at: string;
 }
 
-let pictures = new Map<string, Picture>();
+let onlineDishes = new Map<string, Online>();
+let onlineIngredients = new Map<string, Online>();
+let localDishes: Record<string, Local> = {};
+let localIngredients: Record<string, Local> = {};
 let refreshedAt = 0;
 let restored: Promise<void> | null = null;
-let refreshing: Promise<void> | null = null;
-const prefetched = new Set<string>();
-const inMemory = new Set<string>();
+let listing: Promise<void> | null = null;
 
 function restore(): Promise<void> {
-  restored ??= AsyncStorage.getItem(STORAGE_KEY)
-    .then((raw) => {
-      // Les images embarquées ne sont pas gardées (leur numéro change d'une version de l'application à l'autre).
-    if (raw && !refreshedAt) pictures = new Map((JSON.parse(raw) as Array<[string, Picture]>).filter(([, p]) => !p.asset));
-    })
-    .catch(() => undefined);
+  restored ??= (async () => {
+    try {
+      const [online, local] = await Promise.all([AsyncStorage.getItem(ONLINE_KEY), AsyncStorage.getItem(LOCAL_KEY)]);
+      if (online && !refreshedAt) {
+        const o = JSON.parse(online) as { dishes: Array<[string, Online]>; ingredients: Array<[string, Online]> };
+        onlineDishes = new Map(o.dishes);
+        onlineIngredients = new Map(o.ingredients);
+      }
+      if (local) {
+        const l = JSON.parse(local) as { dishes: Record<string, Local>; ingredients: Record<string, Local> };
+        localDishes = l.dishes ?? {};
+        localIngredients = l.ingredients ?? {};
+      }
+      // Listes des versions 0.26 et antérieures (images livrées avec l'application), devenues inutiles.
+      AsyncStorage.multiRemove(["illustrations-v2", "ingredient-pictures-v1"]).catch(() => undefined);
+    } catch {
+      // Listes absentes ou illisibles : relues depuis Supabase.
+    }
+  })();
   return restored;
 }
 
-/** Toutes les images visibles, par pages : Supabase renvoie au plus 1 000 lignes par requête. */
-async function imageRows(): Promise<ImageRow[]> {
-  const rows: ImageRow[] = [];
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+function saveLocal(now = false) {
+  const write = () => {
+    saveTimer = null;
+    AsyncStorage.setItem(LOCAL_KEY, JSON.stringify({ dishes: localDishes, ingredients: localIngredients })).catch(() => undefined);
+  };
+  if (now) {
+    if (saveTimer) clearTimeout(saveTimer);
+    write();
+  } else saveTimer ??= setTimeout(write, 1500);
+}
+
+/** Toutes les lignes d'une requête, par pages : Supabase renvoie au plus 1 000 lignes par requête. */
+async function allRows<T>(read: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>, what: string): Promise<T[]> {
+  const rows: T[] = [];
   for (;;) {
-    const { data, error } = await supabase.from("recipe_images").select("id, recipe_id, household_id, storage_path, source, created_at")
-      .order("id").range(rows.length, rows.length + IMAGE_PAGE - 1);
-    if (error) throw new Error(`Images illisibles : ${error.message}`);
-    rows.push(...((data ?? []) as ImageRow[]));
-    if (!data || data.length < IMAGE_PAGE) return rows;
+    const { data, error } = await read(rows.length, rows.length + PAGE - 1);
+    if (error) throw new Error(`${what} : ${error.message}`);
+    rows.push(...((data ?? []) as T[]));
+    if (!data || data.length < PAGE) return rows;
   }
 }
 
+const publicUrl = (bucket: string, path: string, version: string) =>
+  `${supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl}?v=${encodeURIComponent(version)}`;
+
+/** Relit la liste des illustrations en ligne (photos des plats, photos du foyer, vignettes des ingrédients). */
 async function refresh() {
-  const data = await imageRows();
+  const [images, ingredients] = await Promise.all([
+    allRows<ImageRow>((a, b) => supabase.from("recipe_images").select("id, recipe_id, household_id, storage_path, source, created_at").order("id").range(a, b), "Images illisibles"),
+    allRows<{ slug: string; storage_path: string; created_at: string }>((a, b) => supabase.from("ingredient_pictures").select("slug, storage_path, created_at").order("slug").range(a, b), "Vignettes illisibles"),
+  ]);
   // L'image propre au foyer (photo, recette du foyer) l'emporte sur l'image commune.
   const best = new Map<string, ImageRow>();
-  for (const row of data) if (row.household_id || !best.has(row.recipe_id)) best.set(row.recipe_id, row);
+  for (const row of images) if (row.household_id || !best.has(row.recipe_id)) best.set(row.recipe_id, row);
   const photos = [...best.values()].filter((r) => r.source === "photo").map((r) => r.storage_path);
   const signed = photos.length ? (await supabase.storage.from(PHOTO_BUCKET).createSignedUrls(photos, LINK_SECONDS)).data ?? [] : [];
   const signedUrl = new Map(signed.map((s) => [s.path, s.signedUrl]));
-  const next = new Map<string, Picture>();
+  const dishes = new Map<string, Online>();
   for (const [recipeId, r] of best) {
     if (r.source === "photo") {
-      const uri = signedUrl.get(r.storage_path);
-      if (uri) next.set(recipeId, { uri, cacheKey: `${r.storage_path}@${r.created_at}`, photo: true, version: r.created_at });
+      const url = signedUrl.get(r.storage_path);
+      if (url) dishes.set(recipeId, { bucket: PHOTO_BUCKET, path: r.storage_path, version: r.created_at, url, photo: true });
     } else {
-      // La date sert de version : une image recréée change de lien, donc de cache.
-      const url = supabase.storage.from(PUBLIC_BUCKET).getPublicUrl(r.storage_path).data.publicUrl;
-      next.set(recipeId, { uri: `${url}?v=${encodeURIComponent(r.created_at)}`, version: r.created_at });
+      dishes.set(recipeId, { bucket: PUBLIC_BUCKET, path: r.storage_path, version: r.created_at, url: publicUrl(PUBLIC_BUCKET, r.storage_path, r.created_at) });
     }
   }
-  pictures = next;
+  const ing = new Map<string, Online>(ingredients.map((r) => [r.slug, {
+    bucket: INGREDIENT_BUCKET, path: r.storage_path, version: r.created_at, url: publicUrl(INGREDIENT_BUCKET, r.storage_path, r.created_at),
+  }]));
+  onlineDishes = dishes;
+  onlineIngredients = ing;
   refreshedAt = Date.now();
-  AsyncStorage.setItem(STORAGE_KEY, JSON.stringify([...pictures])).catch(() => undefined);
-  // Téléchargement en avance des images publiques pas encore en cache sur ce téléphone (hors images embarquées).
-  const toFetch = [...pictures.entries()].map(([id, p]) => resolve(id, p)).filter((p): p is Picture => Boolean(p))
-    .filter((p) => !p.asset && !p.cacheKey && !prefetched.has(p.uri)).map((p) => p.uri);
-  if (toFetch.length) {
-    toFetch.forEach((u) => prefetched.add(u));
-    Image.prefetch(toFetch, "disk").catch(() => undefined);
+  AsyncStorage.setItem(ONLINE_KEY, JSON.stringify({ dishes: [...dishes], ingredients: [...ing] })).catch(() => undefined);
+}
+
+/** Une seule lecture de la liste en ligne à la fois. */
+function refreshList(): Promise<void> {
+  listing ??= refresh().finally(() => {
+    listing = null;
+  });
+  return listing;
+}
+
+/** Image d'un plat : celle du téléphone si elle est à jour, sinon le lien en ligne (l'ancienne en attendant). */
+function resolve(recipeId: string): Picture | null {
+  const online = onlineDishes.get(recipeId);
+  const local = localDishes[recipeId];
+  if (local && (!online || local.version === online.version)) return { uri: local.file, mini: local.mini, version: local.version, local: true };
+  if (!online) return null;
+  return {
+    uri: online.url, version: online.version, photo: online.photo, fallback: local?.mini ?? local?.file,
+    cacheKey: online.photo ? `${online.path}@${online.version}` : undefined,
+  };
+}
+
+// --- Mise à jour : téléchargement des illustrations nouvelles ou modifiées -------------------------------------------
+
+/** État de la mise à jour, affiché par la barre du bas. */
+export interface IllustrationUpdate {
+  running: boolean;
+  total: number;
+  done: number;
+  failed: number;
+}
+
+let update: IllustrationUpdate = { running: false, total: 0, done: 0, failed: 0 };
+const listeners = new Set<() => void>();
+function setUpdate(next: IllustrationUpdate) {
+  update = next;
+  listeners.forEach((l) => l());
+}
+
+/** Avancement de la mise à jour des illustrations (barre du bas). */
+export function useIllustrationUpdate(): IllustrationUpdate {
+  return useSyncExternalStore((l) => {
+    listeners.add(l);
+    return () => {
+      listeners.delete(l);
+    };
+  }, () => update);
+}
+
+interface Job {
+  kind: "dish" | "ingredient";
+  key: string;
+  online: Online;
+}
+
+const folder = (name: string) => {
+  const dir = new Directory(Paths.document, "illustrations", name);
+  if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
+  return dir;
+};
+/** Nom de fichier propre à chaque version : un affichage en mémoire ne garde jamais l'ancienne image. */
+const fileName = (key: string, version: string) => `${key}-${Date.parse(version) || version.replace(/\W/g, "")}.jpg`;
+
+function remove(uri: string | undefined) {
+  if (!uri || WEB) return;
+  try {
+    const f = new File(uri);
+    if (f.exists) f.delete();
+  } catch {
+    // Fichier déjà absent.
   }
 }
 
+const present = (l: Local | undefined) => {
+  if (!l) return false;
+  if (WEB) return true;
+  try {
+    return new File(l.file).exists && (!l.mini || new File(l.mini).exists);
+  } catch {
+    return false;
+  }
+};
+
+/** Miniature de 240 px d'une photo de plat, créée sur le téléphone. */
+async function makeMini(source: string, target: File): Promise<string> {
+  const context = ImageManipulator.manipulate(source);
+  context.resize({ width: MINI_WIDTH, height: null });
+  const rendered = await context.renderAsync();
+  const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.8 });
+  const tmp = new File(saved.uri);
+  await tmp.move(target, { overwrite: true });
+  return target.uri;
+}
+
+async function download(job: Job): Promise<Local> {
+  const { version, url } = job.online;
+  if (WEB) {
+    // Pas de fichiers : le navigateur garde l'image une fois téléchargée.
+    await Image.prefetch(url, "disk");
+    return { version, file: url };
+  }
+  const name = fileName(job.key, version);
+  const target = new File(folder(job.kind === "dish" ? "plats" : "ingredients"), name);
+  const file = await File.downloadFileAsync(url, target, { idempotent: true });
+  if (job.kind === "ingredient") return { version, file: file.uri };
+  const mini = await makeMini(file.uri, new File(folder("plats-mini"), name));
+  return { version, file: file.uri, mini };
+}
+
+let syncing: Promise<void> | null = null;
+let again = false;
+let failedAt = 0;
+
+async function runUpdate() {
+  await restore();
+  await refreshList();
+  const jobs: Job[] = [];
+  for (const [key, online] of onlineDishes) {
+    const l = localDishes[key];
+    if (!l || l.version !== online.version || !present(l)) jobs.push({ kind: "dish", key, online });
+  }
+  for (const [key, online] of onlineIngredients) {
+    const l = localIngredients[key];
+    if (!l || l.version !== online.version || !present(l)) jobs.push({ kind: "ingredient", key, online });
+  }
+  // Illustrations retirées en ligne (recette supprimée) : fichiers effacés.
+  for (const [key, l] of Object.entries(localDishes)) if (!onlineDishes.has(key)) {
+    remove(l.file);
+    remove(l.mini);
+    delete localDishes[key];
+  }
+  if (!jobs.length) {
+    saveLocal(true);
+    return;
+  }
+  let done = 0;
+  let failed = 0;
+  setUpdate({ running: true, total: jobs.length, done, failed });
+  const queue = [...jobs];
+  const worker = async () => {
+    for (let job = queue.shift(); job; job = queue.shift()) {
+      try {
+        const next = await download(job);
+        const store = job.kind === "dish" ? localDishes : localIngredients;
+        const old = store[job.key];
+        store[job.key] = next;
+        if (old && old.file !== next.file) remove(old.file);
+        if (old?.mini && old.mini !== next.mini) remove(old.mini);
+        saveLocal();
+      } catch {
+        failed += 1;
+      }
+      done += 1;
+      setUpdate({ running: true, total: jobs.length, done, failed });
+    }
+  };
+  await Promise.all(Array.from({ length: PARALLEL }, worker));
+  saveLocal(true);
+  if (failed) failedAt = Date.now();
+  setUpdate({ running: false, total: jobs.length, done, failed });
+}
+
 /**
- * Images de recettes (null : pas encore créée). Répond tout de suite avec les images embarquées et la liste gardée sur le
- * téléphone, et la rafraîchit en arrière-plan ; la première fois seulement, attend la liste de Supabase s'il le faut.
+ * Met à jour les illustrations du téléphone : liste en ligne relue, nouvelles illustrations téléchargées. Une seule
+ * mise à jour à la fois ; une demande pendant la mise à jour en relance une à la fin.
+ */
+export function updateIllustrations(): Promise<void> {
+  if (syncing) {
+    again = true;
+    return syncing;
+  }
+  syncing = runUpdate()
+    .catch(() => {
+      failedAt = Date.now();
+      if (update.running) setUpdate({ ...update, running: false });
+    })
+    .finally(() => {
+      syncing = null;
+      if (again) {
+        again = false;
+        updateIllustrations();
+      }
+    });
+  return syncing;
+}
+
+/** Au lancement : listes du téléphone lues, puis mise à jour des illustrations. */
+export function warmIllustrations(): void {
+  restore().then(() => updateIllustrations()).catch(() => undefined);
+}
+
+/** Liste en ligne trop ancienne : nouvelle mise à jour (pas avant un délai après un échec réseau). */
+function updateIfStale() {
+  if (Date.now() - refreshedAt > REFRESH_MS && Date.now() - failedAt > RETRY_MS) updateIllustrations();
+}
+
+// --- Photos des plats ----------------------------------------------------------------------------------------------
+
+/**
+ * Images de recettes (null : pas encore créée). Répond tout de suite avec les listes du téléphone ; la première fois
+ * seulement (aucune liste), attend la liste de Supabase.
  */
 export async function illustrationUrls(recipeIds: string[]): Promise<Record<string, Picture | null>> {
   await restore();
-  if (Date.now() - refreshedAt > REFRESH_MS) {
-    refreshing ??= refresh().finally(() => {
-      refreshing = null;
-    });
-    // Première ouverture : attendre la liste en ligne seulement pour les recettes sans image embarquée.
-    if (pictures.size === 0 && recipeIds.some((id) => !BUNDLED_DISHES[id])) await refreshing.catch(() => undefined);
-    else refreshing.catch(() => undefined);
-  }
-  return Object.fromEntries(recipeIds.map((id) => [id, resolve(id, pictures.get(id))]));
+  // Première ouverture (aucune liste) : la liste seulement, pas les téléchargements.
+  if (!onlineDishes.size && !Object.keys(localDishes).length) await refreshList().catch(() => undefined);
+  updateIfStale();
+  return Object.fromEntries(recipeIds.map((id) => [id, resolve(id)]));
 }
 
-/**
- * Image d'une recette connue de ce téléphone, sans attendre Supabase (null si elle n'est pas encore connue). Sert à
- * afficher les photos au premier rendu ; `illustrationUrls` met la liste à jour en arrière-plan.
- */
+/** Image d'une recette connue du téléphone, sans attendre (null si elle n'est pas encore connue). */
 export function pictureOf(recipeId: string | null | undefined): Picture | null {
-  return recipeId ? resolve(recipeId, pictures.get(recipeId)) : null;
+  return recipeId ? resolve(recipeId) : null;
 }
 
-/** Charge la liste gardée sur le téléphone, puis la rafraîchit et télécharge en avance toutes les photos (au démarrage). */
-export function warmIllustrations(): void {
-  illustrationUrls([]).catch(() => undefined);
-  ingredientPictureUrls().catch(() => undefined);
-}
-
-/**
- * Met en mémoire les photos qui vont s'afficher (cartes des propositions, menus de la semaine) : elles apparaissent
- * alors instantanément, sans relecture du disque ni téléchargement.
- */
+/** Met en mémoire les photos qui vont s'afficher (cartes des propositions, menus de la semaine). */
+const inMemory = new Set<string>();
 export function preloadPictures(recipeIds: Array<string | null | undefined>): void {
-  const uris = [...new Set(recipeIds.map((id) => pictureOf(id)).filter((p) => p && !p.asset).map((p) => p!.uri).filter(Boolean))]
-    .filter((u) => !inMemory.has(u));
+  const uris = [...new Set(recipeIds.map((id) => pictureOf(id)?.uri).filter((u): u is string => Boolean(u)))].filter((u) => !inMemory.has(u));
   if (!uris.length) return;
   uris.forEach((u) => inMemory.add(u));
   Image.prefetch(uris, "memory-disk").catch(() => uris.forEach((u) => inMemory.delete(u)));
 }
 
-/** Une image vient d'être créée ou remplacée : la liste sera relue à la prochaine demande. */
+/** Une image vient d'être créée ou remplacée : la liste sera relue et l'image téléchargée à la prochaine demande. */
 export function forgetIllustration(_recipeId: string) {
   refreshedAt = 0;
+  failedAt = 0;
 }
 
 /** Réduit une photo du téléphone (souvent 3 à 5 Mo) à 1 024 px de large en JPEG (≈ 150 à 250 Ko). */
@@ -190,19 +423,18 @@ export async function uploadRecipePhoto(householdId: string, recipeId: string, u
   const bytes = await (await fetch(await shrinkPhoto(uri, width))).arrayBuffer();
   const up = await supabase.storage.from(PHOTO_BUCKET).upload(path, bytes, { contentType: "image/jpeg", upsert: true });
   if (up.error) throw new Error(`Photo non enregistrée : ${up.error.message}`);
-  // La date sert de version : le cache des téléphones prend la nouvelle photo.
+  // La date sert de version : le téléphone télécharge la nouvelle photo.
   const { error } = await supabase.from("recipe_images").upsert({
     recipe_id: recipeId, household_id: householdId, storage_path: path, source: "photo", created_at: new Date().toISOString(),
   }, { onConflict: "recipe_id,household_id" });
   if (error) throw new Error(`Photo non associée à la recette : ${error.message}`);
   forgetIllustration(recipeId);
-  await refresh();
+  await updateIllustrations();
+  // Mise à jour déjà en cours au moment de l'envoi : la suivante (relancée à sa fin) télécharge la photo.
+  if (syncing) await syncing;
 }
 
 // --- Vignettes des ingrédients ------------------------------------------------------------------------------------------
-
-const INGREDIENT_BUCKET = "ingredient-images";
-const INGREDIENT_KEY = "ingredient-pictures-v1";
 
 /** Crédit d'une photo d'ingrédient (Wikimedia Commons, licence libre). */
 export interface IngredientCredit {
@@ -214,50 +446,21 @@ export interface IngredientCredit {
   sourceUrl: string;
 }
 
-let ingredientPictures = new Map<string, string>();
-let ingredientsLoaded: Promise<void> | null = null;
-
-async function loadIngredientPictures() {
-  try {
-    const raw = await AsyncStorage.getItem(INGREDIENT_KEY);
-    if (raw) ingredientPictures = new Map(JSON.parse(raw) as Array<[string, string]>);
-  } catch {
-    // Liste absente : relue depuis Supabase ci-dessous.
-  }
-  const refresh = (async () => {
-    const { data, error } = await supabase.from("ingredient_pictures").select("slug, storage_path, created_at");
-    if (error || !data) return;
-    const next = new Map<string, string>();
-    for (const row of data as Array<{ slug: string; storage_path: string; created_at: string }>) {
-      const url = supabase.storage.from(INGREDIENT_BUCKET).getPublicUrl(row.storage_path).data.publicUrl;
-      next.set(row.slug, `${url}?v=${encodeURIComponent(row.created_at)}`);
-    }
-    ingredientPictures = next;
-    AsyncStorage.setItem(INGREDIENT_KEY, JSON.stringify([...next])).catch(() => undefined);
-    // Vignettes en ligne seulement pour les ingrédients sans image embarquée.
-    const remote = [...next.entries()].filter(([slug]) => !BUNDLED_INGREDIENTS[slug]).map(([, uri]) => uri);
-    if (remote.length) Image.prefetch(remote, "disk").catch(() => undefined);
-  })();
-  if (!ingredientPictures.size) await refresh;
-}
-
-/** Vignettes des ingrédients par identifiant (slug) ; la liste est gardée sur le téléphone. */
+/** Vignettes des ingrédients par identifiant (slug) : fichier du téléphone, sinon lien en ligne. */
 export async function ingredientPictureUrls(): Promise<Map<string, string>> {
-  ingredientsLoaded ??= loadIngredientPictures();
-  await ingredientsLoaded;
-  return ingredientPictures;
+  await restore();
+  if (!onlineIngredients.size && !Object.keys(localIngredients).length) await refreshList().catch(() => undefined);
+  const slugs = new Set([...onlineIngredients.keys(), ...Object.keys(localIngredients)]);
+  return new Map([...slugs].map((s) => [s, ingredientSource(s)!.uri]));
 }
 
-/**
- * Vignette d'un ingrédient sur fond blanc, sans attendre : image embarquée dans l'application, sinon (ingrédient ajouté
- * depuis) la vignette en ligne déjà connue du téléphone.
- */
-export function ingredientSource(slug: string | null | undefined): number | { uri: string } | null {
+/** Vignette d'un ingrédient sur fond blanc, sans attendre : fichier du téléphone, sinon (pas encore téléchargée) le lien. */
+export function ingredientSource(slug: string | null | undefined): { uri: string } | null {
   if (!slug) return null;
-  const bundled = BUNDLED_INGREDIENTS[slug];
-  if (bundled) return bundled;
-  const uri = ingredientPictures.get(slug);
-  return uri ? { uri } : null;
+  const local = localIngredients[slug];
+  if (local) return { uri: local.file };
+  const online = onlineIngredients.get(slug);
+  return online ? { uri: online.url } : null;
 }
 
 /** Auteurs et licences des photos d'ingrédients (écran des crédits). */
@@ -269,7 +472,6 @@ export async function ingredientCredits(): Promise<IngredientCredit[]> {
   }));
 }
 
-/** Ligne de crédit : « Photo : auteur · licence ». */
 /** Photos libres des plats (Wikimedia Commons), avec leurs crédits. */
 export interface DishCredit {
   recipeId: string;
@@ -285,4 +487,5 @@ export async function dishCredits(): Promise<DishCredit[]> {
   return (data ?? []).map((d: any) => ({ recipeId: d.recipe_id, name: d.name, author: d.author, license: d.license ?? "", sourceUrl: d.source_url ?? "" }));
 }
 
+/** Ligne de crédit : « Photo : auteur · licence ». */
 export const ingredientCredit = (c: IngredientCredit) => `Photo : ${c.author ? `${c.author} · ` : ""}${c.license} · Wikimedia Commons`;

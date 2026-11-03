@@ -6,7 +6,7 @@
 import { Image } from "expo-image";
 import { StyleSheet, Text, View } from "react-native";
 
-import { sourceOf, type Picture } from "../lib/images";
+import { placeholderOf, sourceOf, type Picture } from "../lib/images";
 import { useColors } from "../lib/theme";
 import { Icon } from "./icons";
 
@@ -18,7 +18,7 @@ export function Illustration({ picture, height = 180, rounded = 16, width = "100
     // Image embarquée (miniature pour un petit affichage : décodage rapide des listes) ou téléchargée en avance, sans
     // fondu ; une image en ligne plus récente s'affiche à la place de l'image embarquée dès qu'elle est arrivée.
     // Grand affichage : la miniature embarquée s'affiche le temps du décodage de la grande image.
-    return <Image source={sourceOf(picture, height < 120)} placeholder={picture.fallback ?? (height < 120 ? undefined : picture.mini)} placeholderContentFit="cover"
+    return <Image source={sourceOf(picture, height < 120)} placeholder={placeholderOf(picture, height < 120)} placeholderContentFit="cover"
       cachePolicy="memory-disk" style={{ height, borderRadius: rounded, width, backgroundColor: c.chip }} contentFit="cover"
       transition={0} accessibilityLabel="Photo du plat" />;
   }

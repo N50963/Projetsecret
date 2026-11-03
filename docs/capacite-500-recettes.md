@@ -45,7 +45,8 @@ le faisaient pas :
 
 ## Poids de l'application
 
-Les photos des plats sont embarquées dans l'APK pour s'afficher sans attendre le réseau : ≈ 49 Ko par plat (grande
-photo et miniature en WebP). À 500 plats, cela ajouterait ≈ 17 Mo (≈ 45 Mo pour l'APK 64 bits au lieu de 28 Mo). Si ce
-poids gêne, il suffira de n'embarquer que les miniatures (≈ 10 Ko par plat) : les grandes photos seraient alors
-téléchargées une fois par téléphone à la première ouverture de la fiche.
+Depuis la version 0.27.0, aucune illustration n'est livrée avec l'application : le poids de l'APK ne dépend plus du
+nombre de recettes. Les illustrations sont téléchargées une fois par téléphone (barre de mise à jour au lancement) :
+≈ 125 Ko par photo de plat et ≈ 6 Ko par vignette d'ingrédient. À 500 recettes, la première ouverture télécharge
+≈ 65 Mo (une fois par téléphone, de préférence en Wi-Fi), puis seulement les illustrations nouvelles ou modifiées ;
+place occupée sur le téléphone : ≈ 70 Mo avec les miniatures.

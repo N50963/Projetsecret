@@ -7,7 +7,7 @@ import { SwipeCard, type SwipeDirection } from "../components/SwipeCard";
 import { Icon } from "../components/icons";
 import { Button, ErrorText, Loading, Pill, Screen, Tag } from "../components/ui";
 import { dayLabel, mealLabel, minutes, proteinLabel } from "../lib/format";
-import { forgetIllustration, illustrationUrls, pictureOf, preloadPictures, sourceOf, type Picture } from "../lib/images";
+import { forgetIllustration, illustrationUrls, pictureOf, preloadPictures, placeholderOf, sourceOf, type Picture } from "../lib/images";
 import { draftToInput, generateRecipes, illustrateRecipe, type Draft } from "../lib/mistral";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
@@ -488,7 +488,7 @@ export default function Propositions() {
       {/* Photo transparente aux gestes : le glisser de la carte n'est pas pris par celui de l'image (web). */}
       <View style={{ flex: 1, minHeight: 160, backgroundColor: c.chip }} pointerEvents="none">
         {picture
-          ? <Image source={sourceOf(picture)} placeholder={picture.fallback ?? picture.mini} placeholderContentFit="cover" cachePolicy="memory-disk"
+          ? <Image source={sourceOf(picture)} placeholder={placeholderOf(picture)} placeholderContentFit="cover" cachePolicy="memory-disk"
             style={StyleSheet.absoluteFill} contentFit="cover" transition={0} accessibilityLabel={name} />
           : (
             <View style={styles.placeholder} accessibilityLabel="Photo du plat en préparation">
