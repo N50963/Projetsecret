@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { planMeals } from "../src/modules/planning/engine";
 import type { MealSlot, PlannerContext, PlannerRecipe } from "../src/modules/planning/types";
-import { dishKind, isLongCooking, weatherAdjustment, weatherBrief, weatherText, type DayWeather } from "../src/modules/planning/weather";
+import { autoLevel, dishKind, isLongCooking, weatherAdjustment, weatherBrief, weatherText, type DayWeather } from "../src/modules/planning/weather";
 import { DEFAULT_PREFERENCES } from "../src/modules/recipes/preferences";
 
 const DAY = "2026-07-15";
@@ -39,6 +39,33 @@ describe("nature des plats pour la météo", () => {
   });
 });
 
+describe("classement par temps (de -2 temps froid à 2 temps chaud)", () => {
+  it("suggère un classement d'après le nom du plat", () => {
+    expect(autoLevel({ name: "Salade niçoise" })).toBe(2);
+    expect(autoLevel({ name: "Saumon en papillote, courgettes et citron" })).toBe(1);
+    expect(autoLevel({ name: "Pizza reine" })).toBe(0);
+    expect(autoLevel({ name: "Gratin de chou-fleur" })).toBe(-1);
+    expect(autoLevel({ name: "Raclette" })).toBe(-2);
+    expect(autoLevel({ name: "Velouté de potimarron" })).toBe(-2);
+  });
+
+  it("le choix du foyer l'emporte sur la suggestion", () => {
+    // Pizza (tout temps d'après le nom) classée « temps chaud » par le foyer : en avant par forte chaleur.
+    expect(weatherAdjustment({ name: "Pizza reine", totalMin: 30 }, day(31), 2)).toEqual({ delta: 4, note: "Plat frais : 31 °C prévus" });
+    // Gratin classé « tout temps » : plus de malus quand il fait chaud.
+    expect(weatherAdjustment({ name: "Gratin de courgettes au chèvre", totalMin: 45 }, day(31), 0)).toEqual({ delta: 0, note: undefined });
+    // Salade classée « plutôt froid » : en avant par temps frais.
+    expect(weatherAdjustment({ name: "Salade de chèvre chaud", totalMin: 25 }, day(9), -1)).toEqual({ delta: 2, note: "Plat réconfortant : 9 °C au plus" });
+  });
+
+  it("plutôt chaud ou plutôt froid : bonus plus faible que temps chaud ou temps froid", () => {
+    const hot = day(30);
+    expect(weatherAdjustment({ name: "x", totalMin: 30 }, hot, 1).delta).toBeLessThan(weatherAdjustment({ name: "x", totalMin: 30 }, hot, 2).delta);
+    const cold = day(5);
+    expect(weatherAdjustment({ name: "x", totalMin: 30 }, cold, -1).delta).toBeLessThan(weatherAdjustment({ name: "x", totalMin: 30 }, cold, -2).delta);
+  });
+});
+
 describe("bonus et malus selon la météo du jour", () => {
   it("chaleur : plat frais en avant, plat réconfortant et cuisson longue en retrait", () => {
     expect(weatherAdjustment({ name: "Salade grecque", totalMin: 15 }, day(32))).toEqual({ delta: 4, note: "Plat frais : 32 °C prévus" });
@@ -51,7 +78,7 @@ describe("bonus et malus selon la météo du jour", () => {
     expect(weatherAdjustment({ name: "Velouté de potimarron", totalMin: 45 }, day(8))).toEqual({ delta: 3, note: "Plat chaud et réconfortant : 8 °C au plus" });
     expect(weatherAdjustment({ name: "Salade grecque", totalMin: 15 }, day(8)).delta).toBe(-3);
     const rainy = weatherAdjustment({ name: "Hachis parmentier", totalMin: 60 }, day(18, { rainMm: 12, code: 63 }));
-    expect(rainy).toEqual({ delta: 1.5, note: "Plat réconfortant : pluie prévue" });
+    expect(rainy).toEqual({ delta: 1, note: "Plat réconfortant : pluie prévue" });
     expect(weatherAdjustment({ name: "Soupe de lentilles et carottes", totalMin: 45 }, day(13, { rainMm: 5 })).note).toBe("Plat réconfortant : 13 °C au plus, pluie");
   });
 
@@ -78,6 +105,11 @@ describe("propositions selon la météo", () => {
     expect(plan.proposals[0]!.name).toBe("Salade César au poulet");
     expect(plan.proposals[0]!.weatherNote).toBe("Plat frais : 33 °C prévus");
     expect(plan.proposals.map((p) => p.name).at(-1)).toBe("Tartiflette");
+  });
+
+  it("un plat classé « temps chaud » par le foyer passe devant par forte chaleur", () => {
+    const mine = [recipe("p", "Pizza reine", { weatherLevel: 2 }), recipe("c", "Poulet basquaise"), recipe("t", "Tartiflette")];
+    expect(order(ctx(mine, { [DAY]: day(33) }))[0]).toBe("Pizza reine");
   });
 
   it("par grand froid, la tartiflette passe devant la salade", () => {

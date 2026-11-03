@@ -2,7 +2,7 @@
 
 import type { MainProtein, MealType, Season, Spiciness } from "../recipes/types";
 import type { HouseholdPreferences } from "../recipes/preferences";
-import type { DayWeather } from "./weather";
+import type { DayWeather, WeatherLevel } from "./weather";
 
 /** Date du calendrier au format AAAA-MM-JJ. */
 export type IsoDate = string;
@@ -38,6 +38,8 @@ export interface PlannerRecipe {
   likes: number;
   dislikes: number;
   ingredients: PlannerIngredient[];
+  /** Temps choisi par le foyer pour cette recette (-2 froid … 2 chaud) ; absent : déduit du nom du plat. */
+  weatherLevel?: WeatherLevel | null;
 }
 
 /** Une ligne d'achat ramenée à un ingrédient du référentiel. */

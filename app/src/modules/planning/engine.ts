@@ -215,7 +215,7 @@ function score(ctx: PlannerContext, e: Evaluation, slot: MealSlot, week: WeekSta
     if (reasons.length < 2) reasons.push("Plat de saison");
   }
   // Météo du jour du repas à Rochefort-du-Gard : plat frais quand il fait chaud, réconfortant quand il fait froid ou pleut.
-  const weather = weatherAdjustment(r, ctx.weather?.[slot.date]);
+  const weather = weatherAdjustment(r, ctx.weather?.[slot.date], r.weatherLevel);
   s += weather.delta;
   if (weather.note) reasons.unshift(weather.note);
 

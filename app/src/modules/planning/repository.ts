@@ -58,12 +58,16 @@ async function ingredientsOfVersions(supabase: SupabaseClient, versionIds: strin
 }
 
 export async function loadRecipesForPlanning(supabase: SupabaseClient, householdId: string): Promise<PlannerRecipe[]> {
-  const [catalog, ratings] = await Promise.all([
+  const [catalog, ratings, weatherLevels] = await Promise.all([
     fetchAll((a, b) => supabase.from("recipe_catalog")
       .select("id, version_id, name, total_min, servings, main_protein, meal_types, seasons, cuisine, tags, allergens, spiciness")
       .order("id").range(a, b), "Recettes illisibles"),
     fetchAll((a, b) => supabase.from("recipe_ratings").select("recipe_id, rating").eq("household_id", householdId).range(a, b), "Avis illisibles"),
+    // Classement par temps choisi par le foyer (sans lui, la météo s'appuie sur le nom du plat).
+    fetchAll((a, b) => supabase.from("recipe_weather").select("recipe_id, level").eq("household_id", householdId).order("recipe_id").range(a, b), "Classement météo illisible")
+      .catch(() => []),
   ]);
+  const levelOf = new Map(weatherLevels.map((w) => [w.recipe_id, w.level]));
   const known = await ingredientsOfVersions(supabase, catalog.map((r) => r.version_id));
   const ingredients = catalog.flatMap((r) => known.get(r.version_id) ?? []);
 
@@ -85,6 +89,7 @@ export async function loadRecipesForPlanning(supabase: SupabaseClient, household
     id: r.id, versionId: r.version_id, name: r.name, totalMin: r.total_min, servings: r.servings, mainProtein: r.main_protein,
     mealTypes: r.meal_types, seasons: r.seasons, cuisine: r.cuisine, tags: r.tags, allergens: r.allergens, spiciness: r.spiciness,
     likes: votes(r.id, "like"), dislikes: votes(r.id, "dislike"), ingredients: byVersion.get(r.version_id) ?? [],
+    weatherLevel: levelOf.get(r.id) ?? null,
   }));
 }
 

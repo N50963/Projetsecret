@@ -134,6 +134,17 @@ export default function Parametres() {
         ))}
       </View>
 
+      <Pressable onPress={() => router.push("/meteo-recettes")} accessibilityRole="button"
+        style={({ pressed }) => [styles.card, styles.list, { backgroundColor: c.card, borderColor: c.cardLine, marginTop: 14, opacity: pressed ? 0.7 : 1 }, CARD_SHADOW]}>
+        <View style={styles.row}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.rowName, { color: c.text }]}>Recettes selon la météo</Text>
+            <Text style={[styles.rowValue, { color: c.muted }]}>Classer chaque plat : temps froid, tout temps ou temps chaud</Text>
+          </View>
+          <Icon name="chevronRight" width={9} height={15} color={c.text} />
+        </View>
+      </Pressable>
+
       <Pressable onPress={() => router.push("/credits")} accessibilityRole="button"
         style={({ pressed }) => [styles.card, styles.list, { backgroundColor: c.card, borderColor: c.cardLine, marginTop: 14, opacity: pressed ? 0.7 : 1 }, CARD_SHADOW]}>
         <View style={styles.row}>

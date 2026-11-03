@@ -146,6 +146,27 @@ légumes 7…) ; un repas choisi réserve ses ingrédients. Les recettes aimées
 Aliments exclus par le foyer : la viande principale du plat, mais aussi ses ingrédients (porc : jambon, lardons, chorizo,
 saucisses, charcuterie, cordon bleu ; bœuf : bœuf, veau, corned beef) ; un ingrédient facultatif peut être laissé de côté.
 
+## Saison et météo (Rochefort-du-Gard)
+
+- **Prévision** : Open-Meteo (gratuit, sans compte ni clé ; modèles de Météo-France pour la France), 16 jours, lue
+  chaque heure par Supabase (tâches planifiées `meteo-demande` à hh:12 et `meteo-enregistrement` à hh:14, table
+  `weather_days`) ; le téléphone lit cette table et n'interroge Open-Meteo lui-même qu'en secours (table vide ou
+  prévision de plus de 6 heures), car le quota gratuit d'Open-Meteo est compté par adresse internet. Hors réseau, la
+  dernière prévision gardée sur le téléphone sert encore deux jours ; sans prévision, la météo ne compte pas.
+- **Classement des recettes par temps** (Profil › Recettes selon la météo) : pour chaque recette, cinq boutons — temps
+  froid, plutôt froid, tout temps, plutôt chaud, temps chaud —, recherche, filtres avec le nombre de recettes et filtre
+  « À vérifier ». Le choix est enregistré pour le foyer (table `recipe_weather`) ; sans choix, une suggestion déduite du
+  nom du plat s'affiche en pointillés (salades, taboulé, wraps : temps chaud ; papillotes, grillades : plutôt chaud ;
+  gratins, purées, lasagnes : plutôt froid ; soupes, veloutés, raclette, tartiflette, grands mijotés : temps froid).
+- **Effet sur les propositions** (température maximale du jour du repas) : 28 °C et plus : +4 pour un plat « temps
+  chaud », +2 « plutôt chaud », −3 « plutôt froid », −5 « temps froid », −2 de plus pour une cuisson longue (plat non
+  classé chaud) ; 24 à 27 °C : +1,5 / +1 / −1 / −1,5 ; 11 à 15 °C : +1,5 « temps froid », +1 « plutôt froid », −0,5 /
+  −1 pour les plats chauds ; 10 °C et moins : +3 / +2 / −1,5 / −3 ; pluie (3 mm et plus) : +1,5 / +1 pour les plats froids,
+  −1 « temps chaud ». La carte proposée l'indique (« Plat frais : 31 °C prévus », « Plat chaud et réconfortant : 8 °C au
+  plus, pluie ») ; la météo du jour s'affiche sur les cartes de l'accueil et en tête des propositions ; les idées de
+  Mistral reçoivent la consigne (« plat frais ou léger, sans four »).
+- **Saison** : un plat hors saison recule (−6), un plat propre à la saison (une ou deux saisons) avance un peu (+1,5).
+
 ## Mistral (offre gratuite)
 
 - Texte : Mistral Small et Medium sont bloqués par l'offre gratuite de la clé ; la fonction utilise Ministral 14B

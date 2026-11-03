@@ -30,6 +30,10 @@ const palette = {
   greenInk: "#274420",
   /** « À acheter », nombre d'articles. */
   orangeInk: "#8A4B12",
+  /** Classement par temps : froid (bleu-gris doux), chaud (abricot doux). */
+  coldSoft: "#DCE7EC",
+  coldInk: "#2D5468",
+  warmSoft: "#F7DDC2",
   /** Contour des champs de saisie. */
   field: "#8E8672",
   danger: "#B23A2A",

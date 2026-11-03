@@ -49,6 +49,30 @@ export function dishKind(r: { name: string }): DishKind {
 /** Plat léger d'été (grillades, papillotes) : bienvenu quand il fait chaud, sans être un plat froid. */
 export const isLight = (r: { name: string }) => LIGHT.test(r.name);
 
+/** Plats d'hiver par excellence : soupes, fromage fondu, grands mijotés. */
+const WINTER = new RegExp([
+  "soupe", "velout[ée]", "minestrone", "potage", "raclette", "tartiflette", "fondue", "pot-au-feu", "bourguignon",
+  "b(œ|oe)uf carottes", "blanquette", "marengo", "daube", "navarin", "cassoulet", "choucroute", "pot[ée]e", "aligot",
+].join("|"), "i");
+
+/**
+ * Temps pour lequel proposer un plat : -2 temps froid, -1 plutôt froid, 0 tout temps, 1 plutôt chaud, 2 temps chaud.
+ * Le foyer le choisit pour chaque recette (Profil › Recettes selon la météo) ; sans choix, il est déduit du nom du plat.
+ */
+export type WeatherLevel = -2 | -1 | 0 | 1 | 2;
+export const WEATHER_LEVELS: Array<{ value: WeatherLevel; label: string }> = [
+  { value: -2, label: "Temps froid" }, { value: -1, label: "Plutôt froid" }, { value: 0, label: "Tout temps" },
+  { value: 1, label: "Plutôt chaud" }, { value: 2, label: "Temps chaud" },
+];
+
+/** Classement proposé d'après le nom : salades et crudités par temps chaud, soupes et mijotés par temps froid. */
+export function autoLevel(r: { name: string }): WeatherLevel {
+  const kind = dishKind(r);
+  if (kind === "frais") return 2;
+  if (kind === "reconfortant") return WINTER.test(r.name) ? -2 : -1;
+  return isLight(r) ? 1 : 0;
+}
+
 /**
  * Cuisson longue (four ou mijotage d'une heure et quart ou plus) : à éviter les jours de forte chaleur. Le temps d'un plat
  * léger (brochettes) est surtout celui de la marinade : il ne compte pas.
@@ -57,51 +81,36 @@ export const isLongCooking = (r: { name: string; totalMin: number }) => r.totalM
 
 const degrees = (t: number) => `${Math.round(t)} °C`;
 
+/** Bonus ou malus selon le classement du plat (de -2 à 2), pour chaque type de temps. */
+const BONUS: Record<"hot" | "warm" | "cool" | "cold" | "rain", Record<WeatherLevel, number>> = {
+  hot: { [-2]: -5, [-1]: -3, 0: 0, 1: 2, 2: 4 },
+  warm: { [-2]: -1.5, [-1]: -1, 0: 0, 1: 1, 2: 1.5 },
+  cool: { [-2]: 1.5, [-1]: 1, 0: 0, 1: -0.5, 2: -1 },
+  cold: { [-2]: 3, [-1]: 2, 0: 0, 1: -1.5, 2: -3 },
+  rain: { [-2]: 1.5, [-1]: 1, 0: 0, 1: 0, 2: -1 },
+};
+
 /**
- * Bonus ou malus d'un plat selon la météo du jour du repas, avec la raison à afficher quand la météo a pesé en sa faveur.
+ * Bonus ou malus d'un plat selon la météo du jour du repas et son classement (celui du foyer, sinon celui déduit du nom),
+ * avec la raison à afficher quand la météo a pesé en sa faveur.
  */
-export function weatherAdjustment(r: { name: string; totalMin: number }, day: DayWeather | undefined): { delta: number; note?: string } {
+export function weatherAdjustment(r: { name: string; totalMin: number }, day: DayWeather | undefined, chosen?: WeatherLevel | null): { delta: number; note?: string } {
   if (!day) return { delta: 0 };
-  const kind = dishKind(r);
-  const rainy = day.rainMm >= RAINY_MM;
+  const level = chosen ?? autoLevel(r);
+  const t = day.tMax;
   let delta = 0;
   let note: string | undefined;
-  if (day.tMax >= HOT) {
-    if (kind === "frais") {
-      delta += 4;
-      note = `Plat frais : ${degrees(day.tMax)} prévus`;
-    } else if (isLight(r)) {
-      delta += 2;
-      note = `Plat léger : ${degrees(day.tMax)} prévus`;
-    }
-    if (kind === "reconfortant") delta -= 5;
-    if (isLongCooking(r)) delta -= 2;
-  } else if (day.tMax >= WARM) {
-    if (kind === "frais") {
-      delta += 1.5;
-      note = `Plat frais : ${degrees(day.tMax)} prévus`;
-    }
-    if (kind === "reconfortant") delta -= 1.5;
-  } else if (day.tMax <= COLD) {
-    if (kind === "reconfortant") {
-      delta += 3;
-      note = `Plat chaud et réconfortant : ${degrees(day.tMax)} au plus`;
-    }
-    if (kind === "frais") delta -= 3;
-  } else if (day.tMax <= COOL) {
-    if (kind === "reconfortant") {
-      delta += 1;
-      note = `Plat réconfortant : ${degrees(day.tMax)} au plus`;
-    }
-    if (kind === "frais") delta -= 1;
+  if (t >= WARM) {
+    delta += BONUS[t >= HOT ? "hot" : "warm"][level];
+    if (level >= 1) note = `${level === 2 ? "Plat frais" : "Plat léger"} : ${degrees(t)} prévus`;
+    if (t >= HOT && level <= 0 && isLongCooking(r)) delta -= 2;
+  } else if (t <= COOL) {
+    delta += BONUS[t <= COLD ? "cold" : "cool"][level];
+    if (level <= -1) note = `${level === -2 && t <= COLD ? "Plat chaud et réconfortant" : "Plat réconfortant"} : ${degrees(t)} au plus`;
   }
-  if (rainy && day.tMax < HOT) {
-    if (kind === "reconfortant") {
-      delta += 1.5;
-      note ??= "Plat réconfortant : pluie prévue";
-      if (!note.includes("pluie")) note += ", pluie";
-    }
-    if (kind === "frais") delta -= 1;
+  if (day.rainMm >= RAINY_MM && t < HOT) {
+    delta += BONUS.rain[level];
+    if (level <= -1) note = note ? `${note}, pluie` : "Plat réconfortant : pluie prévue";
   }
   return { delta, note };
 }

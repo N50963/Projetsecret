@@ -58,6 +58,7 @@ function Gate() {
         <Stack.Screen name="parametres" options={{ title: "Paramètres", animation: "none" }} />
         <Stack.Screen name="preferences" options={{ title: "Préférences" }} />
         <Stack.Screen name="credits" options={{ title: "Crédits des photos" }} />
+        <Stack.Screen name="meteo-recettes" options={{ title: "Recettes selon la météo" }} />
         <Stack.Screen name="produits" options={{ title: "Produits à vérifier" }} />
       </Stack.Protected>
     </Stack>
