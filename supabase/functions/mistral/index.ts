@@ -86,14 +86,14 @@ let workingModel: string | null = null;
 
 async function mistralFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const key = Deno.env.get("MISTRAL_API_KEY");
-  if (!key) throw new HttpError(503, "Clé Mistral absente : ajoutez le secret MISTRAL_API_KEY dans Supabase (Edge Functions > Secrets).");
+  if (!key) throw new HttpError(503, "La réflexion approfondie n'est pas configurée sur le serveur (clé absente dans les secrets des fonctions).");
   try {
     return await fetch(`${MISTRAL}${path}`, {
       ...init, signal: AbortSignal.timeout(MISTRAL_TIMEOUT_MS),
       headers: { Authorization: `Bearer ${key}`, ...(typeof init.body === "string" ? { "Content-Type": "application/json" } : {}), ...init.headers },
     });
   } catch (e) {
-    if (e instanceof DOMException && e.name === "TimeoutError") throw new HttpError(504, "Mistral met trop de temps à répondre : réessayez.");
+    if (e instanceof DOMException && e.name === "TimeoutError") throw new HttpError(504, "La réflexion approfondie prend trop de temps : réessayez.");
     throw e;
   }
 }
@@ -113,17 +113,17 @@ async function chatJson(messages: Array<{ role: string; content: string }>, temp
       await r.body?.cancel();
       continue;
     }
-    if (!r.ok) throw new HttpError(502, `Mistral a refusé la demande (${r.status}) : ${(await r.text()).slice(0, 300)}`);
+    if (!r.ok) throw new HttpError(502, `La réflexion approfondie a échoué (erreur ${r.status}) : réessayez.`);
     const body = await r.json();
     workingModel = model;
     const content = body.choices?.[0]?.message?.content ?? "";
     try {
       return { data: JSON.parse(content), model };
     } catch {
-      throw new HttpError(502, "Réponse de Mistral illisible (JSON attendu).");
+      throw new HttpError(502, "La réflexion approfondie a renvoyé une réponse illisible : réessayez.");
     }
   }
-  throw new HttpError(429, `Aucun modèle Mistral disponible avec cette clé pour le moment (${last}).`);
+  throw new HttpError(429, "La réflexion approfondie est indisponible pour le moment (quota gratuit atteint) : réessayez plus tard.");
 }
 
 /** Texte d'une recette photographiée, lu par le premier modèle de vision que la clé accepte. */
@@ -150,12 +150,12 @@ async function visionText(images: string[]): Promise<{ text: string; model: stri
         last = `${model} : ${detail}`;
         continue;
       }
-      throw new HttpError(502, `Mistral a refusé la photo (${r.status}) : ${detail}`);
+      throw new HttpError(502, `La photo n'a pas pu être lue (erreur ${r.status}) : réessayez.`);
     }
     const body = await r.json();
     return { text: String(body.choices?.[0]?.message?.content ?? ""), model };
   }
-  throw new HttpError(429, `Aucun modèle Mistral ne peut lire les photos avec cette clé pour le moment (${last}).`);
+  throw new HttpError(429, "La lecture des photos est indisponible pour le moment : réessayez plus tard.");
 }
 
 /** Recette lue à voix haute : transcription de l'enregistrement (Voxtral). */
@@ -168,7 +168,7 @@ async function transcribe(audio: string, mime: string): Promise<string> {
   form.append("file", new Blob([bytes], { type: mime || "audio/mp4" }), `recette.${ext}`);
   const r = await mistralFetch("/audio/transcriptions", { method: "POST", body: form });
   if (unavailable(r)) throw new HttpError(429, "La transcription de la voix n'est pas disponible pour le moment : réessayez plus tard.");
-  if (!r.ok) throw new HttpError(502, `Mistral n'a pas pu transcrire l'enregistrement (${r.status}) : ${(await r.text()).slice(0, 300)}`);
+  if (!r.ok) throw new HttpError(502, `La voix n'a pas pu être transcrite (erreur ${r.status}) : réessayez.`);
   const body = await r.json();
   return String(body.text ?? "").trim();
 }
@@ -488,7 +488,7 @@ function findToolFile(node: any): { file_id: string } | null {
 async function mistralImage(db: SupabaseClient, prompt: string): Promise<Uint8Array> {
   const pause = (await db.from("app_settings").select("value").eq("key", "mistral_image_pause_until").maybeSingle()).data?.value;
   if (pause && Date.parse(pause) > Date.now()) {
-    throw new HttpError(429, `Création d'images Mistral en pause jusqu'à ${new Date(pause).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })} (quota gratuit).`);
+    throw new HttpError(429, `Création d'images en pause jusqu'à ${new Date(pause).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })} (quota gratuit).`);
   }
   const agentId = await imageAgent(db);
   const r = await mistralFetch("/conversations", { method: "POST", body: JSON.stringify({ agent_id: agentId, inputs: prompt }) });
@@ -507,7 +507,7 @@ async function mistralImage(db: SupabaseClient, prompt: string): Promise<Uint8Ar
     const shape = (conv.outputs ?? []).map((o: any) => o.type === "tool.execution"
       ? `outil ${o.name ?? ""} ${JSON.stringify(o.info ?? o.arguments ?? {}).slice(0, 120)}`
       : `${o.type} ${typeof o.content === "string" ? o.content.slice(0, 160) : JSON.stringify(o.content).slice(0, 160)}`);
-    throw new HttpError(502, `Mistral n'a pas renvoyé d'image (${shape.join(" | ").slice(0, 280)}).`);
+    throw new HttpError(502, "Aucune image n'a été créée : réessayez plus tard.");
   }
   const file = chunk?.file_id ? await mistralFetch(`/files/${chunk.file_id}/content`, { headers: { Accept: "*/*" } })
     : await fetch(url!, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
@@ -969,7 +969,7 @@ Deno.serve(async (req) => {
     const db = admin();
     const { count } = await db.from("ai_calls").select("id", { count: "exact", head: true }).eq("household_id", householdId)
       .gte("created_at", new Date(Date.now() - 3_600_000).toISOString());
-    if ((count ?? 0) >= HOURLY_LIMIT) throw new HttpError(429, "Trop de demandes à Mistral cette heure-ci : réessayez plus tard.");
+    if ((count ?? 0) >= HOURLY_LIMIT) throw new HttpError(429, "Trop de demandes de réflexion approfondie cette heure-ci : réessayez plus tard.");
     if (Math.random() < 0.05) {
       await db.from("ai_calls").delete().lt("created_at", new Date(Date.now() - LOG_RETENTION_DAYS * 86_400_000).toISOString());
     }

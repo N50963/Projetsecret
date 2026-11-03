@@ -484,7 +484,7 @@ export default function Propositions() {
   const ready = slotIdeas ? slotIdeas.drafts.length : 0;
   const failed = exhausted && !draft && waiting === 0;
   const tag = exhausted
-    ? <Tag label="idée Mistral" tone="plain" icon="sparkle" />
+    ? <Tag label="nouvelle idée" tone="plain" icon="sparkle" />
     : !toBuyLabels.length
       ? <Tag label="avec vos courses" tone="green" />
       : <Tag label={`${toBuyLabels.length} à acheter`} tone="orange" />;
@@ -567,7 +567,7 @@ export default function Propositions() {
               })}
             </View>
             <Text style={[styles.stateTitle, { color: c.text }]}>
-              {seen ? `Mistral prépare encore ${waiting} idée${waiting > 1 ? "s" : ""}…` : "Mistral prépare 3 idées…"}
+              {seen ? `Réflexion approfondie : encore ${waiting} idée${waiting > 1 ? "s" : ""} en préparation…` : "Réflexion approfondie : 3 idées en préparation…"}
             </Text>
           </View>
         )}
@@ -575,7 +575,7 @@ export default function Propositions() {
           <View style={[styles.state, { backgroundColor: c.card, borderColor: c.border }]} accessibilityRole="alert">
             <Icon name="alert" size={44} color={c.text} />
             <Text style={[styles.stateTitle, { color: c.text }]}>
-              {slotIdeas?.drafts.length ? "Plus d'idées pour ce repas" : "Mistral ne répond pas pour le moment"}
+              {slotIdeas?.drafts.length ? "Plus d'idées pour ce repas" : "La réflexion approfondie ne répond pas pour le moment"}
             </Text>
             <Text style={{ color: c.muted, fontSize: 16, textAlign: "center" }}>
               {!slotIdeas?.drafts.length && slotIdeas?.failed ? slotIdeas.failed : "Les repas déjà choisis sont enregistrés."}

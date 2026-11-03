@@ -39,9 +39,9 @@ async function call<T>(body: Record<string, unknown>, signal?: AbortSignal): Pro
   if (error) {
     if (error instanceof FunctionsHttpError) {
       const detail = await error.context.json().catch(() => null);
-      throw new Error(detail?.error ?? "Mistral n'a pas répondu.");
+      throw new Error(detail?.error ?? "La réflexion approfondie n'a pas répondu.");
     }
-    throw new Error("Mistral injoignable : vérifiez la connexion internet.");
+    throw new Error("Réflexion approfondie injoignable : vérifiez la connexion internet.");
   }
   return data as T;
 }

@@ -53,7 +53,7 @@ export default function Credits() {
       <Muted>
         Photos libres de Wikimedia Commons (domaine public, CC0, Creative Commons, GFDL) : touchez une ligne pour voir l'image
         d'origine et sa licence. Les photos des ingrédients ont été modifiées : détourées ou telles quelles, posées sur fond
-        blanc. Les autres photos des plats sont créées par Mistral ou prises avec votre téléphone.
+        blanc. Les autres photos des plats sont des illustrations créées pour l'application ou prises avec votre téléphone.
       </Muted>
       <ErrorText>{error}</ErrorText>
       {dishes?.length ? (

@@ -293,7 +293,7 @@ export default function FicheRecette() {
     setSaved(true);
     const result = await adaptRecipeDraft(household.id, toPayload(recipe), `Note : ${stars}/5. ${comment.trim()}`);
     if (!result.improvable) {
-      setInfo("Merci pour votre avis : Mistral ne voit rien à améliorer dans cette recette.");
+      setInfo("Merci pour votre avis : après réflexion approfondie, rien à améliorer dans cette recette.");
       return;
     }
     setDraft({ kind: "mistral", recipe: result.recipe, issues: result.issues, change_note: result.change_note });
@@ -322,7 +322,7 @@ export default function FicheRecette() {
       await load();
       return;
     }
-    const newId = await adaptRecipe(supabase, household.id, recipe, input, draft.change_note || "Améliorée par Mistral après un avis");
+    const newId = await adaptRecipe(supabase, household.id, recipe, input, draft.change_note || "Améliorée après un avis du foyer");
     setDraft(null);
     setCurrent(0);
     if (newId && recipe.householdId !== household.id) router.replace(`/recette/${newId}`);
@@ -566,7 +566,7 @@ export default function FicheRecette() {
         <View style={[styles.section, { gap: 9 }]}>
           {/* Une seule barre de notation : celle du haut de la fiche. Ici, la remarque sur le contenu, pour Mistral. */}
           <H2>Une remarque sur le plat d'aujourd'hui ?</H2>
-          <Muted>{previous?.stars ? "Goût, quantités, cuisson… Mistral relit la recette avec votre remarque et propose une version améliorée si besoin."
+          <Muted>{previous?.stars ? "Goût, quantités, cuisson… Réflexion approfondie : la recette est relue avec votre remarque, et une version améliorée vous est proposée si besoin."
             : "Notez d'abord le plat avec les étoiles en haut de la fiche."}</Muted>
           <Field multiline value={comment} maxLength={1000} placeholder="Un peu fade, trop de crème, portions trop petites…"
             onChangeText={(t) => {
@@ -575,7 +575,7 @@ export default function FicheRecette() {
             }} />
           <Button title={saved ? "Remarque envoyée" : "Envoyer la remarque"} onPress={saveRating} busy={busy === "rate"}
             disabled={!previous?.stars || !comment.trim() || saved} />
-          {busy === "rate" ? <Muted>Mistral relit la recette avec votre avis…</Muted> : null}
+          {busy === "rate" ? <Muted>Réflexion approfondie sur la recette avec votre avis…</Muted> : null}
         </View>
       )}
 
@@ -610,14 +610,14 @@ export default function FicheRecette() {
       {draft && (
         <View style={[styles.section, { gap: 12 }]}>
           <Card>
-            <H2>{draft.kind === "edit" ? "Modifier la recette" : "Version améliorée par Mistral"}</H2>
+            <H2>{draft.kind === "edit" ? "Modifier la recette" : "Version améliorée"}</H2>
             {draft.change_note ? <Body>{draft.change_note}</Body> : null}
             <Muted>
               {draft.kind === "edit"
                 ? "Corrigez le nom, les temps, les ingrédients ou les étapes. L'ancienne version reste dans l'historique."
                 : "D'après votre avis. Vous avez le dernier mot : corrigez ce que vous voulez avant de garder cette version ; l'ancienne reste dans l'historique."}
             </Muted>
-            {draft.issues.length ? <Muted>Remarques de Mistral : {draft.issues.join(" ; ")}</Muted> : null}
+            {draft.issues.length ? <Muted>Points à vérifier : {draft.issues.join(" ; ")}</Muted> : null}
           </Card>
           <RecipeEditor value={draft.recipe} onChange={(r) => setDraft({ ...draft, recipe: r })} />
           <Button title={draft.kind === "edit" ? "Enregistrer les modifications" : "Garder ma version"} onPress={saveRevision} busy={busy === "save"} />

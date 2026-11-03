@@ -49,7 +49,7 @@ function ProductCard({ product, edit, names, options, open, busy, onToggle, onCh
         </Text>
         <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
           {product.unknown && !edit.suggested ? <Tag label="Non reconnu" tone="orange" /> : null}
-          {edit.suggested ? <Tag label="Suggestion de Mistral" icon="sparkle" /> : null}
+          {edit.suggested ? <Tag label="Suggestion" icon="sparkle" /> : null}
         </View>
       </View>
 

@@ -33,7 +33,7 @@ function PhotoPicker({ photo, onChange, onError }: { photo: PickedPhoto | null; 
           </Pressable>
         </View>
       ) : (
-        <Muted>Facultatif : sans photo, Mistral crée une illustration du plat. Vous pourrez la remplacer plus tard.</Muted>
+        <Muted>Facultatif : sans photo, une illustration du plat est créée automatiquement. Vous pourrez la remplacer plus tard.</Muted>
       )}
       <Row>
         <Button title={photo ? "Reprendre" : "Prendre une photo"} kind="secondary" onPress={() => pick(true)} style={{ flex: 1 }} />
@@ -181,10 +181,10 @@ export default function AjoutRecette() {
     return (
       <Screen title="Vérifier la recette">
         <Muted>
-          Mistral a mis la recette en forme et précisé les durées de cuisson. Vous avez le dernier mot : corrigez ce que vous voulez,
-          c'est votre version qui sera enregistrée.
+          Après réflexion approfondie, la recette est mise en forme et les durées de cuisson sont précisées. Vous avez le dernier
+          mot : corrigez ce que vous voulez, c'est votre version qui sera enregistrée.
         </Muted>
-        {draft.issues.length ? <Muted>Remarques de Mistral : {draft.issues.join(" ; ")}</Muted> : null}
+        {draft.issues.length ? <Muted>Points à vérifier : {draft.issues.join(" ; ")}</Muted> : null}
         {sourceText ? <SourceText mode={mode} text={sourceText} /> : null}
         <RecipeEditor value={draft.recipe} onChange={(r) => setDraft({ ...draft, recipe: r })} />
         <PhotoPicker photo={photo} onChange={setPhoto} onError={setError} />
@@ -204,7 +204,7 @@ export default function AjoutRecette() {
       </Row>
       {mode === "photo" ? (
         <View style={{ gap: 10 }}>
-          <Muted>Photographiez la recette (livre, fiche, écran, papier manuscrit), jusqu'à {MAX_PAGES} pages : Mistral lit le texte et le met en forme.</Muted>
+          <Muted>Photographiez la recette (livre, fiche, écran, papier manuscrit), jusqu'à {MAX_PAGES} pages : le texte est lu puis mis en forme.</Muted>
           {pages.length ? (
             <View style={styles.pages}>
               {pages.map((p, n) => (
@@ -253,7 +253,7 @@ export default function AjoutRecette() {
         </View>
       ) : mode === "coller" ? (
         <>
-          <Muted>Collez la recette (site, message, livre) : Mistral la met en forme et relie les ingrédients à vos achats.</Muted>
+          <Muted>Collez la recette (site, message, livre) : elle est mise en forme et ses ingrédients sont reliés à vos achats.</Muted>
           <TextInput multiline value={text} onChangeText={setText} placeholder="Coller ici" placeholderTextColor={c.muted}
             style={[input, { minHeight: 220 }]} />
         </>
@@ -274,8 +274,8 @@ export default function AjoutRecette() {
         <View style={styles.waiting}>
           <ActivityIndicator color={c.primary} />
           <Muted style={{ flex: 1 }}>
-            {mode === "photo" ? "Mistral lit la photo puis met la recette en forme (30 s environ)…" : mode === "lien" ? "Lecture de la page et mise en forme (20 s environ)…"
-              : mode === "voix" ? "Transcription de votre voix puis mise en forme (20 s environ)…" : "Mistral met la recette en forme…"}
+            {mode === "photo" ? "Réflexion approfondie : lecture de la photo puis mise en forme (30 s environ)…" : mode === "lien" ? "Réflexion approfondie : lecture de la page et mise en forme (20 s environ)…"
+              : mode === "voix" ? "Réflexion approfondie : transcription de votre voix puis mise en forme (20 s environ)…" : "Réflexion approfondie : mise en forme de la recette…"}
           </Muted>
         </View>
       ) : null}

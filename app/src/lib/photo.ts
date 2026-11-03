@@ -22,7 +22,7 @@ export async function pickDishPhoto(camera: boolean): Promise<PickedPhoto | null
 export function chooseDishPhoto(title = "Photo du plat"): Promise<PickedPhoto | null> {
   if (Platform.OS === "web") return pickDishPhoto(false);
   return new Promise((resolve, reject) => {
-    Alert.alert(title, "Votre photo remplace l'image créée par Mistral.", [
+    Alert.alert(title, "Votre photo remplace l'illustration du plat.", [
       { text: "Prendre une photo", onPress: () => pickDishPhoto(true).then(resolve, reject) },
       { text: "Choisir dans la galerie", onPress: () => pickDishPhoto(false).then(resolve, reject) },
       { text: "Annuler", style: "cancel", onPress: () => resolve(null) },
