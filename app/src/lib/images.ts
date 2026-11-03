@@ -18,6 +18,7 @@ import { BUNDLED_DISHES, BUNDLED_INGREDIENTS } from "./bundled";
 import { supabase } from "./supabase";
 
 const PUBLIC_BUCKET = "recipe-images";
+const IMAGE_PAGE = 1000;
 const PHOTO_BUCKET = "household-photos";
 const LINK_SECONDS = 7 * 24 * 3600;
 const PHOTO_MAX_WIDTH = 1024;
@@ -83,12 +84,23 @@ function restore(): Promise<void> {
   return restored;
 }
 
+/** Toutes les images visibles, par pages : Supabase renvoie au plus 1 000 lignes par requête. */
+async function imageRows(): Promise<ImageRow[]> {
+  const rows: ImageRow[] = [];
+  for (;;) {
+    const { data, error } = await supabase.from("recipe_images").select("id, recipe_id, household_id, storage_path, source, created_at")
+      .order("id").range(rows.length, rows.length + IMAGE_PAGE - 1);
+    if (error) throw new Error(`Images illisibles : ${error.message}`);
+    rows.push(...((data ?? []) as ImageRow[]));
+    if (!data || data.length < IMAGE_PAGE) return rows;
+  }
+}
+
 async function refresh() {
-  const { data, error } = await supabase.from("recipe_images").select("recipe_id, household_id, storage_path, source, created_at");
-  if (error) throw new Error(`Images illisibles : ${error.message}`);
+  const data = await imageRows();
   // L'image propre au foyer (photo, recette du foyer) l'emporte sur l'image commune.
   const best = new Map<string, ImageRow>();
-  for (const row of (data ?? []) as ImageRow[]) if (row.household_id || !best.has(row.recipe_id)) best.set(row.recipe_id, row);
+  for (const row of data) if (row.household_id || !best.has(row.recipe_id)) best.set(row.recipe_id, row);
   const photos = [...best.values()].filter((r) => r.source === "photo").map((r) => r.storage_path);
   const signed = photos.length ? (await supabase.storage.from(PHOTO_BUCKET).createSignedUrls(photos, LINK_SECONDS)).data ?? [] : [];
   const signedUrl = new Map(signed.map((s) => [s.path, s.signedUrl]));

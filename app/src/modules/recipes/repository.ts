@@ -26,8 +26,12 @@ export interface RecipeFilters {
   maxSpiciness?: Spiciness;
   excludedAllergens?: string[];
   search?: string;
+  /** Nombre maximal de recettes ; sans limite, tout le catalogue est lu (par pages). */
   limit?: number;
 }
+
+/** Taille d'une page : Supabase (PostgREST) renvoie au plus 1 000 lignes par requête. */
+const PAGE = 1000;
 
 export interface RecipeSummary {
   id: string;
@@ -91,17 +95,28 @@ function toSummary(r: Row): RecipeSummary {
 
 /** Catalogue (recettes communes + recettes du foyer), filtré. Les allergènes exclus sont une contrainte stricte. */
 export async function listRecipes(supabase: SupabaseClient, filters: RecipeFilters = {}): Promise<RecipeSummary[]> {
-  let q = supabase.from("recipe_catalog").select("*");
-  if (filters.mealType) q = q.contains("meal_types", [filters.mealType]);
-  if (filters.season) q = q.contains("seasons", [filters.season]);
-  if (filters.mainProtein) q = q.eq("main_protein", filters.mainProtein);
-  if (filters.maxTotalMin !== undefined) q = q.lte("total_min", filters.maxTotalMin);
-  if (filters.maxSpiciness !== undefined) q = q.lte("spiciness", filters.maxSpiciness);
-  if (filters.excludedAllergens?.length) q = q.not("allergens", "ov", `{${filters.excludedAllergens.join(",")}}`);
-  if (filters.search) q = q.ilike("name", `%${filters.search}%`);
-  const { data, error } = await q.order("name").limit(filters.limit ?? 200);
-  check(error, "Lecture des recettes impossible");
-  return ((data ?? []) as Row[]).map(toSummary);
+  const page = (from: number, to: number) => {
+    let q = supabase.from("recipe_catalog").select("*");
+    if (filters.mealType) q = q.contains("meal_types", [filters.mealType]);
+    if (filters.season) q = q.contains("seasons", [filters.season]);
+    if (filters.mainProtein) q = q.eq("main_protein", filters.mainProtein);
+    if (filters.maxTotalMin !== undefined) q = q.lte("total_min", filters.maxTotalMin);
+    if (filters.maxSpiciness !== undefined) q = q.lte("spiciness", filters.maxSpiciness);
+    if (filters.excludedAllergens?.length) q = q.not("allergens", "ov", `{${filters.excludedAllergens.join(",")}}`);
+    if (filters.search) q = q.ilike("name", `%${filters.search}%`);
+    // Le nom seul ne suffit pas à ordonner les pages : deux recettes peuvent porter le même nom.
+    return q.order("name").order("id").range(from, to);
+  };
+  const max = filters.limit ?? Infinity;
+  const rows: Row[] = [];
+  while (rows.length < max) {
+    const size = Math.min(PAGE, max - rows.length);
+    const { data, error } = await page(rows.length, rows.length + size - 1);
+    check(error, "Lecture des recettes impossible");
+    rows.push(...((data ?? []) as Row[]));
+    if (!data || data.length < size) break;
+  }
+  return rows.map(toSummary);
 }
 
 /** Recette complète (version courante), ingrédients dans l'ordre. */

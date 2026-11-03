@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Icon } from "../components/icons";
 import { Illustration } from "../components/Illustration";
@@ -50,7 +50,7 @@ export default function Recettes() {
     const n = ++latest.current;
     try {
       const [list, favs, notes] = await Promise.all([
-        listRecipes(supabase, { search: text.trim() || undefined, limit: 300 }), listFavorites(supabase, household.id), latestStars(supabase, household.id),
+        listRecipes(supabase, { search: text.trim() || undefined }), listFavorites(supabase, household.id), latestStars(supabase, household.id),
       ]);
       if (n !== latest.current) return;
       setError("");
@@ -77,8 +77,8 @@ export default function Recettes() {
     return true;
   });
 
-  return (
-    <Screen title="Recettes" nav="recettes">
+  const header = (
+    <View style={styles.header}>
       <Button icon="plus" title="Ajouter une recette" onPress={() => router.push("/ajout-recette")} />
       <View>
         <Field value={search} placeholder="Rechercher une recette" style={{ paddingLeft: 44 }} onChangeText={(t) => {
@@ -100,11 +100,28 @@ export default function Recettes() {
         ))}
       </ScrollView>
       <ErrorText>{error}</ErrorText>
-      <View style={{ gap: 7 }}>
-        {shown.map((r) => {
+    </View>
+  );
+
+  // Liste virtualisée : seules les cartes visibles (et quelques-unes autour) sont dessinées, ce qui garde l'onglet fluide
+  // et léger en mémoire avec des centaines de recettes et leurs photos.
+  return (
+    <Screen title="Recettes" nav="recettes" scroll={false} padded={false}>
+      <FlatList
+        data={shown}
+        style={styles.fill}
+        keyExtractor={(r) => r.id}
+        ListHeaderComponent={header}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.list}
+        ItemSeparatorComponent={Gap}
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={7}
+        renderItem={({ item: r }) => {
           const note = stars.get(r.id);
           return (
-            <Pressable key={r.id} onPress={() => router.push(`/recette/${r.id}`)} accessibilityRole="button" accessibilityLabel={`Ouvrir la fiche : ${r.name}`}
+            <Pressable onPress={() => router.push(`/recette/${r.id}`)} accessibilityRole="button" accessibilityLabel={`Ouvrir la fiche : ${r.name}`}
               style={({ pressed }) => [styles.item, { backgroundColor: c.card, borderColor: c.cardLine, opacity: pressed ? 0.8 : 1 }, CARD_SHADOW]}>
               <Illustration picture={images[r.id] ?? pictureOf(r.id)} height={66} width={86} rounded={9} />
               <View style={styles.text}>
@@ -118,19 +135,28 @@ export default function Recettes() {
               <Icon name="chevronRight" width={9} height={15} color={c.text} />
             </Pressable>
           );
-        })}
-        {!shown.length && (
+        }}
+        ListEmptyComponent={
           <Muted>
             {onlyFavorites ? "Aucune recette en favori avec ce filtre : touchez le cœur sur une fiche."
               : rating === "toutes" ? "Aucune recette." : "Aucune recette avec cette note."}
           </Muted>
-        )}
-      </View>
+        }
+      />
     </Screen>
   );
 }
 
+function Gap() {
+  return <View style={{ height: 7 }} />;
+}
+
 const styles = StyleSheet.create({
+  // Mêmes marges que les autres écrans (Screen) : 12 px autour, 12 px entre les blocs du haut.
+  // Screen garde 20 px sous un contenu fixe : la liste, elle, défile jusqu'à la barre du bas.
+  fill: { flex: 1, marginBottom: -20 },
+  list: { paddingHorizontal: 12, paddingTop: 12, paddingBottom: 20 },
+  header: { gap: 12, marginBottom: 12 },
   searchIcon: { position: "absolute", left: 14, top: 0, bottom: 0, justifyContent: "center" },
   item: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 66, paddingRight: 12, borderRadius: 12, borderWidth: 1, overflow: "hidden" },
   text: { flex: 1, minWidth: 0, paddingLeft: 4 },
