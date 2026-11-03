@@ -2,12 +2,13 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 // Défilement qui s'accorde avec les gestes natifs : un menu détaché n'est jamais repris par la page.
 import { ScrollView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon, Logo } from "../components/icons";
+import { useConfirm } from "../components/ConfirmSheet";
 import { IngredientMenu, type IngredientMenuRequest } from "../components/IngredientMenu";
 import { ReminderSheet } from "../components/ReminderSheet";
 import { TimersBar } from "../components/Steps";
@@ -50,13 +51,6 @@ const defaultChoice = (fresh: boolean): DayChoice => ({ dejeuner: false, diner: 
 /** Temps enregistré ramené aux choix de la roue (30 min, 1 h, sans limite). */
 const snapTime = (t: number | null) => (t === null ? null : t <= 30 ? 30 : t <= 60 ? 60 : null);
 
-function confirm(message: string, action: string, onConfirm: () => void) {
-  if (Platform.OS === "web") {
-    if (window.confirm(message)) onConfirm();
-    return;
-  }
-  Alert.alert(message, undefined, [{ text: "Garder", style: "cancel" }, { text: action, style: "destructive", onPress: onConfirm }]);
-}
 
 /**
  * Accueil MenuBily : en-tête au logo ; en grand, le prochain repas (menu du jour, sinon le prochain de la semaine) ;
@@ -66,6 +60,7 @@ function confirm(message: string, action: string, onConfirm: () => void) {
 export default function Accueil() {
   const router = useRouter();
   const household = useHousehold();
+  const [ask, confirmSheet] = useConfirm();
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { timers } = useTimers();
@@ -183,17 +178,22 @@ export default function Accueil() {
     }
   };
 
-  const cancel = (s: WeekSlot) => confirm(`Annuler « ${s.name} » ?`, "Annuler ce menu", async () => {
-    setBusy(s.slotId);
-    setError("");
-    try {
-      await cancelMealChoice(supabase, s.slotId);
-      await load();
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(null);
-    }
+  const cancel = (s: WeekSlot) => ask({
+    title: "Annuler ce menu ?", picture: picture(s.recipeId), name: s.name ?? "", detail: `${dayLabel(s.date, today)} · ${mealLabel(s.mealType)}`,
+    message: "Le repas redevient à prévoir. Les ingrédients ajoutés à la liste de courses pour ce menu, et pas encore achetés, en sont retirés.",
+    confirmLabel: "Annuler ce menu", cancelLabel: "Garder ce menu",
+    onConfirm: async () => {
+      setBusy(s.slotId);
+      setError("");
+      try {
+        await cancelMealChoice(supabase, s.slotId);
+        await load();
+      } catch (e) {
+        setError(errorText(e));
+      } finally {
+        setBusy(null);
+      }
+    },
   });
 
   /**
@@ -308,6 +308,7 @@ export default function Accueil() {
       )}
       <TimersBar />
       <BottomNav active="accueil" />
+      {confirmSheet}
       <ReminderSheet visible={reminders} onClose={() => setReminders(false)} today={today} menus={menus} toBuy={toBuy.length}
         onOpenRecipe={(id) => router.push(`/recette/${id}`)} onOpenShopping={() => router.navigate("/courses")} />
     </View>

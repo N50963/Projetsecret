@@ -4,9 +4,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Platform, Pressable, Share, StyleSheet, Text, View, type ScrollViewInstance } from "react-native";
+import { ActivityIndicator, Platform, Pressable, Share, StyleSheet, Text, View, type ScrollViewInstance } from "react-native";
 
 import { Icon } from "../../components/icons";
+import { useConfirm } from "../../components/ConfirmSheet";
 import { Illustration } from "../../components/Illustration";
 import { cleanDraft, RecipeEditor } from "../../components/RecipeEditor";
 import { StarRating } from "../../components/StarRating";
@@ -49,13 +50,6 @@ interface Revision {
 /** Jour où la recette a été faite sur ce téléphone (« C'est prêt ») : l'avis ne se donne que ce jour-là. */
 const cookedKey = (recipeId: string) => `recette-faite:${recipeId}`;
 
-function confirm(message: string, action: string, onConfirm: () => void) {
-  if (Platform.OS === "web") {
-    if (window.confirm(message)) onConfirm();
-    return;
-  }
-  Alert.alert(message, undefined, [{ text: "Garder", style: "cancel" }, { text: action, style: "destructive", onPress: onConfirm }]);
-}
 
 /**
  * Fiche recette MenuBily (ouverte en fondu) : photo, durées, puces (protéine, personnes), onglets Ingrédients (« à
@@ -70,6 +64,7 @@ export default function FicheRecette() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const household = useHousehold();
+  const [ask, confirmSheet] = useConfirm();
   const c = useColors();
   const { timers, now } = useTimers();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
@@ -307,10 +302,15 @@ export default function FicheRecette() {
     setMore(false);
     setDraft({ kind: "edit", recipe: toPayload(recipe) as unknown as DraftRecipe, issues: [], change_note: "" });
   };
-  const deleteRecipe = () => confirm(`Supprimer « ${recipe.name} » ?`, "Supprimer", () => act("delete", async () => {
-    await archiveRecipe(supabase, recipe.id);
-    router.back();
-  }));
+  const deleteRecipe = () => ask({
+    title: "Supprimer cette recette ?", picture: image, name: recipe.name, detail: "Recette du foyer",
+    message: "Elle ne sera plus proposée et n'apparaîtra plus dans l'onglet Recettes.",
+    confirmLabel: "Supprimer la recette", cancelLabel: "Garder la recette", icon: "trash",
+    onConfirm: () => act("delete", async () => {
+      await archiveRecipe(supabase, recipe.id);
+      router.back();
+    }),
+  });
   const saveRevision = () => act("save", async () => {
     if (!draft) return;
     const input = draftToInput(cleanDraft(draft.recipe), draft.kind === "edit" ? recipe.source : "mistral");
@@ -624,6 +624,7 @@ export default function FicheRecette() {
           <Button title={draft.kind === "edit" ? "Annuler" : "Garder la recette actuelle"} kind="secondary" onPress={() => setDraft(null)} />
         </View>
       )}
+      {confirmSheet}
     </Screen>
   );
 }
