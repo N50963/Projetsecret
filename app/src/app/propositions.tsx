@@ -12,10 +12,12 @@ import { draftToInput, generateRecipes, illustrateRecipe, type Draft } from "../
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { useColors } from "../lib/theme";
+import { loadWeather } from "../lib/weather";
+import { WeatherChip } from "../components/WeatherChip";
 import {
   acceptProposal, addDays, addShoppingItems, DEFAULT_TARGETS, getPlanSlots, getSlotsFrom, ingredientsInRecipes, loadPlannerContext, loadRecipesForPlanning,
   missingForSlot, neededQuantity, planMeals, recordShown, rejectProposal, shortagesAfter, skipSlot, Stock, toIsoDate,
-  type MissingIngredient, type PlannedSlot, type PlannerContext, type Proposal, type ServedMeal, type Shortage,
+  type MissingIngredient, type PlannedSlot, type PlannerContext, type Proposal, type ServedMeal, type Shortage, weatherBrief, weatherText,
 } from "../modules/planning";
 import { createRecipe, currentSeason, type MainProtein } from "../modules/recipes";
 import { errorText, isNetworkError, retryQuietly } from "../lib/errors";
@@ -134,10 +136,13 @@ export default function Propositions() {
     (async () => {
       try {
         // Menu du jour : tous les repas à partir d'aujourd'hui (un repas à remplacer peut relever d'une autre planification).
-        const [s, context] = await Promise.all([
+        const [s, loaded, weather] = await Promise.all([
           params.slot ? getSlotsFrom(supabase, household.id, start) : getPlanSlots(supabase, planId),
           loadPlannerContext(supabase, household.id, start, planId),
+          loadWeather(),
         ]);
+        // Météo de Rochefort-du-Gard : plat frais quand il fait chaud, réconfortant quand il fait froid ou pleut.
+        const context = { ...loaded, weather };
         let ready = context;
         const target = params.slot ? s.find((x) => x.id === params.slot) : undefined;
         if (target) {
@@ -346,11 +351,11 @@ export default function Propositions() {
     setSeen(0);
     variants.forEach(({ protein, hint }, n) => ideaTimers.current.push(setTimeout(() => {
       generateRecipes(household.id, {
-        brief: `${hint}${brief}`, count: 1, servings: slot.servings,
+        brief: `${weatherBrief(context.weather?.[slot.date])}${hint}${brief}`, count: 1, servings: slot.servings,
         constraints: { max_total_min: slot.maxTotalMin, meal_type: slot.mealType, season, main_protein: protein, avoid },
       }, ctrl.signal)
         .then(({ recipes }) => forSlot((i) => ({ ...i, pending: i.pending - 1,
-          drafts: [...i.drafts, ...recipes.filter((d) => d.recipe.name && d.recipe.ingredients.length >= 3)] })))
+          drafts: [...i.drafts, ...(recipes ?? []).filter((d) => d.recipe?.name && (d.recipe.ingredients?.length ?? 0) >= 3)] })))
         .catch((e) => {
           if (!ctrl.signal.aborted) forSlot((i) => ({ ...i, pending: i.pending - 1, failed: errorText(e) }));
         });
@@ -483,7 +488,7 @@ export default function Propositions() {
     : !toBuyLabels.length
       ? <Tag label="avec vos courses" tone="green" />
       : <Tag label={`${toBuyLabels.length} à acheter`} tone="orange" />;
-  const card = (name: string, picture: Picture | null | undefined, duration: number, protein: string, ingredients: string, toBuy?: string) => (
+  const card = (name: string, picture: Picture | null | undefined, duration: number, protein: string, ingredients: string, toBuy?: string, note?: string) => (
     <View style={[styles.card, { backgroundColor: c.background, borderColor: c.border }]}>
       {/* Photo transparente aux gestes : le glisser de la carte n'est pas pris par celui de l'image (web). */}
       <View style={{ flex: 1, minHeight: 160, backgroundColor: c.chip }} pointerEvents="none">
@@ -503,6 +508,12 @@ export default function Propositions() {
           <Pill icon="timer">{minutes(duration)}</Pill>
           {protein ? <Pill icon="cutlery">{protein}</Pill> : null}
         </View>
+        {note ? (
+          <View style={styles.note}>
+            <Icon name={weatherText(ctx?.weather?.[current.date]?.code ?? 0).icon} size={18} color={c.greenInk} />
+            <Text style={{ color: c.greenInk, fontSize: 15, fontWeight: "500", flex: 1 }} numberOfLines={1}>{note}</Text>
+          </View>
+        ) : null}
         <Text style={{ color: c.muted, fontSize: 16, lineHeight: 21 }} numberOfLines={2}>{ingredients}</Text>
         {toBuy ? (
           <View style={[styles.toBuy, { backgroundColor: c.chip }]}>
@@ -522,6 +533,7 @@ export default function Propositions() {
             : focus ? `Nouveau menu (il manquerait : ${(replacing[current.id] ?? []).map((m) => m.label).join(", ")})`
               : `Repas ${done + 1} sur ${Math.max(asked.length, done + 1)}`} · {current.maxTotalMin ? `${minutes(current.maxTotalMin)} au plus` : "sans limite"} ·
         </Text>
+        <WeatherChip day={ctx.weather?.[current.date]} size={13} />
         {tag}
       </View>
       <View style={{ paddingHorizontal: 14 }}><ErrorText>{error}</ErrorText></View>
@@ -533,7 +545,7 @@ export default function Propositions() {
             onPress={() => router.push(`/recette/${top.recipeId}`)}>
             {card(top.name, images[top.recipeId] ?? pictureOf(top.recipeId), top.totalMin, proteinLabel(top.mainProtein, top.name),
               ctx.recipes.find((r) => r.id === top.recipeId)?.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", ") ?? "",
-              toBuyLabels.length ? toBuyLabels.join(", ") : undefined)}
+              toBuyLabels.length ? toBuyLabels.join(", ") : undefined, top.weatherNote)}
           </SwipeCard>
         )}
         {draft && (
@@ -600,6 +612,7 @@ const styles = StyleSheet.create({
   cardText: { paddingTop: 7, paddingHorizontal: 14, paddingBottom: 12, gap: 9 },
   name: { fontSize: 26.5, lineHeight: 28, fontWeight: "700" },
   toBuy: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 38, borderRadius: 13, paddingHorizontal: 12, paddingVertical: 6 },
+  note: { flexDirection: "row", alignItems: "center", gap: 7 },
   state: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: 17, borderWidth: 1, padding: 24, alignItems: "center", justifyContent: "center", gap: 18 },
   slot: { width: 84, height: 84, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   stateTitle: { fontSize: 19, lineHeight: 25, fontWeight: "700", textAlign: "center" },

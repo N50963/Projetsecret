@@ -22,6 +22,8 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 import { dayLabel, mealLabel, minutes } from "../lib/format";
 import { placeholderOf, sourceOf, type Picture } from "../lib/images";
+import type { DayWeather } from "../modules/planning";
+import { WeatherChip } from "./WeatherChip";
 import { CARD_SHADOW, useColors } from "../lib/theme";
 import type { WeekSlot } from "../modules/planning";
 import type { MealType } from "../modules/recipes";
@@ -169,7 +171,7 @@ function DishRow({ slot, meal, pic, busy, dimmed, aimed, onOpen, onCancel, drag 
   );
 }
 
-export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChange, onOpen, onCancel, onMove, onDragChange, isPast, compact = false, onPlanMore }: {
+export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChange, onOpen, onCancel, onMove, onDragChange, isPast, compact = false, onPlanMore, weather }: {
   days: string[]; today: string; planOf: (date: string) => DayPlan; slotOf: (date: string, meal: MealType) => WeekSlot | undefined;
   picture: (recipeId: string | null) => Picture | null; busy: boolean;
   onChange: (date: string, patch: Partial<DayPlan>) => void; onOpen: (slot: WeekSlot) => void; onCancel: (slot: WeekSlot) => void;
@@ -182,6 +184,8 @@ export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChang
   /** Semaine choisie : seuls les menus choisis s'affichent ; un lien discret rouvre les repas à prévoir. */
   compact?: boolean;
   onPlanMore?: () => void;
+  /** Prévisions de Rochefort-du-Gard par jour (affichées sur la carte du jour). */
+  weather?: Record<string, DayWeather>;
 }) {
   const past = (d: string, m: MealType) => isPast?.(d, m) ?? false;
   const c = useColors();
@@ -327,6 +331,7 @@ export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChang
           <View style={styles.cardHead}>
             <Text style={[styles.cardTitle, { color: day === today ? c.primary : c.text }]} accessibilityRole="header">{title}</Text>
             <Text style={[styles.cardDate, { color: c.muted }]}>{date}</Text>
+            <View style={styles.cardWeather}><WeatherChip day={weather?.[day]} /></View>
           </View>
 
           {MEALS.map((m) => {
@@ -460,6 +465,7 @@ const styles = StyleSheet.create({
   cardHead: { flexDirection: "row", alignItems: "baseline", gap: 8, paddingHorizontal: 3 },
   cardTitle: { fontSize: 18, lineHeight: 24, fontWeight: "700" },
   cardDate: { fontSize: 14.2, lineHeight: 18 },
+  cardWeather: { marginLeft: "auto", alignSelf: "center" },
   dish: { height: 86, borderRadius: 13, borderWidth: 1, overflow: "hidden" },
   aimed: { borderWidth: 2.5 },
   dishLink: { flexDirection: "row", height: 84 },

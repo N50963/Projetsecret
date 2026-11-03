@@ -10,3 +10,4 @@ export {
   acceptProposal, addShoppingItems, cancelMealChoice, ensureSlot, moveMealChoice, getPlanSlots, getSlotsFrom, ingredientsInRecipes, type RecipeIngredientOption, getWeekSlots, getShoppingList, loadPlannerContext, loadPurchases, loadRecipesForPlanning, recordShown, rejectProposal,
   getUpcomingMeals, savePlan, setShoppingItemChecked, setShoppingItemsRemoved, skipSlot, type PlannedSlot, type ShoppingItem, type SlotRequest, type UpcomingMeal, type WeekSlot,
 } from "./repository";
+export { dishKind, weatherAdjustment, weatherBrief, weatherText, type DayWeather, type DishKind, type WeatherIcon } from "./weather";

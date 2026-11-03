@@ -6,6 +6,7 @@
 
 import { maxSpicinessFor } from "../recipes/preferences";
 import { currentSeason } from "../recipes/repository";
+import { weatherAdjustment } from "./weather";
 import type { MainProtein } from "../recipes/types";
 import { addDays, AVAILABLE_RATIO, dayDiff, neededQuantity, Stock, TIGHT_RATIO } from "./stock";
 import type {
@@ -151,7 +152,7 @@ interface WeekState {
   recent: Array<{ recipe: PlannerRecipe; date: IsoDate }>;
 }
 
-function score(ctx: PlannerContext, e: Evaluation, slot: MealSlot, week: WeekState, mealsInPlan: number): { score: number; reasons: string[] } {
+function score(ctx: PlannerContext, e: Evaluation, slot: MealSlot, week: WeekState, mealsInPlan: number): { score: number; reasons: string[]; weatherNote?: string } {
   const r = e.recipe;
   const t = targetsFor(ctx, mealsInPlan);
   const others = week.meals.filter((m) => m.slotId !== slot.id);
@@ -206,7 +207,17 @@ function score(ctx: PlannerContext, e: Evaluation, slot: MealSlot, week: WeekSta
     reasons.unshift("Vous avez aimé");
   }
   s -= Math.min(3, ctx.rejectionCounts?.[r.id] ?? 0);
-  if (!r.seasons.includes(currentSeason(new Date(`${slot.date}T12:00:00`)))) s -= 4;
+  // Saison : un plat hors saison recule nettement ; un plat propre à la saison (une ou deux saisons) avance un peu.
+  const season = currentSeason(new Date(`${slot.date}T12:00:00`));
+  if (!r.seasons.includes(season)) s -= 6;
+  else if (r.seasons.length <= 2) {
+    s += 1.5;
+    if (reasons.length < 2) reasons.push("Plat de saison");
+  }
+  // Météo du jour du repas à Rochefort-du-Gard : plat frais quand il fait chaud, réconfortant quand il fait froid ou pleut.
+  const weather = weatherAdjustment(r, ctx.weather?.[slot.date]);
+  s += weather.delta;
+  if (weather.note) reasons.unshift(weather.note);
 
   if (e.tight.length) {
     s -= e.tight.length;
@@ -214,7 +225,7 @@ function score(ctx: PlannerContext, e: Evaluation, slot: MealSlot, week: WeekSta
   }
   s -= 1.5 * e.missing.length;
   if (e.missing.length) reasons.push(`À acheter : ${e.missing.map((m) => m.label).join(", ")}`);
-  return { score: Math.round(s * 10) / 10, reasons };
+  return { score: Math.round(s * 10) / 10, reasons, weatherNote: weather.note };
 }
 
 /**
@@ -291,6 +302,7 @@ export function planMeals(ctx: PlannerContext, slots: MealSlot[], options: PlanO
     const proposals: Proposal[] = pickDiverse(ranked, count, round === 1 ? (c) => c.score >= 0 : undefined).map((c) => ({
       recipeId: c.recipe.id, versionId: c.recipe.versionId, name: c.recipe.name, totalMin: c.recipe.totalMin,
       mainProtein: c.recipe.mainProtein, round, score: c.score, missing: c.missing, usesPurchased: c.usesPurchased, reasons: c.reasons,
+      weatherNote: c.weatherNote,
     }));
     plans.push({ slotId: slot.id, round, proposals });
 

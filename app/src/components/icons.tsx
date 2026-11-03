@@ -228,6 +228,40 @@ const ICONS = {
     </>,
   },
   stop: { viewBox: "0 0 24 24", draw: ({ color }) => <><Circle cx={12} cy={12} r={9.5} {...stroke(color)} /><Rect x={8.8} y={8.8} width={6.4} height={6.4} rx={1} fill={color} /></> },
+  /** Météo (prévision du jour, Open-Meteo) : tracés fins comme les autres icônes. */
+  cloudSun: {
+    viewBox: "0 0 24 24", draw: ({ color }) => <>
+      <Path d="M8.2 7.6a3.6 3.6 0 0 1 6.6-1.2M6.3 4.4l.9.9M11 2.6v1.3M15.7 4.4l-.9.9" {...stroke(color, 1.7)} />
+      <Path d="M7.5 19.5h9.2a3.6 3.6 0 0 0 .4-7.2 5 5 0 0 0-9.6 1.1 3.1 3.1 0 0 0 0 6.1z" {...stroke(color, 1.8)} />
+    </>,
+  },
+  cloud: {
+    viewBox: "0 0 24 24", draw: ({ color }) => <Path d="M7 18.5h10a4 4 0 0 0 .5-8 5.5 5.5 0 0 0-10.6 1.3A3.4 3.4 0 0 0 7 18.5z" {...stroke(color, 1.8)} />,
+  },
+  fog: {
+    viewBox: "0 0 24 24", draw: ({ color }) => <>
+      <Path d="M7 13.5h10a3.6 3.6 0 0 0 .4-7.2 5 5 0 0 0-9.6 1.1A3.1 3.1 0 0 0 7 13.5z" {...stroke(color, 1.7)} />
+      <Path d="M4.5 17h15M6.5 20.5h11" {...stroke(color, 1.7)} />
+    </>,
+  },
+  rain: {
+    viewBox: "0 0 24 24", draw: ({ color }) => <>
+      <Path d="M7 14.5h10a3.8 3.8 0 0 0 .4-7.6 5.2 5.2 0 0 0-10 1.2A3.2 3.2 0 0 0 7 14.5z" {...stroke(color, 1.8)} />
+      <Path d="M8.5 17.5l-1 2.5M12.5 17.5l-1 2.5M16.5 17.5l-1 2.5" {...stroke(color, 1.8)} />
+    </>,
+  },
+  snow: {
+    viewBox: "0 0 24 24", draw: ({ color }) => <>
+      <Path d="M7 13.5h10a3.6 3.6 0 0 0 .4-7.2 5 5 0 0 0-9.6 1.1A3.1 3.1 0 0 0 7 13.5z" {...stroke(color, 1.7)} />
+      <Path d="M8.5 17.2v3M7.2 18.7h2.6M15.5 17.2v3M14.2 18.7h2.6M12 18.4v3M10.7 19.9h2.6" {...stroke(color, 1.5)} />
+    </>,
+  },
+  storm: {
+    viewBox: "0 0 24 24", draw: ({ color }) => <>
+      <Path d="M7 14h10a3.6 3.6 0 0 0 .4-7.2 5 5 0 0 0-9.6 1.1A3.1 3.1 0 0 0 7 14z" {...stroke(color, 1.7)} />
+      <Path d="M12.5 15.5l-2 3.2h3l-2 3" {...stroke(color, 1.8)} />
+    </>,
+  },
 } satisfies Record<string, Drawing>;
 
 export type IconName = keyof typeof ICONS;

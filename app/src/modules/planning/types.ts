@@ -2,6 +2,7 @@
 
 import type { MainProtein, MealType, Season, Spiciness } from "../recipes/types";
 import type { HouseholdPreferences } from "../recipes/preferences";
+import type { DayWeather } from "./weather";
 
 /** Date du calendrier au format AAAA-MM-JJ. */
 export type IsoDate = string;
@@ -91,6 +92,8 @@ export interface Proposal {
   usesPurchased: string[];
   /** Raisons lisibles du classement (équilibre, variété, fraîcheur). */
   reasons: string[];
+  /** Raison météo affichée sur la carte (« Plat frais : 31 °C prévus »), si la météo a pesé en faveur du plat. */
+  weatherNote?: string;
 }
 
 /** Objectifs d'équilibre pour 7 repas (repères PNNS), ramenés au nombre de repas planifiés. */
@@ -116,4 +119,6 @@ export interface PlannerContext {
   /** Nombre de refus passés par recette, toutes planifications confondues. */
   rejectionCounts?: Record<string, number>;
   targets?: Partial<BalanceTargets>;
+  /** Prévisions de Rochefort-du-Gard par jour (absentes hors réseau : la météo ne compte pas). */
+  weather?: Record<IsoDate, DayWeather>;
 }

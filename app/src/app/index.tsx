@@ -15,6 +15,7 @@ import { WeekRibbon } from "../components/WeekRibbon";
 import { BottomNav, Button, ErrorText } from "../components/ui";
 import { dayLabel, mealLabel, minutes } from "../lib/format";
 import { illustrationUrls, pictureOf, preloadPictures, placeholderOf, sourceOf, type Picture } from "../lib/images";
+import { loadWeather } from "../lib/weather";
 import { setShoppingCount, toBuyLines } from "../lib/shoppingCount";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
@@ -22,7 +23,7 @@ import { BRAND_FONT, useColors } from "../lib/theme";
 import { useTimers } from "../lib/timers";
 import {
   addDays, cancelMealChoice, ensureSlot, getShoppingList, getWeekSlots, moveMealChoice, savePlan, toIsoDate, weekDates, type ShoppingItem, type SlotRequest,
-  type WeekSlot,
+  type DayWeather, type WeekSlot,
 } from "../modules/planning";
 import type { MealType } from "../modules/recipes";
 import { errorText } from "../lib/errors";
@@ -119,6 +120,12 @@ export default function Accueil() {
       setError(errorText(e));
     }
   }, [household.id, today, days]);
+
+  // Prévisions de Rochefort-du-Gard (lues au plus une fois par heure) : météo sur les cartes des jours.
+  const [weather, setWeather] = useState<Record<string, DayWeather>>({});
+  useFocusEffect(useCallback(() => {
+    loadWeather().then(setWeather, () => undefined);
+  }, []));
 
   useFocusEffect(useCallback(() => {
     load();
@@ -289,7 +296,7 @@ export default function Accueil() {
           <View style={styles.planning}>
             <WeekRibbon days={days} today={today} planOf={choiceOf} slotOf={(d, m) => slots[`${d}:${m}`]} picture={picture}
               busy={busy !== null} onChange={update} onOpen={open} onCancel={cancel} onMove={move} onDragChange={setDragging}
-              isPast={isPast} compact={compact} onPlanMore={() => setPlanning(true)} />
+              isPast={isPast} compact={compact} onPlanMore={() => setPlanning(true)} weather={weather} />
           </View>
         )}
 
