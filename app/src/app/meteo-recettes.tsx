@@ -129,9 +129,9 @@ export default function MeteoRecettes() {
   const header = (
     <View style={styles.header}>
       <Muted>
-        Les menus proposés suivent ce classement selon la météo prévue à Rochefort-du-Gard : par 28 °C et plus, les plats
-        « temps chaud » passent devant ; par 10 °C et moins, les plats « temps froid ». En pointillés : suggestion d'après le
-        nom du plat, en attendant votre choix.
+        Les menus proposés suivent ce classement selon la météo prévue à Rochefort-du-Gard : par temps froid, les plats
+        « temps froid », « plutôt froid » et « tout temps » sont proposés, les plats chauds reculent ; inversement par temps
+        chaud. En pointillés : suggestion d'après le nom du plat, en attendant votre choix.
       </Muted>
       <View>
         <Field value={search} placeholder="Rechercher une recette" style={{ paddingLeft: 44 }} onChangeText={setSearch} />

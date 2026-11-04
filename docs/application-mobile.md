@@ -176,11 +176,14 @@ saucisses, charcuterie, cordon bleu ; bœuf : bœuf, veau, corned beef) ; un ing
   « À vérifier ». Le choix est enregistré pour le foyer (table `recipe_weather`) ; sans choix, une suggestion déduite du
   nom du plat s'affiche en pointillés (salades, taboulé, wraps : temps chaud ; papillotes, grillades : plutôt chaud ;
   gratins, purées, lasagnes : plutôt froid ; soupes, veloutés, raclette, tartiflette, grands mijotés : temps froid).
-- **Effet sur les propositions** (température maximale du jour du repas) : 28 °C et plus : +4 pour un plat « temps
-  chaud », +2 « plutôt chaud », −3 « plutôt froid », −5 « temps froid », −2 de plus pour une cuisson longue (plat non
-  classé chaud) ; 24 à 27 °C : +1,5 / +1 / −1 / −1,5 ; 11 à 15 °C : +1,5 « temps froid », +1 « plutôt froid », −0,5 /
-  −1 pour les plats chauds ; 10 °C et moins : +3 / +2 / −1,5 / −3 ; pluie (3 mm et plus) : +1,5 / +1 pour les plats froids,
-  −1 « temps chaud ». La carte proposée l'indique (« Plat frais : 31 °C prévus », « Plat chaud et réconfortant : 8 °C au
+- **Effet sur les propositions** (température maximale du jour du repas), choix souple depuis la version 0.29.2 : quand
+  il fait froid, les plats « temps froid », « plutôt froid » et « tout temps » restent tous proposés (léger avantage aux
+  premiers) et seuls les plats « plutôt chaud » et « temps chaud » reculent nettement ; inversement quand il fait chaud.
+  28 °C et plus : +1 « temps chaud », +0,5 « plutôt chaud », 0 « tout temps », −3 « plutôt froid », −5 « temps froid »,
+  −1 de plus pour une cuisson longue (plat non classé chaud) ; 24 à 27 °C : +0,5 / +0,5 / 0 / −1,5 / −3 ; 11 à 15 °C :
+  +0,5 « temps froid » et « plutôt froid », 0, −1,5 « plutôt chaud », −3 « temps chaud » ; 10 °C et moins : +1 / +0,5 / 0 /
+  −3 / −5 ; pluie (3 mm et plus) : +0,5 pour les plats froids, −1 « temps chaud ». Auparavant (+4 / +2 par forte chaleur,
+  +3 / +2 par grand froid), les plats « tout temps » passaient presque toujours après. La carte proposée l'indique (« Plat frais : 31 °C prévus », « Plat chaud et réconfortant : 8 °C au
   plus, pluie ») ; la météo du jour s'affiche sur les cartes de l'accueil et en tête des propositions ; les idées de
   Mistral reçoivent la consigne (« plat frais ou léger, sans four »).
 - **Saison** : un plat hors saison recule (−6), un plat propre à la saison (une ou deux saisons) avance un peu (+1,5).

@@ -51,11 +51,11 @@ describe("classement par temps (de -2 temps froid à 2 temps chaud)", () => {
 
   it("le choix du foyer l'emporte sur la suggestion", () => {
     // Pizza (tout temps d'après le nom) classée « temps chaud » par le foyer : en avant par forte chaleur.
-    expect(weatherAdjustment({ name: "Pizza reine", totalMin: 30 }, day(31), 2)).toEqual({ delta: 4, note: "Plat frais : 31 °C prévus" });
+    expect(weatherAdjustment({ name: "Pizza reine", totalMin: 30 }, day(31), 2)).toEqual({ delta: 1, note: "Plat frais : 31 °C prévus" });
     // Gratin classé « tout temps » : plus de malus quand il fait chaud.
     expect(weatherAdjustment({ name: "Gratin de courgettes au chèvre", totalMin: 45 }, day(31), 0)).toEqual({ delta: 0, note: undefined });
     // Salade classée « plutôt froid » : en avant par temps frais.
-    expect(weatherAdjustment({ name: "Salade de chèvre chaud", totalMin: 25 }, day(9), -1)).toEqual({ delta: 2, note: "Plat réconfortant : 9 °C au plus" });
+    expect(weatherAdjustment({ name: "Salade de chèvre chaud", totalMin: 25 }, day(9), -1)).toEqual({ delta: 0.5, note: "Plat réconfortant : 9 °C au plus" });
   });
 
   it("plutôt chaud ou plutôt froid : bonus plus faible que temps chaud ou temps froid", () => {
@@ -67,19 +67,31 @@ describe("classement par temps (de -2 temps froid à 2 temps chaud)", () => {
 });
 
 describe("bonus et malus selon la météo du jour", () => {
-  it("chaleur : plat frais en avant, plat réconfortant et cuisson longue en retrait", () => {
-    expect(weatherAdjustment({ name: "Salade grecque", totalMin: 15 }, day(32))).toEqual({ delta: 4, note: "Plat frais : 32 °C prévus" });
+  it("chaleur : plat frais un peu en avant, plat réconfortant en retrait, cuisson longue légèrement", () => {
+    expect(weatherAdjustment({ name: "Salade grecque", totalMin: 15 }, day(32))).toEqual({ delta: 1, note: "Plat frais : 32 °C prévus" });
     expect(weatherAdjustment({ name: "Raclette", totalMin: 35 }, day(32)).delta).toBe(-5);
-    expect(weatherAdjustment({ name: "Poulet rôti et pommes de terre au four", totalMin: 100 }, day(32)).delta).toBe(-2);
+    expect(weatherAdjustment({ name: "Poulet rôti et pommes de terre au four", totalMin: 100 }, day(32)).delta).toBe(-1);
     expect(weatherAdjustment({ name: "Saumon en papillote, courgettes et citron", totalMin: 35 }, day(30)).note).toBe("Plat léger : 30 °C prévus");
   });
 
-  it("froid ou pluie : plat chaud et réconfortant en avant, plat frais en retrait", () => {
-    expect(weatherAdjustment({ name: "Velouté de potimarron", totalMin: 45 }, day(8))).toEqual({ delta: 3, note: "Plat chaud et réconfortant : 8 °C au plus" });
-    expect(weatherAdjustment({ name: "Salade grecque", totalMin: 15 }, day(8)).delta).toBe(-3);
+  it("froid ou pluie : plat chaud et réconfortant un peu en avant, plat frais en retrait", () => {
+    expect(weatherAdjustment({ name: "Velouté de potimarron", totalMin: 45 }, day(8))).toEqual({ delta: 1, note: "Plat chaud et réconfortant : 8 °C au plus" });
+    expect(weatherAdjustment({ name: "Salade grecque", totalMin: 15 }, day(8)).delta).toBe(-5);
     const rainy = weatherAdjustment({ name: "Hachis parmentier", totalMin: 60 }, day(18, { rainMm: 12, code: 63 }));
-    expect(rainy).toEqual({ delta: 1, note: "Plat réconfortant : pluie prévue" });
+    expect(rainy).toEqual({ delta: 0.5, note: "Plat réconfortant : pluie prévue" });
     expect(weatherAdjustment({ name: "Soupe de lentilles et carottes", totalMin: 45 }, day(13, { rainMm: 5 })).note).toBe("Plat réconfortant : 13 °C au plus, pluie");
+  });
+
+  it("choix souple : par temps froid, froid, plutôt froid et tout temps restent proposés ; inversement par temps chaud", () => {
+    const delta = (t: number, level: -2 | -1 | 0 | 1 | 2) => weatherAdjustment({ name: "x", totalMin: 30 }, day(t), level).delta;
+    for (const [t, ok, out] of [[6, [-2, -1, 0], [1, 2]], [32, [2, 1, 0], [-1, -2]]] as const) {
+      const kept = ok.map((l) => delta(t, l));
+      // Plats du bon côté et « tout temps » : à égalité ou presque (au plus 1 point d'écart), jamais en recul.
+      expect(Math.min(...kept)).toBeGreaterThanOrEqual(0);
+      expect(Math.max(...kept) - Math.min(...kept)).toBeLessThanOrEqual(1);
+      // Plats de l'autre côté : nettement en retrait.
+      for (const l of out) expect(delta(t, l)).toBeLessThanOrEqual(-3);
+    }
   });
 
   it("temps doux ou sans prévision : rien ne change", () => {

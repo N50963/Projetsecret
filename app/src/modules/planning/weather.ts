@@ -81,14 +81,20 @@ export const isLongCooking = (r: { name: string; totalMin: number }) => r.totalM
 
 const degrees = (t: number) => `${Math.round(t)} °C`;
 
-/** Bonus ou malus selon le classement du plat (de -2 à 2), pour chaque type de temps. */
+/**
+ * Bonus ou malus selon le classement du plat (de -2 à 2), pour chaque type de temps. Choix souple : quand il fait froid,
+ * les plats « temps froid », « plutôt froid » et « tout temps » restent tous proposés (léger avantage aux premiers) ;
+ * seuls les plats « plutôt chaud » et « temps chaud » reculent nettement. Inversement quand il fait chaud.
+ */
 const BONUS: Record<"hot" | "warm" | "cool" | "cold" | "rain", Record<WeatherLevel, number>> = {
-  hot: { [-2]: -5, [-1]: -3, 0: 0, 1: 2, 2: 4 },
-  warm: { [-2]: -1.5, [-1]: -1, 0: 0, 1: 1, 2: 1.5 },
-  cool: { [-2]: 1.5, [-1]: 1, 0: 0, 1: -0.5, 2: -1 },
-  cold: { [-2]: 3, [-1]: 2, 0: 0, 1: -1.5, 2: -3 },
-  rain: { [-2]: 1.5, [-1]: 1, 0: 0, 1: 0, 2: -1 },
+  hot: { [-2]: -5, [-1]: -3, 0: 0, 1: 0.5, 2: 1 },
+  warm: { [-2]: -3, [-1]: -1.5, 0: 0, 1: 0.5, 2: 0.5 },
+  cool: { [-2]: 0.5, [-1]: 0.5, 0: 0, 1: -1.5, 2: -3 },
+  cold: { [-2]: 1, [-1]: 0.5, 0: 0, 1: -3, 2: -5 },
+  rain: { [-2]: 0.5, [-1]: 0.5, 0: 0, 1: 0, 2: -1 },
 };
+/** Cuisson longue (four, mijotage) d'un plat « tout temps » ou froid par forte chaleur : léger recul. */
+const LONG_COOKING_HOT = -1;
 
 /**
  * Bonus ou malus d'un plat selon la météo du jour du repas et son classement (celui du foyer, sinon celui déduit du nom),
@@ -103,7 +109,7 @@ export function weatherAdjustment(r: { name: string; totalMin: number }, day: Da
   if (t >= WARM) {
     delta += BONUS[t >= HOT ? "hot" : "warm"][level];
     if (level >= 1) note = `${level === 2 ? "Plat frais" : "Plat léger"} : ${degrees(t)} prévus`;
-    if (t >= HOT && level <= 0 && isLongCooking(r)) delta -= 2;
+    if (t >= HOT && level <= 0 && isLongCooking(r)) delta += LONG_COOKING_HOT;
   } else if (t <= COOL) {
     delta += BONUS[t <= COLD ? "cold" : "cool"][level];
     if (level <= -1) note = `${level === -2 && t <= COLD ? "Plat chaud et réconfortant" : "Plat réconfortant"} : ${degrees(t)} au plus`;
