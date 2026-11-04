@@ -108,6 +108,7 @@ export async function listRecipes(supabase: SupabaseClient, filters: RecipeFilte
     return q.order("name").order("id").range(from, to);
   };
   const max = filters.limit ?? Infinity;
+  const hidden = hiddenRecipeIds(supabase);
   const rows: Row[] = [];
   while (rows.length < max) {
     const size = Math.min(PAGE, max - rows.length);
@@ -116,7 +117,44 @@ export async function listRecipes(supabase: SupabaseClient, filters: RecipeFilte
     rows.push(...((data ?? []) as Row[]));
     if (!data || data.length < size) break;
   }
-  return rows.map(toSummary);
+  const skip = await hidden;
+  return rows.filter((r) => !skip.has(r.id)).map(toSummary);
+}
+
+/**
+ * Recettes supprimées par le foyer (masquées pour lui ; la base ne renvoie que celles de son foyer). Vide si la
+ * liste est illisible : rien n'est masqué plutôt que de bloquer l'écran.
+ */
+export async function hiddenRecipeIds(supabase: SupabaseClient): Promise<Set<string>> {
+  try {
+    const { data, error } = await supabase.from("hidden_recipes").select("recipe_id").limit(5000);
+    if (error) return new Set();
+    return new Set(((data ?? []) as Row[]).map((r) => r.recipe_id as string));
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Supprime une recette pour le foyer : elle quitte l'onglet Recettes et les propositions. Elle est masquée plutôt
+ * qu'effacée : une recette commune est partagée par tous les foyers, et les menus déjà prévus avec elle restent lisibles
+ * (nom, fiche, liste de courses). `restoreRecipe` la remet.
+ */
+export async function removeRecipe(supabase: SupabaseClient, recipeId: string, householdId: string): Promise<void> {
+  const { error } = await supabase.from("hidden_recipes")
+    .upsert({ household_id: householdId, recipe_id: recipeId }, { onConflict: "household_id,recipe_id", ignoreDuplicates: true });
+  check(error, "Suppression refusée");
+}
+
+/** Remet une recette supprimée dans l'onglet Recettes et les propositions. */
+export async function restoreRecipe(supabase: SupabaseClient, recipeId: string, householdId: string): Promise<void> {
+  const { error } = await supabase.from("hidden_recipes").delete().eq("household_id", householdId).eq("recipe_id", recipeId);
+  check(error, "Recette non remise");
+}
+
+/** Recette supprimée par le foyer (fiche ouverte depuis un menu déjà prévu). */
+export async function isRecipeHidden(supabase: SupabaseClient, recipeId: string): Promise<boolean> {
+  return (await hiddenRecipeIds(supabase)).has(recipeId);
 }
 
 /** Recette complète (version courante), ingrédients dans l'ordre. */
@@ -340,7 +378,8 @@ export async function getRecipeCandidates(supabase: SupabaseClient, householdId:
     p_season: options.season ?? null, p_max_total_min: options.maxTotalMin ?? null, p_excluded_allergens: options.excludedAllergens ?? [],
   });
   check(error, "Propositions de recettes indisponibles");
-  return ((data ?? []) as Row[]).map((r) => ({
+  const hidden = await hiddenRecipeIds(supabase);
+  return ((data ?? []) as Row[]).filter((r) => !hidden.has(r.recipe_id)).map((r) => ({
     recipeId: r.recipe_id, name: r.name, totalMin: r.total_min, mainProtein: r.main_protein, requiredCount: r.required_count,
     availableCount: r.available_count, missingCount: r.missing_count, missing: r.missing, unmapped: r.unmapped, likes: r.likes, dislikes: r.dislikes,
   }));

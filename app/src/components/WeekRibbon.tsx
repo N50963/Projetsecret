@@ -156,17 +156,21 @@ function DishRow({ slot, meal, pic, busy, dimmed, aimed, onOpen, onCancel, drag 
           </View>
         </View>
       </GestureDetector>
-      <Pressable onPress={() => onCancel(slot)} disabled={busy} accessibilityRole="button" accessibilityLabel={`Annuler ce menu : ${slot.name}`}
-        style={({ pressed: p }) => [styles.dishClose, { opacity: p ? 0.6 : 1 }]}>
-        <Icon name="cross" size={16} color={c.muted} />
-      </Pressable>
-      {drag ? (
-        <GestureDetector gesture={gestures.handle}>
-          <View style={styles.dishHandle} accessible accessibilityLabel={`Déplacer : ${slot.name}`} accessibilityHint="Glisser vers un autre jour ou un autre repas">
-            <Icon name="grip" size={20} color={c.muted} />
-          </View>
-        </GestureDetector>
-      ) : null}
+      {/* Croix et poignée dans leur propre colonne, hors de la zone de la ligne : un toucher sur la croix n'ouvre plus aussi
+          la fiche du plat (la demande de confirmation restait alors cachée derrière la fiche, jusqu'au retour). */}
+      <View style={styles.dishSide}>
+        <Pressable onPress={() => onCancel(slot)} disabled={busy} accessibilityRole="button" accessibilityLabel={`Annuler ce menu : ${slot.name}`}
+          style={({ pressed: p }) => [styles.dishClose, { opacity: p ? 0.6 : 1 }]}>
+          <Icon name="cross" size={16} color={c.muted} />
+        </Pressable>
+        {drag ? (
+          <GestureDetector gesture={gestures.handle}>
+            <View style={styles.dishHandle} accessible accessibilityLabel={`Déplacer : ${slot.name}`} accessibilityHint="Glisser vers un autre jour ou un autre repas">
+              <Icon name="grip" size={20} color={c.muted} />
+            </View>
+          </GestureDetector>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -466,18 +470,19 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 18, lineHeight: 24, fontWeight: "700" },
   cardDate: { fontSize: 14.2, lineHeight: 18 },
   cardWeather: { marginLeft: "auto", alignSelf: "center" },
-  dish: { height: 86, borderRadius: 13, borderWidth: 1, overflow: "hidden" },
+  dish: { height: 86, flexDirection: "row", borderRadius: 13, borderWidth: 1, overflow: "hidden" },
   aimed: { borderWidth: 2.5 },
-  dishLink: { flexDirection: "row", height: 84 },
+  dishLink: { flex: 1, minWidth: 0, flexDirection: "row", height: 84 },
   dishPhoto: { width: 98, height: 84 },
   dishWaiting: { alignItems: "center", justifyContent: "center" },
   dishFade: { position: "absolute", right: 0, top: 0, bottom: 0, width: 26 },
-  dishText: { flex: 1, minWidth: 0, paddingLeft: 6, paddingRight: 42, justifyContent: "center" },
+  dishText: { flex: 1, minWidth: 0, paddingLeft: 6, justifyContent: "center" },
   dishMeta: { fontSize: 14.2, lineHeight: 18 },
   dishName: { fontSize: 15.5, lineHeight: 18.5, fontWeight: "700" },
-  dishClose: { position: "absolute", right: 0, top: 0, width: 48, height: 48, alignItems: "center", justifyContent: "center" },
+  dishSide: { width: 46, height: 84 },
+  dishClose: { height: 44, alignItems: "center", justifyContent: "center" },
   // Poignée de déplacement sous la croix, sur toute la moitié basse de la ligne.
-  dishHandle: { position: "absolute", right: 0, bottom: 0, width: 48, height: 40, alignItems: "center", justifyContent: "center" },
+  dishHandle: { flex: 1, alignItems: "center", justifyContent: "center" },
   meal: { borderRadius: 13, borderWidth: 1.5 },
   mealToggle: { height: 60, paddingLeft: 9, paddingRight: 12, flexDirection: "row", alignItems: "center", gap: 11 },
   mealIcon: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },

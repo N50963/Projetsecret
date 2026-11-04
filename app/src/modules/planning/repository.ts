@@ -58,7 +58,7 @@ async function ingredientsOfVersions(supabase: SupabaseClient, versionIds: strin
 }
 
 export async function loadRecipesForPlanning(supabase: SupabaseClient, householdId: string): Promise<PlannerRecipe[]> {
-  const [catalog, ratings, weatherLevels] = await Promise.all([
+  const [all, ratings, weatherLevels, hidden] = await Promise.all([
     fetchAll((a, b) => supabase.from("recipe_catalog")
       .select("id, version_id, name, total_min, servings, main_protein, meal_types, seasons, cuisine, tags, allergens, spiciness")
       .order("id").range(a, b), "Recettes illisibles"),
@@ -66,7 +66,12 @@ export async function loadRecipesForPlanning(supabase: SupabaseClient, household
     // Classement par temps choisi par le foyer (sans lui, la météo s'appuie sur le nom du plat).
     fetchAll((a, b) => supabase.from("recipe_weather").select("recipe_id, level").eq("household_id", householdId).order("recipe_id").range(a, b), "Classement météo illisible")
       .catch(() => []),
+    // Recettes supprimées par le foyer : jamais proposées.
+    fetchAll((a, b) => supabase.from("hidden_recipes").select("recipe_id").eq("household_id", householdId).order("recipe_id").range(a, b), "Recettes supprimées illisibles")
+      .catch(() => []),
   ]);
+  const skip = new Set(hidden.map((h) => h.recipe_id as string));
+  const catalog = all.filter((r) => !skip.has(r.id));
   const levelOf = new Map(weatherLevels.map((w) => [w.recipe_id, w.level]));
   const known = await ingredientsOfVersions(supabase, catalog.map((r) => r.version_id));
   const ingredients = catalog.flatMap((r) => known.get(r.version_id) ?? []);

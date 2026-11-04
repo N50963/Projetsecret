@@ -14,7 +14,7 @@ import { StarRating } from "../../components/StarRating";
 import { StepText, TimersBar } from "../../components/Steps";
 import { Body, Button, Card, ErrorText, Field, H1, H2, HeaderIcon, Muted, Pill, Row, Screen } from "../../components/ui";
 import { minutes, proteinLabel, quantity } from "../../lib/format";
-import { ingredientPictureUrls, ingredientSource, illustrationUrls, pictureOf, uploadRecipePhoto, type Picture } from "../../lib/images";
+import { ingredientPictureUrls, ingredientSource, illustrationUrls, pictureOf, uploadRecipePhoto, usePictures, type Picture } from "../../lib/images";
 import { adaptRecipeDraft, draftToInput, type DraftRecipe } from "../../lib/mistral";
 import { pickDishPhoto } from "../../lib/photo";
 import { useHousehold } from "../../lib/session";
@@ -24,7 +24,7 @@ import { addDays, loadPurchases, PURCHASE_WINDOW_DAYS, setShoppingItemsRemoved, 
 import { CARD_SHADOW, useColors } from "../../lib/theme";
 import { startTimer, stopTimer, timerId, useTimers } from "../../lib/timers";
 import {
-  adaptRecipe, addNeedsToShoppingList, addRecipeVersion, archiveRecipe, getHouseholdPreferences, getLatestRating, getListedIngredients, getRecipe, getShoppingStatus, ingredientIds, isFavorite, isLabelListed, rateRecipe,
+  adaptRecipe, addNeedsToShoppingList, addRecipeVersion, getHouseholdPreferences, getLatestRating, getListedIngredients, getRecipe, getShoppingStatus, ingredientIds, isFavorite, isLabelListed, isRecipeHidden, rateRecipe, removeRecipe, restoreRecipe,
   scaleIngredients, setFavorite, toPayload, validateRecipe, type IngredientShopping, type ListedIngredients, type Recipe, type RecipeIngredient, type RecipeRating,
 } from "../../modules/recipes";
 import { errorText } from "../../lib/errors";
@@ -57,8 +57,8 @@ const cookedKey = (recipeId: string) => `recette-faite:${recipeId}`;
  * barre de notation, en haut : la note seule ne sollicite pas Mistral et pondère les propositions. La recette faite
  * (« C'est prêt »), et ce jour-là seulement : une remarque sur le contenu (goût, quantités) part à Mistral, qui propose
  * une version améliorée si la recette est améliorable (l'utilisateur la corrige et la garde, ou garde la recette actuelle). Photo du plat : icône blanche discrète en haut de la photo (appareil photo ou
- * galerie). « Plus d'options » (recettes ajoutées par le foyer) : modifier ou supprimer. Favoris et partage dans la bande
- * verte.
+ * galerie). Partage, favoris et suppression dans la bande verte ; « Modifier la recette » (recettes ajoutées par le
+ * foyer) en bas de la fiche. Une recette supprimée (fiche ouverte depuis un menu déjà prévu) peut y être remise.
  */
 export default function FicheRecette() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -70,6 +70,9 @@ export default function FicheRecette() {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   // Photo connue du téléphone affichée tout de suite ; la liste est rafraîchie au chargement.
   const [image, setImage] = useState<Picture | null>(() => pictureOf(id));
+  usePictures();
+  /** Photo du téléphone (redessinée dès qu'une nouvelle version arrive), sinon celle lue en ligne. */
+  const picture = pictureOf(id) ?? image;
   const [servings, setServings] = useState(household.defaultServings);
   const [tab, setTab] = useState<Tab>("ingredients");
   const [needs, setNeeds] = useState<IngredientShopping[]>([]);
@@ -91,7 +94,8 @@ export default function FicheRecette() {
   const [previous, setPrevious] = useState<RecipeRating | null>(null);
   const [comment, setComment] = useState("");
   const [saved, setSaved] = useState(false);
-  const [more, setMore] = useState(false);
+  /** Recette supprimée par le foyer (fiche ouverte depuis un menu déjà prévu). */
+  const [hidden, setHidden] = useState(false);
   const [photoMenu, setPhotoMenu] = useState(false);
   const scroll = useRef<ScrollViewInstance>(null);
   const [draft, setDraft] = useState<Revision | null>(null);
@@ -115,8 +119,9 @@ export default function FicheRecette() {
   const load = useCallback(async () => {
     try {
       // Recette, note, favori et photo lus ensemble (une seule attente réseau).
-      const [r, urls, rating, fav] = await Promise.all([
+      const [r, urls, rating, fav, gone] = await Promise.all([
         getRecipe(supabase, id), illustrationUrls([id]), getLatestRating(supabase, household.id, id), isFavorite(supabase, household.id, id),
+        isRecipeHidden(supabase, id),
       ]);
       setRecipe(r);
       setImage(urls[r.id] ?? null);
@@ -126,6 +131,7 @@ export default function FicheRecette() {
       setComment(ratedToday ? rating.comment ?? "" : "");
       setSaved(Boolean(ratedToday));
       setFav(fav);
+      setHidden(gone);
       AsyncStorage.getItem(cookedKey(r.id)).then(setCookedOn, () => undefined);
     } catch (e) {
       setError(errorText(e));
@@ -185,7 +191,7 @@ export default function FicheRecette() {
     return (
       <Screen title="Recette" padded={false} scroll={false}>
         <View>
-          <Illustration picture={image} height={210} rounded={0} />
+          <Illustration picture={picture} height={210} rounded={0} />
           <LinearGradient colors={["rgba(254,243,227,0)", "rgba(254,243,227,0.7)", c.background]} locations={[0, 0.6, 1]}
             style={styles.photoFade} pointerEvents="none" />
         </View>
@@ -299,17 +305,22 @@ export default function FicheRecette() {
     setDraft({ kind: "mistral", recipe: result.recipe, issues: result.issues, change_note: result.change_note });
   });
   const editRecipe = () => {
-    setMore(false);
     setDraft({ kind: "edit", recipe: toPayload(recipe) as unknown as DraftRecipe, issues: [], change_note: "" });
   };
   const deleteRecipe = () => ask({
-    title: "Supprimer cette recette ?", picture: image, name: recipe.name, detail: "Recette du foyer",
-    message: "Elle ne sera plus proposée et n'apparaîtra plus dans l'onglet Recettes.",
+    title: "Supprimer cette recette ?", picture, name: recipe.name, detail: own ? "Recette du foyer" : "Recette de MenuBily",
+    message: "Elle ne sera plus proposée et n'apparaîtra plus dans l'onglet Recettes. Les menus déjà prévus avec elle restent.",
     confirmLabel: "Supprimer la recette", cancelLabel: "Garder la recette", icon: "trash",
     onConfirm: () => act("delete", async () => {
-      await archiveRecipe(supabase, recipe.id);
-      router.back();
+      await removeRecipe(supabase, recipe.id, household.id);
+      if (router.canGoBack()) router.back();
+      else setHidden(true);
     }),
+  });
+  const restore = () => act("restore", async () => {
+    await restoreRecipe(supabase, recipe.id, household.id);
+    setHidden(false);
+    setInfo("Recette remise dans l'onglet Recettes et dans les propositions.");
   });
   const saveRevision = () => act("save", async () => {
     if (!draft) return;
@@ -334,10 +345,11 @@ export default function FicheRecette() {
       <View style={{ flexDirection: "row" }}>
         <HeaderIcon name="share" label="Partager" onPress={share} size={23} />
         <HeaderIcon name={favorite ? "heart" : "heartOutline"} label={favorite ? "Retirer des favoris" : "Ajouter aux favoris"} onPress={toggleFavorite} />
+        {!hidden ? <HeaderIcon name="trash" label="Supprimer la recette" onPress={deleteRecipe} size={22} /> : null}
       </View>
     )}>
       <View>
-        <Illustration picture={image} height={210} rounded={0} />
+        <Illustration picture={picture} height={210} rounded={0} />
         {/* Fondu du bas : la photo se fond dans le fond de la fiche, sans démarcation nette. */}
         <LinearGradient colors={["rgba(254,243,227,0)", "rgba(254,243,227,0.7)", c.background]} locations={[0, 0.6, 1]}
           style={styles.photoFade} pointerEvents="none" />
@@ -584,28 +596,20 @@ export default function FicheRecette() {
         <ErrorText>{error}</ErrorText>
       </View>
 
-      {own && (
+      {hidden ? (
         <View style={styles.section}>
-          <Pressable onPress={() => {
-            setMore((m) => !m);
-            // Le contenu déplié est en bas de la fiche : il est amené à l'écran.
-            if (!more) setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 80);
-          }} accessibilityRole="button" accessibilityState={{ expanded: more }}
-            style={({ pressed }) => [styles.more, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.8 : 1 }]}>
-            <Text style={{ color: c.text, fontSize: 16, fontWeight: "600" }}>Plus d’options</Text>
-            <Icon name={more ? "chevronUp" : "chevronDown"} size={18} color={c.text} />
-          </Pressable>
-          {more && (
-            <Card>
-              <H2>Fiche recette</H2>
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                <Button title="Modifier" kind="secondary" onPress={editRecipe} style={{ flex: 1 }} />
-                <Button title="Supprimer" kind="danger" icon="trash" onPress={deleteRecipe} busy={busy === "delete"} style={{ flex: 1 }} />
-              </View>
-            </Card>
-          )}
+          <Card>
+            <H2>Recette supprimée</H2>
+            <Muted>Elle n'est plus proposée et n'apparaît plus dans l'onglet Recettes.</Muted>
+            <Button title="Remettre dans mes recettes" kind="secondary" onPress={restore} busy={busy === "restore"} />
+          </Card>
         </View>
-      )}
+      ) : own ? (
+        <View style={[styles.section, { flexDirection: "row", gap: 8 }]}>
+          <Button title="Modifier la recette" kind="secondary" onPress={editRecipe} style={{ flex: 1 }} />
+          <Button title="Supprimer" kind="danger" icon="trash" onPress={deleteRecipe} busy={busy === "delete"} style={{ flex: 1 }} />
+        </View>
+      ) : null}
 
       {draft && (
         <View style={[styles.section, { gap: 12 }]}>
@@ -659,5 +663,4 @@ const styles = StyleSheet.create({
   timer: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, alignSelf: "flex-start" },
   durations: { flexDirection: "row", gap: 5.5, marginLeft: 17.5, marginRight: 13, marginTop: 10 },
   duration: { flex: 1, height: 56, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  more: { height: 48, borderRadius: 24, borderWidth: 1.5, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
 });

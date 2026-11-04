@@ -1,16 +1,17 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, Vibration, View } from "react-native";
 
+import { useConfirm } from "../components/ConfirmSheet";
 import { Icon } from "../components/icons";
 import { Illustration } from "../components/Illustration";
 import { Button, Chip, ErrorText, Field, Muted, Screen } from "../components/ui";
 import { minutes, proteinLabel } from "../lib/format";
-import { illustrationUrls, pictureOf, type Picture } from "../lib/images";
+import { illustrationUrls, pictureOf, usePictures, type Picture } from "../lib/images";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { CARD_SHADOW, useColors } from "../lib/theme";
-import { latestStars, listFavorites, listRecipes, type RecipeSummary, type Stars } from "../modules/recipes";
+import { latestStars, listFavorites, listRecipes, removeRecipe, type RecipeSummary, type Stars } from "../modules/recipes";
 import { errorText } from "../lib/errors";
 
 /** Filtre par note : toutes, au moins N étoiles, ou pas encore notées. */
@@ -29,7 +30,10 @@ function SmallStars({ value }: { value: number }) {
   );
 }
 
-/** Recettes (onglet de la barre du bas) : recherche, favoris, filtre par note, une carte par recette avec sa photo et sa note. */
+/**
+ * Recettes (onglet de la barre du bas) : recherche, favoris, filtre par note, une carte par recette avec sa photo et sa note.
+ * Toucher une recette ouvre sa fiche ; un appui long propose de la supprimer.
+ */
 export default function Recettes() {
   const router = useRouter();
   const household = useHousehold();
@@ -42,6 +46,8 @@ export default function Recettes() {
   const [stars, setStars] = useState<Map<string, Stars>>(new Map());
   const [images, setImages] = useState<Record<string, Picture | null>>({});
   const [error, setError] = useState("");
+  const [ask, confirmSheet] = useConfirm();
+  const pictures = usePictures();
 
   /** Numéro de la dernière recherche : une réponse plus ancienne, arrivée après, n'écrase pas les résultats. */
   const latest = useRef(0);
@@ -68,6 +74,25 @@ export default function Recettes() {
     load(search);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]));
+
+  /** Appui long : demande de suppression ; la recette quitte la liste dès la confirmation (remise si la base refuse). */
+  const remove = (r: RecipeSummary) => {
+    Vibration.vibrate(30);
+    ask({
+      title: "Supprimer cette recette ?", picture: pictureOf(r.id) ?? images[r.id], name: r.name,
+      detail: r.householdId === household.id ? "Recette du foyer" : "Recette de MenuBily",
+      message: "Elle ne sera plus proposée et n'apparaîtra plus dans l'onglet Recettes. Les menus déjà prévus avec elle restent.",
+      confirmLabel: "Supprimer la recette", cancelLabel: "Garder la recette", icon: "trash",
+      onConfirm: () => {
+        latest.current += 1;
+        setRecipes((list) => list.filter((x) => x.id !== r.id));
+        removeRecipe(supabase, r.id, household.id).catch((e) => {
+          setError(errorText(e));
+          load(search);
+        });
+      },
+    });
+  };
 
   const shown = recipes.filter((r) => {
     if (onlyFavorites && !favorites.has(r.id)) return false;
@@ -118,12 +143,14 @@ export default function Recettes() {
         initialNumToRender={12}
         maxToRenderPerBatch={12}
         windowSize={7}
+        extraData={pictures}
         renderItem={({ item: r }) => {
           const note = stars.get(r.id);
           return (
-            <Pressable onPress={() => router.push(`/recette/${r.id}`)} accessibilityRole="button" accessibilityLabel={`Ouvrir la fiche : ${r.name}`}
+            <Pressable onPress={() => router.push(`/recette/${r.id}`)} onLongPress={() => remove(r)} delayLongPress={450}
+              accessibilityRole="button" accessibilityLabel={`Ouvrir la fiche : ${r.name}`} accessibilityHint="Appui long pour supprimer la recette"
               style={({ pressed }) => [styles.item, { backgroundColor: c.card, borderColor: c.cardLine, opacity: pressed ? 0.8 : 1 }, CARD_SHADOW]}>
-              <Illustration picture={images[r.id] ?? pictureOf(r.id)} height={66} width={86} rounded={9} />
+              <Illustration picture={pictureOf(r.id) ?? images[r.id]} height={66} width={86} rounded={9} />
               <View style={styles.text}>
                 <Text style={[styles.name, { color: c.text }]} numberOfLines={2}>{r.name}</Text>
                 <View style={styles.meta}>
@@ -143,6 +170,7 @@ export default function Recettes() {
           </Muted>
         }
       />
+      {confirmSheet}
     </Screen>
   );
 }

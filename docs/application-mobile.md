@@ -79,7 +79,7 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    recette ne change jamais) : la recherche par ingrédient de l'accueil les charge, les propositions s'ouvrent ensuite
    sans les relire (5,9 s → 2,4 s mesurées depuis un serveur éloigné de Supabase).
    Les ingrédients manquants des recettes choisies vont sur la liste de courses.
-8. **Fiches recettes** : photo du plat (« Plus d'options » › Photo du plat : appareil photo ou galerie ; la photo prise
+8. **Fiches recettes** : photo du plat (icône d'appareil photo en haut de la photo : appareil photo ou galerie ; la photo prise
    avec le téléphone remplace l'image créée par Mistral, qui ne l'écrase jamais), temps de préparation, de cuisson et
    total en haut de la fiche (photo libre de Commons, image créée par Mistral ou visuel fourni par le foyer : 108 plats,
    fichiers de data/photos-plats copiés en ligne par la fonction foyer-photos ; photo gardée sur le téléphone, affichée
@@ -97,8 +97,12 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    entières). Pas de demande de modification à Mistral sans remarque. « Bon appétit ! » propose aussi de mettre sa propre photo du plat.
 10. **Recettes** (onglet de la barre du bas) : recherche (lancée quand la saisie marque une pause ; une réponse plus
    ancienne n'écrase jamais les résultats), filtre Favoris, filtre par note (5 étoiles, 4 et +, 3 et +,
-   non notées), note affichée sur chaque ligne. Les recettes ajoutées par le foyer se modifient ou se suppriment depuis
-   leur fiche (« Plus d'options » › Modifier / Supprimer) ; les recettes de la base commune ne sont pas modifiables.
+   non notées), note affichée sur chaque ligne. Un appui long sur une recette propose de la supprimer (panneau de
+   confirmation au style de l'application). Sur la fiche, la corbeille de la bande verte supprime la recette ; les
+   recettes ajoutées par le foyer ont en bas de fiche « Modifier la recette » et « Supprimer » ; les recettes de la base
+   commune ne sont pas modifiables. Une recette supprimée est masquée pour le foyer (table `hidden_recipes`), pas
+   effacée : elle quitte l'onglet Recettes, le tableau météo et les propositions, mais les menus déjà prévus avec elle
+   gardent leur nom et leur fiche, qui propose « Remettre dans mes recettes ».
 11. **Ajout de recettes** : cinq sources, mises en forme par Mistral (durées de cuisson, feu et température précisés :
    chaque étape avec une durée aura son minuteur) :
    - **Photo** de la recette (livre, fiche, écran, papier manuscrit), jusqu'à 4 pages (appareil photo ou galerie,
@@ -183,9 +187,14 @@ saucisses, charcuterie, cordon bleu ; bœuf : bœuf, veau, corned beef) ; un ing
   livrée avec l'application. Au lancement, l'application compare la liste en ligne (date de chaque image = sa version)
   aux fichiers du téléphone et télécharge les illustrations nouvelles ou modifiées dans son dossier permanent
   (`Paths.document/illustrations`, 6 téléchargements en parallèle), avec une barre discrète au-dessus des onglets
-  (« Mise à jour des illustrations · 37 / 363 », puis « Illustrations à jour » et fondu). Les miniatures de 240 px des
-  listes sont créées sur le téléphone. Ensuite tout s'affiche depuis le téléphone, instantanément et sans réseau ; une
-  nouvelle illustration ne demande pas de nouvelle version de l'application. Première ouverture : ≈ 20 Mo (145 photos
+  (« Mise à jour des illustrations · 37 / 363 », puis « Illustrations à jour » et fondu). Les miniatures de 480 px des
+  listes et du ruban de la semaine sont créées sur le téléphone (240 px jusqu'à la version 0.28 : floues dans les cases
+  du ruban, refaites une fois depuis les photos du téléphone, sans réseau). Ensuite tout s'affiche depuis le téléphone,
+  instantanément et sans réseau ; une nouvelle illustration ne demande pas de nouvelle version de l'application.
+  Version 0.29.0 : une photo du téléphone s'affiche toujours nette, même quand une version plus récente attend son
+  téléchargement (auparavant, la miniature floue s'affichait le temps de télécharger la nouvelle, plusieurs secondes
+  pendant une mise à jour) ; les écrans se redessinent dès qu'une illustration arrive (`usePictures`), et les
+  illustrations demandées par l'écran affiché sont téléchargées en premier. Première ouverture : ≈ 20 Mo (145 photos
   de plats et 217 vignettes). Liste relue toutes les 2 minutes au plus quand un écran demande des images (nouvel essai
   10 minutes après une coupure réseau). Code : `app/src/lib/images.ts`, barre `app/src/components/UpdateBar.tsx`.
 - Ajouter ou remplacer des illustrations : visuels de plats dans `data/photos-plats/<id de recette>.jpg` (JPEG ≤ 400 Ko),

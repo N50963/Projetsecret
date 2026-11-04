@@ -12,7 +12,7 @@ import { Illustration } from "../components/Illustration";
 import { Icon, type IconName } from "../components/icons";
 import { Chip, ErrorText, Field, Muted, Screen } from "../components/ui";
 import { errorText } from "../lib/errors";
-import { illustrationUrls, pictureOf, type Picture } from "../lib/images";
+import { illustrationUrls, pictureOf, usePictures, type Picture } from "../lib/images";
 import { getWeatherLevels, setWeatherLevel } from "../lib/recipeWeather";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
@@ -51,6 +51,7 @@ export default function MeteoRecettes() {
   /** Recettes dont l'enregistrement est en cours (bouton à l'opacité réduite). */
   const [saving, setSaving] = useState<Set<string>>(new Set());
   const latest = useRef(new Map<string, number>());
+  const pictures = usePictures();
 
   useEffect(() => {
     (async () => {
@@ -156,7 +157,7 @@ export default function MeteoRecettes() {
           initialNumToRender={10}
           maxToRenderPerBatch={10}
           windowSize={7}
-          extraData={[chosen, saving]}
+          extraData={[chosen, saving, pictures]}
           ListEmptyComponent={<Muted>Aucune recette avec ce filtre.</Muted>}
           renderItem={({ item: r }) => {
             const { level, mine } = levelOf(r);
@@ -164,7 +165,7 @@ export default function MeteoRecettes() {
               <View style={[styles.row, { backgroundColor: c.card, borderColor: c.cardLine }, CARD_SHADOW]}>
                 <Pressable onPress={() => router.push(`/recette/${r.id}`)} accessibilityRole="button" accessibilityLabel={`Ouvrir la fiche : ${r.name}`}
                   style={({ pressed }) => [styles.title, { opacity: pressed ? 0.7 : 1 }]}>
-                  <Illustration picture={images[r.id] ?? pictureOf(r.id)} height={42} width={56} rounded={8} />
+                  <Illustration picture={pictureOf(r.id) ?? images[r.id]} height={42} width={56} rounded={8} />
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[styles.name, { color: c.text }]} numberOfLines={2}>{r.name}</Text>
                     {!mine && <Text style={[styles.hint, { color: c.muted }]}>Suggestion, à vérifier</Text>}

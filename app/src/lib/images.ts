@@ -5,11 +5,12 @@
  *   dans le dossier permanent de l'application, avec une barre de mise à jour discrète en bas de l'écran
  *   (`useIllustrationUpdate`). Elles s'affichent ensuite depuis le téléphone : instantanément et sans réseau. Une nouvelle
  *   illustration ne demande donc pas de nouvelle version de l'application.
- * - Photos des plats : la photo en ligne (≈ 1 173 px, pour la fiche et les grandes cartes) et une miniature de 240 px
- *   créée sur le téléphone (listes, ruban de la semaine, liste de courses) : décodage rapide des petites images.
+ * - Photos des plats : la photo en ligne (≈ 1 200 à 1 400 px, pour la fiche et les grandes cartes) et une miniature de
+ *   480 px créée sur le téléphone (listes, ruban de la semaine, liste de courses) : nette en petit, décodée vite.
  * - Photos prises par le foyer (seau privé household-photos) : téléchargées par lien temporaire, gardées comme les autres.
- * - Tant qu'une illustration n'est pas encore sur le téléphone, son lien en ligne est affiché (avec l'ancienne version
- *   du téléphone en attendant, s'il y en a une).
+ * - Une illustration du téléphone s'affiche toujours, nette, même si une version plus récente attend d'être téléchargée :
+ *   la nouvelle la remplace dès son arrivée (`usePictures` fait redessiner les écrans). Seule une illustration absente du
+ *   téléphone est lue en ligne. Les illustrations demandées par l'écran affiché sont téléchargées en premier.
  * - Version web (aperçus) : pas de fichiers ; les images sont lues en ligne et gardées par le navigateur.
  * Plan gratuit Supabase (5 Go de sortie réseau par mois) : chaque illustration n'est téléchargée qu'une fois par téléphone.
  */
@@ -29,7 +30,8 @@ const INGREDIENT_BUCKET = "ingredient-images";
 const PAGE = 1000;
 const LINK_SECONDS = 7 * 24 * 3600;
 const PHOTO_MAX_WIDTH = 1024;
-const MINI_WIDTH = 240;
+/** Largeur des miniatures : nette dans le ruban de la semaine (98 × 84 points, image recadrée) jusqu'à 3 pixels par point. */
+const MINI_WIDTH = 480;
 /** Téléchargements en parallèle pendant la mise à jour. */
 const PARALLEL = 6;
 /** La liste en ligne est relue après ce délai (images créées entre-temps par la tâche planifiée ou par le foyer). */
@@ -48,10 +50,8 @@ export interface Picture {
   version?: string;
   /** Photo du foyer (seau privé). */
   photo?: boolean;
-  /** Miniature de 240 px (fichier du téléphone) pour les petits affichages. */
+  /** Miniature (fichier du téléphone) pour les petits affichages. */
   mini?: string;
-  /** Ancienne version gardée sur le téléphone, affichée pendant le téléchargement de la nouvelle : rien ne reste vide. */
-  fallback?: string;
   /** Image lue sur le téléphone (sans réseau). */
   local?: boolean;
 }
@@ -60,10 +60,9 @@ export interface Picture {
 export const sourceOf = (p: Picture, small = false): ImageSource =>
   small && p.mini ? { uri: p.mini } : { uri: p.uri, cacheKey: p.cacheKey };
 
-/** Image d'attente : l'ancienne version du téléphone, sinon (grand affichage) la miniature, décodée plus vite. */
+/** Image d'attente d'un grand affichage : la miniature du téléphone, décodée plus vite (aucune pour un petit affichage). */
 export function placeholderOf(p: Picture, small = false): ImageSource | undefined {
-  const uri = p.fallback ?? (small ? undefined : p.mini);
-  return uri ? { uri } : undefined;
+  return !small && p.mini ? { uri: p.mini } : undefined;
 }
 
 // --- Listes : en ligne et sur le téléphone --------------------------------------------------------------------------
@@ -83,6 +82,8 @@ interface Local {
   version: string;
   file: string;
   mini?: string;
+  /** Largeur de la miniature (absente : 240 px, versions 0.27 et 0.28). */
+  miniWidth?: number;
 }
 
 interface ImageRow {
@@ -177,6 +178,7 @@ async function refresh() {
   onlineDishes = dishes;
   onlineIngredients = ing;
   refreshedAt = Date.now();
+  changed(true);
   AsyncStorage.setItem(ONLINE_KEY, JSON.stringify({ dishes: [...dishes], ingredients: [...ing] })).catch(() => undefined);
 }
 
@@ -188,16 +190,57 @@ function refreshList(): Promise<void> {
   return listing;
 }
 
-/** Image d'un plat : celle du téléphone si elle est à jour, sinon le lien en ligne (l'ancienne en attendant). */
+/**
+ * Image d'un plat : celle du téléphone, nette tout de suite, même quand une version plus récente est en cours de
+ * téléchargement (elle la remplacera) ; sinon le lien en ligne.
+ */
 function resolve(recipeId: string): Picture | null {
-  const online = onlineDishes.get(recipeId);
   const local = localDishes[recipeId];
-  if (local && (!online || local.version === online.version)) return { uri: local.file, mini: local.mini, version: local.version, local: true };
+  if (local) return { uri: local.file, mini: local.mini, version: local.version, local: true };
+  const online = onlineDishes.get(recipeId);
   if (!online) return null;
-  return {
-    uri: online.url, version: online.version, photo: online.photo, fallback: local?.mini ?? local?.file,
-    cacheKey: online.photo ? `${online.path}@${online.version}` : undefined,
+  return { uri: online.url, version: online.version, photo: online.photo, cacheKey: online.photo ? `${online.path}@${online.version}` : undefined };
+}
+
+// --- Écrans redessinés quand les illustrations du téléphone changent --------------------------------------------------
+
+let epoch = 0;
+const pictureListeners = new Set<() => void>();
+let changeTimer: ReturnType<typeof setTimeout> | null = null;
+/** Une illustration est arrivée ou la liste a changé : les écrans se redessinent (au plus une fois par seconde). */
+function changed(now = false) {
+  const fire = () => {
+    changeTimer = null;
+    epoch += 1;
+    pictureListeners.forEach((l) => l());
   };
+  if (now) {
+    if (changeTimer) clearTimeout(changeTimer);
+    fire();
+  } else changeTimer ??= setTimeout(fire, 1000);
+}
+
+/**
+ * À appeler dans un écran qui affiche des photos de plats (`pictureOf`) : il se redessine quand une illustration arrive
+ * sur le téléphone. La valeur rendue change à chaque fois (à passer en `extraData` d'une FlatList).
+ */
+export function usePictures(): number {
+  return useSyncExternalStore((l) => {
+    pictureListeners.add(l);
+    return () => {
+      pictureListeners.delete(l);
+    };
+  }, () => epoch);
+}
+
+/** Ordre des illustrations demandées par l'écran affiché (la dernière demande compte) : téléchargées en premier. */
+let wanted = new Map<string, number>();
+function want(recipeIds: Array<string | null | undefined>) {
+  const next = new Map<string, number>();
+  recipeIds.forEach((id, i) => {
+    if (id && !next.has(id)) next.set(id, i);
+  });
+  if (next.size) wanted = next;
 }
 
 // --- Mise à jour : téléchargement des illustrations nouvelles ou modifiées -------------------------------------------
@@ -228,7 +271,8 @@ export function useIllustrationUpdate(): IllustrationUpdate {
 }
 
 interface Job {
-  kind: "dish" | "ingredient";
+  /** mini : nouvelle miniature d'une photo déjà sur le téléphone (sans réseau). */
+  kind: "dish" | "ingredient" | "mini";
   key: string;
   online: Online;
 }
@@ -261,7 +305,7 @@ const present = (l: Local | undefined) => {
   }
 };
 
-/** Miniature de 240 px d'une photo de plat, créée sur le téléphone. */
+/** Miniature d'une photo de plat, créée sur le téléphone. */
 async function makeMini(source: string, target: File): Promise<string> {
   const context = ImageManipulator.manipulate(source);
   context.resize({ width: MINI_WIDTH, height: null });
@@ -274,6 +318,12 @@ async function makeMini(source: string, target: File): Promise<string> {
 
 async function download(job: Job): Promise<Local> {
   const { version, url } = job.online;
+  if (job.kind === "mini") {
+    // Photo déjà sur le téléphone : seule la miniature est refaite, sous un autre nom (l'ancienne reste affichée jusque-là).
+    const l = localDishes[job.key]!;
+    const mini = await makeMini(l.file, new File(folder("plats-mini"), fileName(job.key, l.version).replace(/\.jpg$/, `-${MINI_WIDTH}.jpg`)));
+    return { ...l, mini, miniWidth: MINI_WIDTH };
+  }
   if (WEB) {
     // Pas de fichiers : le navigateur garde l'image une fois téléchargée.
     await Image.prefetch(url, "disk");
@@ -283,8 +333,8 @@ async function download(job: Job): Promise<Local> {
   const target = new File(folder(job.kind === "dish" ? "plats" : "ingredients"), name);
   const file = await File.downloadFileAsync(url, target, { idempotent: true });
   if (job.kind === "ingredient") return { version, file: file.uri };
-  const mini = await makeMini(file.uri, new File(folder("plats-mini"), name));
-  return { version, file: file.uri, mini };
+  const mini = await makeMini(file.uri, new File(folder("plats-mini"), name.replace(/\.jpg$/, `-${MINI_WIDTH}.jpg`)));
+  return { version, file: file.uri, mini, miniWidth: MINI_WIDTH };
 }
 
 let syncing: Promise<void> | null = null;
@@ -297,7 +347,11 @@ async function runUpdate() {
   const jobs: Job[] = [];
   for (const [key, online] of onlineDishes) {
     const l = localDishes[key];
-    if (!l || l.version !== online.version || !present(l)) jobs.push({ kind: "dish", key, online });
+    if (!l || l.version !== online.version || !present(l)) {
+      // Fichier disparu : l'image en ligne s'affiche en attendant le nouveau téléchargement.
+      if (l && !present(l)) delete localDishes[key];
+      jobs.push({ kind: "dish", key, online });
+    } else if (!WEB && (l.miniWidth ?? 240) < MINI_WIDTH) jobs.push({ kind: "mini", key, online });
   }
   for (const [key, online] of onlineIngredients) {
     const l = localIngredients[key];
@@ -316,17 +370,33 @@ async function runUpdate() {
   let done = 0;
   let failed = 0;
   setUpdate({ running: true, total: jobs.length, done, failed });
-  const queue = [...jobs];
+  // Téléchargements d'abord (illustrations absentes ou modifiées), miniatures refaites ensuite.
+  const queue = [...jobs.filter((j) => j.kind !== "mini"), ...jobs.filter((j) => j.kind === "mini")];
+  /** Prochaine tâche : une illustration demandée par l'écran affiché, sinon la suivante de la file. */
+  const take = () => {
+    let best = -1;
+    let rank = Infinity;
+    queue.forEach((j, i) => {
+      const r = j.kind === "ingredient" ? undefined : wanted.get(j.key);
+      if (r !== undefined && r < rank) {
+        rank = r;
+        best = i;
+      }
+    });
+    return best >= 0 ? queue.splice(best, 1)[0] : queue.shift();
+  };
   const worker = async () => {
-    for (let job = queue.shift(); job; job = queue.shift()) {
+    for (let job = take(); job; job = take()) {
       try {
         const next = await download(job);
-        const store = job.kind === "dish" ? localDishes : localIngredients;
+        const store = job.kind === "ingredient" ? localIngredients : localDishes;
         const old = store[job.key];
         store[job.key] = next;
-        if (old && old.file !== next.file) remove(old.file);
-        if (old?.mini && old.mini !== next.mini) remove(old.mini);
+        // Anciens fichiers effacés un peu plus tard : les écrans affichent encore l'ancienne version d'ici leur mise à jour.
+        const stale = [old && old.file !== next.file ? old.file : undefined, old?.mini && old.mini !== next.mini ? old.mini : undefined];
+        if (stale.some(Boolean)) setTimeout(() => stale.forEach(remove), 10_000);
         saveLocal();
+        if (job.kind !== "ingredient") changed();
       } catch {
         failed += 1;
       }
@@ -381,6 +451,7 @@ function updateIfStale() {
  * seulement (aucune liste), attend la liste de Supabase.
  */
 export async function illustrationUrls(recipeIds: string[]): Promise<Record<string, Picture | null>> {
+  want(recipeIds);
   await restore();
   // Première ouverture (aucune liste) : la liste seulement, pas les téléchargements.
   if (!onlineDishes.size && !Object.keys(localDishes).length) await refreshList().catch(() => undefined);
@@ -396,6 +467,7 @@ export function pictureOf(recipeId: string | null | undefined): Picture | null {
 /** Met en mémoire les photos qui vont s'afficher (cartes des propositions, menus de la semaine). */
 const inMemory = new Set<string>();
 export function preloadPictures(recipeIds: Array<string | null | undefined>): void {
+  want(recipeIds);
   const uris = [...new Set(recipeIds.map((id) => pictureOf(id)?.uri).filter((u): u is string => Boolean(u)))].filter((u) => !inMemory.has(u));
   if (!uris.length) return;
   uris.forEach((u) => inMemory.add(u));

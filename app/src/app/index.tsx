@@ -15,7 +15,7 @@ import { TimersBar } from "../components/Steps";
 import { WeekRibbon } from "../components/WeekRibbon";
 import { BottomNav, Button, ErrorText } from "../components/ui";
 import { dayLabel, mealLabel, minutes } from "../lib/format";
-import { illustrationUrls, pictureOf, preloadPictures, placeholderOf, sourceOf, type Picture } from "../lib/images";
+import { illustrationUrls, pictureOf, preloadPictures, placeholderOf, sourceOf, usePictures, type Picture } from "../lib/images";
 import { useWeather } from "../lib/weather";
 import { setShoppingCount, toBuyLines } from "../lib/shoppingCount";
 import { useHousehold } from "../lib/session";
@@ -69,6 +69,7 @@ export default function Accueil() {
   const [slots, setSlots] = useState<Record<string, WeekSlot>>({});
   const [choices, setChoices] = useState<Record<string, DayChoice>>({});
   const [images, setImages] = useState<Record<string, Picture | null>>({});
+  usePictures();
   const [shopping, setShopping] = useState<ShoppingItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [reminders, setReminders] = useState(false);
@@ -128,7 +129,7 @@ export default function Accueil() {
     return () => clearInterval(tick);
   }, [load]));
 
-  const picture = (recipeId: string | null) => (recipeId ? images[recipeId] ?? pictureOf(recipeId) : null);
+  const picture = (recipeId: string | null) => (recipeId ? pictureOf(recipeId) ?? images[recipeId] ?? null : null);
   const fresh = !Object.values(slots).some((s) => s.status === "accepted");
   const choiceOf = (d: string): DayChoice => choices[d] ?? defaultChoice(fresh);
   /** Repas du jour passé : le déjeuner après 14 h, le dîner après 20 h. */

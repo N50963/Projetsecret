@@ -7,7 +7,7 @@ import { SwipeCard, type SwipeDirection } from "../components/SwipeCard";
 import { Icon } from "../components/icons";
 import { Button, ErrorText, Loading, Pill, Screen, Tag } from "../components/ui";
 import { dayLabel, mealLabel, minutes, proteinLabel } from "../lib/format";
-import { forgetIllustration, illustrationUrls, pictureOf, preloadPictures, placeholderOf, sourceOf, type Picture } from "../lib/images";
+import { forgetIllustration, illustrationUrls, pictureOf, preloadPictures, placeholderOf, sourceOf, usePictures, type Picture } from "../lib/images";
 import { draftToInput, generateRecipes, illustrateRecipe, type Draft } from "../lib/mistral";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
@@ -106,6 +106,7 @@ export default function Propositions() {
   /** Idées déjà montrées (refusées) pour le repas courant. */
   const [seen, setSeen] = useState(0);
   const [images, setImages] = useState<Record<string, Picture | null>>({});
+  usePictures();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [focus, setFocus] = useState<Focus | null>(null);
@@ -543,7 +544,7 @@ export default function Propositions() {
         {top && !exhausted && (
           <SwipeCard key={`${current.id}-${top.recipeId}`} swipeRef={swipe} onSwipe={(d) => onSwipe(top, d)} style={StyleSheet.absoluteFill}
             onPress={() => router.push(`/recette/${top.recipeId}`)}>
-            {card(top.name, images[top.recipeId] ?? pictureOf(top.recipeId), top.totalMin, proteinLabel(top.mainProtein, top.name),
+            {card(top.name, pictureOf(top.recipeId) ?? images[top.recipeId], top.totalMin, proteinLabel(top.mainProtein, top.name),
               ctx.recipes.find((r) => r.id === top.recipeId)?.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", ") ?? "",
               toBuyLabels.length ? toBuyLabels.join(", ") : undefined, top.weatherNote)}
           </SwipeCard>

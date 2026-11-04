@@ -6,7 +6,7 @@ import { Icon } from "../components/icons";
 import { Illustration } from "../components/Illustration";
 import { ErrorText, Muted, Screen, SectionTitle } from "../components/ui";
 import { quantity } from "../lib/format";
-import { illustrationUrls, pictureOf, type Picture } from "../lib/images";
+import { illustrationUrls, pictureOf, usePictures, type Picture } from "../lib/images";
 import { shoppingLines, type ShoppingLine } from "../lib/shopping";
 import { setShoppingCount, toBuyLines } from "../lib/shoppingCount";
 import { useHousehold } from "../lib/session";
@@ -24,6 +24,7 @@ export default function Courses() {
   const c = useColors();
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [images, setImages] = useState<Record<string, Picture | null>>({});
+  usePictures();
   const [error, setError] = useState("");
   /** Dernier article retiré : bandeau « Annuler » pendant quelques secondes. */
   const [undo, setUndo] = useState<{ name: string; ids: string[] } | null>(null);
@@ -106,7 +107,7 @@ export default function Courses() {
                 accessibilityLabel={`Cocher : ${line.name}`} style={styles.check}>
                 <Icon name="circle" size={26} color={c.orangeInk} />
               </Pressable>
-              {photo ? <Illustration picture={images[photo] ?? pictureOf(photo)} height={64} width={74} rounded={9} /> : (
+              {photo ? <Illustration picture={pictureOf(photo) ?? images[photo]} height={64} width={74} rounded={9} /> : (
                 <View style={[styles.noPhoto, { backgroundColor: c.chip }]}><Icon name="image" size={24} color={c.muted} /></View>
               )}
               <View style={styles.text}>
