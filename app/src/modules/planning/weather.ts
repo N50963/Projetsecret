@@ -130,24 +130,17 @@ export function weatherText(code: number): { label: string; icon: WeatherIcon } 
   return { label: "orage", icon: "storm" };
 }
 
-/** Temps du jour pour le choix d'un plat : chaleur, chaud, frais, froid (ou pluie fraîche), doux. */
+/** Temps du jour (couleur du bandeau météo du calendrier) : chaleur, chaud, frais, froid (ou pluie fraîche), doux. */
 export type WeatherTone = "hot" | "warm" | "cool" | "cold" | "mild";
 
-/**
- * Conseil affiché sur la carte du jour (calendrier de l'accueil), pour choisir un plat : mêmes repères que le classement
- * des propositions.
- */
-export function weatherAdvice(day: DayWeather): { tone: WeatherTone; advice: string } {
+/** Repères des propositions : chaleur 28 °C et plus, chaud 24 °C, frais 15 °C (froid avec la pluie), froid 10 °C. */
+export function weatherTone(day: DayWeather): WeatherTone {
   const t = day.tMax;
-  const rain = day.rainMm >= RAINY_MM;
-  if (t >= HOT) return { tone: "hot", advice: "Forte chaleur : un plat frais, sans four ni longue cuisson (salade, taboulé, grillades)." };
-  if (t >= WARM) return { tone: "warm", advice: rain ? "Chaud et pluvieux : un plat léger sera bienvenu." : "Il fera chaud : un plat frais ou léger sera bienvenu." };
-  if (t <= COLD) return { tone: "cold", advice: `${rain ? "Froid et pluie" : "Il fera froid"} : un plat chaud et réconfortant (soupe, gratin, mijoté).` };
-  if (t <= COOL) return rain
-    ? { tone: "cold", advice: "Temps frais et pluvieux : un plat chaud et réconfortant (soupe, gratin, mijoté)." }
-    : { tone: "cool", advice: "Temps frais : un plat chaud fera plaisir." };
-  if (rain) return { tone: "cool", advice: "Pluie prévue : un plat réconfortant fera plaisir." };
-  return { tone: "mild", advice: "Temps doux : tous les plats conviennent." };
+  if (t >= HOT) return "hot";
+  if (t >= WARM) return "warm";
+  if (t <= COLD || (t <= COOL && day.rainMm >= RAINY_MM)) return "cold";
+  if (t <= COOL || day.rainMm >= RAINY_MM) return "cool";
+  return "mild";
 }
 
 /** Consigne pour les idées de Mistral (début du brief, limité à 600 caractères côté serveur). */

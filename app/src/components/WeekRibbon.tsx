@@ -188,7 +188,7 @@ export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChang
   /** Semaine choisie : seuls les menus choisis s'affichent ; un lien discret rouvre les repas à prévoir. */
   compact?: boolean;
   onPlanMore?: () => void;
-  /** Prévisions de Rochefort-du-Gard par jour (bandeau de la carte du jour, avec un conseil de plat). */
+  /** Prévisions de Rochefort-du-Gard par jour (bandeau de la carte du jour : icône du temps et températures). */
   weather?: Record<string, DayWeather>;
 }) {
   const past = (d: string, m: MealType) => isPast?.(d, m) ?? false;
@@ -336,8 +336,8 @@ export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChang
             <Text style={[styles.cardTitle, { color: day === today ? c.primary : c.text }]} accessibilityRole="header">{title}</Text>
             <Text style={[styles.cardDate, { color: c.muted }]}>{date}</Text>
           </View>
-          {/* Météo du jour choisi, au moment de choisir ses repas : le conseil de plat seulement s'il reste un repas à prévoir. */}
-          <WeatherBand day={weather?.[day]} advice={MEALS.some((m) => !chosen(day, m) && !past(day, m))} />
+          {/* Météo du jour choisi, au moment de choisir ses repas : icône du temps et températures. */}
+          <WeatherBand day={weather?.[day]} />
 
           {MEALS.map((m) => {
             const slot = chosen(day, m);
