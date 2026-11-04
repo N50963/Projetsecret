@@ -1,7 +1,10 @@
 # Logo MenuBily (visuel fourni par le foyer : marmite, nom et slogan) : fond crème rendu transparent (bords adoucis),
-# marges retirées, réduit à 300 px de haut pour l'application (en-tête de l'accueil, écran de connexion).
+# marges retirées, réduit à 300 px de haut pour l'application (en-tête de l'accueil, écran de connexion). En option, la
+# marmite seule, en pleine définition, pour l'icône de l'application (scripts/icone-marmite.py la décline ensuite).
 # Usage (depuis app/) :
-#   python3 scripts/logo-menubily.py assets/logo-menubily-source.png /tmp/logo.png assets/logo-menubily.webp 300
+#   python3 scripts/logo-menubily.py assets/logo-menubily-source.png /tmp/logo.png assets/logo-menubily.webp 300 \
+#     assets/marmite-source.png
+#   python3 scripts/icone-marmite.py
 import sys
 import numpy as np
 from PIL import Image
@@ -28,3 +31,14 @@ small = img.resize((w, height), Image.LANCZOS)
 small.save(out_png, optimize=True)
 small.save(out_webp, quality=92, method=6)
 print("final :", small.size)
+
+if len(sys.argv) > 5:
+    # Marmite : tout ce qui précède le premier espace vide (au moins 10 colonnes sans dessin) entre elle et le nom.
+    alpha = rgba[y0:y1, x0:x1, 3]
+    filled = (alpha > 5).sum(axis=0)
+    start = img.size[0] // 10
+    gap = next(x for x in range(start, img.size[0] - 10) if not filled[x:x + 10].any())
+    pot = Image.fromarray(rgba[y0:y1, x0:x0 + gap], "RGBA")
+    pot = pot.crop(pot.getchannel("A").point(lambda v: 255 if v > 5 else 0).getbbox())
+    pot.save(sys.argv[5], optimize=True)
+    print("marmite :", pot.size)

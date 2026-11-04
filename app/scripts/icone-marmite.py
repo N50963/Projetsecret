@@ -1,5 +1,6 @@
 """
-Icône de l'application : la marmite (assets/marmite-source.png, 512 px, fond transparent).
+Icône de l'application : la marmite du logo (assets/marmite-source.png, ≈ 510 px, fond transparent ; extraite du
+logo par scripts/logo-menubily.py).
 
 Usage : python scripts/icone-marmite.py   (depuis le dossier app)
 
@@ -24,7 +25,7 @@ pot = src.crop(src.getchannel("A").getbbox())  # marmite seule, sans marge
 
 
 def placed(size: int, width_ratio: float, background=None, mask: str | None = None) -> Image.Image:
-    """Marmite centrée sur un carré de `size` px, sa largeur valant `width_ratio` du carré."""
+    """Marmite centrée sur un carré de `size` px, son plus grand côté valant `width_ratio` du carré."""
     canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     if background is not None:
         shape = Image.new("L", (size, size), 0)
@@ -36,8 +37,8 @@ def placed(size: int, width_ratio: float, background=None, mask: str | None = No
         else:
             draw.rectangle((0, 0, size, size), fill=255)
         canvas.paste(Image.new("RGBA", (size, size), background), (0, 0), shape)
-    w = round(size * width_ratio)
-    h = round(pot.height * w / pot.width)
+    scale = size * width_ratio / max(pot.width, pot.height)
+    w, h = round(pot.width * scale), round(pot.height * scale)
     small = pot.resize((w, h), Image.LANCZOS)
     canvas.alpha_composite(small, ((size - w) // 2, (size - h) // 2))
     return canvas

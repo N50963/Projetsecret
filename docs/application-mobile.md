@@ -9,8 +9,9 @@ Courses, Paramètres, Connexion, états et planche de composants), reproduit au 
 - logo (version 0.29.1) : visuel du foyer, marmite, nom et slogan (`app/assets/logo-menubily-source.png`), fond rendu
   transparent et réduit à 300 px de haut par `app/scripts/logo-menubily.py` (`assets/logo-menubily.webp`, 79 Ko) ;
   affiché en tête de l'accueil et sur l'écran de connexion ;
-- icône de l'application : la marmite (`app/assets/marmite-source.png`), déclinée par `app/scripts/icone-marmite.py`
-  (icônes Android, écran de démarrage) ; icônes de l'interface :
+- icône de l'application : la marmite du logo (`app/assets/marmite-source.png`, extraite du logo par
+  `app/scripts/logo-menubily.py`), déclinée par `app/scripts/icone-marmite.py` (icône adaptative sur fond crème, à
+  thème, ronde et classique, écran de démarrage) ; icônes de l'interface :
   tracés SVG des maquettes (`app/src/components/icons.tsx`, react-native-svg) ;
 - boutons pleine largeur à dégradé vert, puces beiges (vert doux bordé de vert quand elles sont choisies),
   barre du bas Accueil · Courses · Recettes · Profil.
@@ -21,7 +22,9 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
 ## Déroulé
 
 1. **Connexion** au compte partagé du foyer (mêmes identifiants sur les deux téléphones), puis code du foyer
-   la première fois.
+   la première fois. Clavier ouvert, la photo du haut se replie et le panneau
+   (logo, e-mail, mot de passe, bouton) remonte au-dessus du clavier : sous Android, l'application s'affiche sous les
+   barres du système et la fenêtre n'est plus réduite par le clavier.
 2. **Tickets Lidl Plus** : la page de connexion officielle de Lidl s'ouvre dans l'application ; la personne s'y connecte
    elle-même. Le jeton obtenu reste dans le stockage sécurisé du téléphone (Keychain / Keystore) et n'est jamais envoyé
    à Supabase. Chaque téléphone se connecte une fois. Les tickets sont ensuite lus directement chez Lidl par le
