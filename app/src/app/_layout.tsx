@@ -1,4 +1,3 @@
-import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
@@ -10,7 +9,7 @@ import { Button, ErrorText, Loading, Muted, Screen } from "../components/ui";
 import { warmIllustrations } from "../lib/images";
 import { REOPEN_AFTER_MS, refreshWeather } from "../lib/weather";
 import { SessionProvider, useSession } from "../lib/session";
-import { BRAND_FONT, useColors } from "../lib/theme";
+import { useColors } from "../lib/theme";
 
 /**
  * Écrans accessibles selon l'état du compte : connexion, puis code du foyer, puis l'application. Un écran dont la
@@ -83,8 +82,6 @@ function Gate() {
 }
 
 export default function RootLayout() {
-  // Police du nom MenuBily ; le reste du texte utilise Roboto, la police du système Android.
-  useFonts({ [BRAND_FONT]: require("../../assets/fonts/Cabin-BoldItalic.ttf") });
   // Gestes natifs (déplacement des menus de la semaine) : la racine de l'application les reçoit.
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

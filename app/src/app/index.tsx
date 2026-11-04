@@ -20,7 +20,7 @@ import { useWeather } from "../lib/weather";
 import { setShoppingCount, toBuyLines } from "../lib/shoppingCount";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
-import { BRAND_FONT, useColors } from "../lib/theme";
+import { useColors } from "../lib/theme";
 import { useTimers } from "../lib/timers";
 import {
   addDays, cancelMealChoice, ensureSlot, getShoppingList, getWeekSlots, moveMealChoice, savePlan, setMealWanted, toIsoDate, weekDates, type ShoppingItem, type SlotRequest,
@@ -262,11 +262,7 @@ export default function Accueil() {
       <View style={{ height: insets.top, backgroundColor: c.statusBar }} />
       <ScrollView contentContainerStyle={{ paddingBottom: 12 }} scrollEnabled={!dragging}>
         <LinearGradient colors={["#FEF8EE", c.background]} style={styles.header}>
-          <View style={styles.logo}><Logo /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.brand, { color: c.primary, fontFamily: BRAND_FONT }]}>MenuBily</Text>
-            <Text style={[styles.slogan, { color: c.muted }]}>Bien manger, même sans idée</Text>
-          </View>
+          <View style={styles.logo}><Logo height={66} /></View>
           <Pressable onPress={notifications} accessibilityRole="button" accessibilityLabel="Notifications" hitSlop={4}
             style={({ pressed }) => [styles.round, { opacity: pressed ? 0.6 : 1 }]}>
             <Icon name="bell" width={24} height={25} color={c.text} />
@@ -345,11 +341,9 @@ export default function Accueil() {
 }
 
 const styles = StyleSheet.create({
-  header: { height: 71, flexDirection: "row", alignItems: "center", paddingLeft: 13, paddingRight: 8, gap: 5 },
-  // Logo centré sur le nom et le slogan, avec une marge avant le texte.
-  logo: { marginLeft: 2, marginRight: 9, alignItems: "center", justifyContent: "center" },
-  brand: { fontSize: 26.5, lineHeight: 30 },
-  slogan: { fontSize: 12.2, lineHeight: 16, fontWeight: "500" },
+  header: { height: 78, flexDirection: "row", alignItems: "center", paddingLeft: 10, paddingRight: 8, gap: 5 },
+  // Logo (marmite, nom et slogan) sur toute la place laissée par les boutons.
+  logo: { flex: 1, minWidth: 0, justifyContent: "center" },
   round: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
   badge: { position: "absolute", top: 10, right: 11, width: 9, height: 9, borderRadius: 5 },
   avatar: { width: 45, height: 45, borderRadius: 23, alignItems: "center", justifyContent: "center" },

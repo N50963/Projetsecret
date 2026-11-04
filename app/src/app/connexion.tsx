@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Logo } from "../components/icons";
 import { Button, ErrorText, Field, Muted } from "../components/ui";
 import { useSession } from "../lib/session";
-import { BRAND_FONT, useColors } from "../lib/theme";
+import { useColors } from "../lib/theme";
 import { errorText } from "../lib/errors";
 
 /** Connexion MenuBily : photo d'un plat en haut, panneau crème avec le logo, l'e-mail et le mot de passe du compte du foyer. */
@@ -42,13 +42,7 @@ export default function Connexion() {
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" bounces={false}>
         <Image source={require("../../assets/connexion.webp")} style={styles.photo} contentFit="cover" accessibilityIgnoresInvertColors />
         <View style={[styles.sheet, { backgroundColor: c.background, paddingBottom: 26 + insets.bottom }]}>
-          <View style={styles.brand}>
-            <Logo />
-            <View>
-              <Text style={[styles.name, { color: c.primary, fontFamily: BRAND_FONT }]}>MenuBily</Text>
-              <Text style={[styles.slogan, { color: c.muted }]}>Bien manger, même sans idée</Text>
-            </View>
-          </View>
+          <View style={styles.brand}><Logo height={84} /></View>
           <ErrorText>{error}</ErrorText>
           <View style={styles.group}>
             <Text style={[styles.label, { color: c.text }]} nativeID="courriel">E-mail</Text>
@@ -71,9 +65,7 @@ export default function Connexion() {
 const styles = StyleSheet.create({
   photo: { flex: 1, minHeight: 260, marginBottom: -24 },
   sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingHorizontal: 17, gap: 13 },
-  brand: { flexDirection: "row", alignItems: "center", gap: 12, height: 62 },
-  name: { fontSize: 26.5, lineHeight: 30 },
-  slogan: { fontSize: 12.2, lineHeight: 16, fontWeight: "500" },
+  brand: { alignItems: "center", paddingTop: 4 },
   group: { gap: 6 },
   label: { fontSize: 16, fontWeight: "500" },
 });

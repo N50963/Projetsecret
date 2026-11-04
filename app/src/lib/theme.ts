@@ -63,5 +63,3 @@ export const PRIMARY_GRADIENT = ["#4E7029", "#466526", "#4A652B", "#40602C", "#3
 export const PRIMARY_GRADIENT_STOPS = [0, 0.3, 0.5, 0.78, 1] as const;
 /** Ombre douce des cartes (brun chaud, très légère). */
 export const CARD_SHADOW = { shadowColor: "#966E3C", shadowOpacity: 0.08, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1 } as const;
-/** Police du nom de l'application (Cabin, gras italique). */
-export const BRAND_FONT = "Cabin-BoldItalic";

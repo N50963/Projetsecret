@@ -275,10 +275,16 @@ export function Icon({ name, size = 22, color, width, height }: { name: IconName
   );
 }
 
-/** Logo MenuBily : la marmite (même image que l'icône de l'application, assets/logo-marmite.png). */
-export function Logo({ width = 56, height = 35 }: { width?: number; height?: number }) {
+/** Largeur sur hauteur du logo (assets/logo-menubily.webp : 1 086 × 300 px). */
+const LOGO_RATIO = 1086 / 300;
+
+/**
+ * Logo MenuBily : marmite, nom et slogan (visuel du foyer, fond transparent ; scripts/logo-menubily.py). Réduit, calé à
+ * gauche, si la place manque en largeur.
+ */
+export function Logo({ height = 68 }: { height?: number }) {
   return (
-    <Image source={require("../../assets/logo-marmite.png")} style={{ width, height }} contentFit="contain" transition={0}
-      accessibilityLabel="Logo MenuBily" />
+    <Image source={require("../../assets/logo-menubily.webp")} style={{ height, width: "100%", maxWidth: height * LOGO_RATIO }} contentFit="contain"
+      contentPosition="left" transition={0} accessibilityRole="image" accessibilityLabel="MenuBily, bien manger, même sans idée" />
   );
 }

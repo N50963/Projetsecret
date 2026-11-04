@@ -5,10 +5,12 @@ Courses, Paramètres, Connexion, états et planche de composants), reproduit au 
 
 - couleurs (`app/src/lib/theme.ts`) : fond crème #FEF3E3, cartes #FDF4E9, vert #2C5A27, vert doux #E7E3BE, texte
   orange #8A4B12 pour « à acheter », bande verte #445A33 en tête des écrans ;
-- typographie : Roboto (police du système Android), nom « MenuBily » en Cabin gras italique
-  (`app/assets/fonts`, licence OFL) ;
-- logo et icône de l'application : la marmite (`app/assets/marmite-source.png`), déclinée par
-  `app/scripts/icone-marmite.py` (icônes Android, écran de démarrage, `assets/logo-marmite.png`) ; icônes de l'interface :
+- typographie : Roboto (police du système Android) ;
+- logo (version 0.29.1) : visuel du foyer, marmite, nom et slogan (`app/assets/logo-menubily-source.png`), fond rendu
+  transparent et réduit à 300 px de haut par `app/scripts/logo-menubily.py` (`assets/logo-menubily.webp`, 79 Ko) ;
+  affiché en tête de l'accueil et sur l'écran de connexion ;
+- icône de l'application : la marmite (`app/assets/marmite-source.png`), déclinée par `app/scripts/icone-marmite.py`
+  (icônes Android, écran de démarrage) ; icônes de l'interface :
   tracés SVG des maquettes (`app/src/components/icons.tsx`, react-native-svg) ;
 - boutons pleine largeur à dégradé vert, puces beiges (vert doux bordé de vert quand elles sont choisies),
   barre du bas Accueil · Courses · Recettes · Profil.

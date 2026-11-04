@@ -1,5 +1,5 @@
 """
-Icône de l'application et logo MenuBily : la marmite (assets/marmite-source.png, 512 px, fond transparent).
+Icône de l'application : la marmite (assets/marmite-source.png, 512 px, fond transparent).
 
 Usage : python scripts/icone-marmite.py   (depuis le dossier app)
 
@@ -8,7 +8,7 @@ Génère :
   icônes à thème), icône classique (carré arrondi crème) et ronde ;
 - android/app/src/main/res/drawable-*/splashscreen_logo.png : écran de démarrage ;
 - assets/icon.png, android-icon-*.png, splash-icon.png, favicon.png : sources Expo équivalentes ;
-- assets/logo-marmite.png : logo affiché dans l'application (en-tête de l'accueil, connexion).
+- (logo affiché dans l'application : voir scripts/logo-menubily.py.)
 """
 from pathlib import Path
 
@@ -73,9 +73,4 @@ Image.new("RGBA", (1024, 1024), CREAM).save(assets / "android-icon-background.pn
 monochrome(1024, FG_RATIO).save(assets / "android-icon-monochrome.png", optimize=True)
 placed(1024, 0.74).save(assets / "splash-icon.png", optimize=True)
 placed(48, 0.9).save(assets / "favicon.png", optimize=True)
-# Logo de l'application : marmite seule, recadrée sur sa partie pleine (la vapeur, très légère, la décentrait vers le bas
-# à côté du nom), 3 fois sa taille d'affichage (≈ 56 px de large).
-body = pot.crop(pot.getchannel("A").point(lambda v: 255 if v > 200 else 0).getbbox())
-logo = body.resize((168, round(body.height * 168 / body.width)), Image.LANCZOS)
-logo.save(assets / "logo-marmite.png", optimize=True)
-print("icônes, écran de démarrage et logo générés", logo.size)
+print("icônes et écran de démarrage générés")
