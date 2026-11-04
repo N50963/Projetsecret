@@ -23,7 +23,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { dayLabel, mealLabel, minutes } from "../lib/format";
 import { placeholderOf, sourceOf, type Picture } from "../lib/images";
 import type { DayWeather } from "../modules/planning";
-import { WeatherChip } from "./WeatherChip";
+import { WeatherBand } from "./WeatherChip";
 import { CARD_SHADOW, useColors } from "../lib/theme";
 import type { WeekSlot } from "../modules/planning";
 import type { MealType } from "../modules/recipes";
@@ -188,7 +188,7 @@ export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChang
   /** Semaine choisie : seuls les menus choisis s'affichent ; un lien discret rouvre les repas à prévoir. */
   compact?: boolean;
   onPlanMore?: () => void;
-  /** Prévisions de Rochefort-du-Gard par jour (affichées sur la carte du jour). */
+  /** Prévisions de Rochefort-du-Gard par jour (bandeau de la carte du jour, avec un conseil de plat). */
   weather?: Record<string, DayWeather>;
 }) {
   const past = (d: string, m: MealType) => isPast?.(d, m) ?? false;
@@ -335,8 +335,9 @@ export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChang
           <View style={styles.cardHead}>
             <Text style={[styles.cardTitle, { color: day === today ? c.primary : c.text }]} accessibilityRole="header">{title}</Text>
             <Text style={[styles.cardDate, { color: c.muted }]}>{date}</Text>
-            <View style={styles.cardWeather}><WeatherChip day={weather?.[day]} /></View>
           </View>
+          {/* Météo du jour choisi, au moment de choisir ses repas : le conseil de plat seulement s'il reste un repas à prévoir. */}
+          <WeatherBand day={weather?.[day]} advice={MEALS.some((m) => !chosen(day, m) && !past(day, m))} />
 
           {MEALS.map((m) => {
             const slot = chosen(day, m);
@@ -469,7 +470,6 @@ const styles = StyleSheet.create({
   cardHead: { flexDirection: "row", alignItems: "baseline", gap: 8, paddingHorizontal: 3 },
   cardTitle: { fontSize: 18, lineHeight: 24, fontWeight: "700" },
   cardDate: { fontSize: 14.2, lineHeight: 18 },
-  cardWeather: { marginLeft: "auto", alignSelf: "center" },
   dish: { height: 86, flexDirection: "row", borderRadius: 13, borderWidth: 1, overflow: "hidden" },
   aimed: { borderWidth: 2.5 },
   dishLink: { flex: 1, minWidth: 0, flexDirection: "row", height: 84 },

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { planMeals } from "../src/modules/planning/engine";
 import type { MealSlot, PlannerContext, PlannerRecipe } from "../src/modules/planning/types";
-import { autoLevel, dishKind, isLongCooking, weatherAdjustment, weatherBrief, weatherText, type DayWeather } from "../src/modules/planning/weather";
+import { autoLevel, dishKind, isLongCooking, weatherAdjustment, weatherAdvice, weatherBrief, weatherText, type DayWeather } from "../src/modules/planning/weather";
 import { DEFAULT_PREFERENCES } from "../src/modules/recipes/preferences";
 
 const DAY = "2026-07-15";
@@ -94,6 +94,16 @@ describe("bonus et malus selon la météo du jour", () => {
     expect(weatherBrief(day(33))).toContain("plat frais ou léger, sans four");
     expect(weatherBrief(day(7, { code: 3 }))).toBe("Météo à Rochefort-du-Gard : 7 °C au plus, couvert : plat chaud et réconfortant. ");
     expect(weatherBrief(day(19))).toBe("");
+  });
+
+  it("conseil de la carte du jour, selon les mêmes repères que les propositions", () => {
+    expect(weatherAdvice(day(31))).toEqual({ tone: "hot", advice: expect.stringContaining("plat frais, sans four") });
+    expect(weatherAdvice(day(25)).tone).toBe("warm");
+    expect(weatherAdvice(day(10, { rainMm: 6 }))).toEqual({ tone: "cold", advice: expect.stringMatching(/^Froid et pluie : un plat chaud et réconfortant/) });
+    expect(weatherAdvice(day(14, { rainMm: 4 })).tone).toBe("cold");
+    expect(weatherAdvice(day(14)).tone).toBe("cool");
+    expect(weatherAdvice(day(20, { rainMm: 5 })).advice).toBe("Pluie prévue : un plat réconfortant fera plaisir.");
+    expect(weatherAdvice(day(20)).advice).toBe("Temps doux : tous les plats conviennent.");
   });
 });
 

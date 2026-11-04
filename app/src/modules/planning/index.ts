@@ -11,5 +11,6 @@ export {
   getUpcomingMeals, savePlan, setShoppingItemChecked, setShoppingItemsRemoved, skipSlot, type PlannedSlot, type ShoppingItem, type SlotRequest, type UpcomingMeal, type WeekSlot,
 } from "./repository";
 export {
-  autoLevel, dishKind, WEATHER_LEVELS, weatherAdjustment, weatherBrief, weatherText, type DayWeather, type DishKind, type WeatherIcon, type WeatherLevel,
+  autoLevel, dishKind, WEATHER_LEVELS, weatherAdjustment, weatherAdvice, weatherBrief, weatherText, type DayWeather, type DishKind, type WeatherIcon,
+  type WeatherLevel, type WeatherTone,
 } from "./weather";

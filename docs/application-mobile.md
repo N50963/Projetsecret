@@ -39,8 +39,12 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    par jour dans le ruban de la semaine (plus de liste séparée, pas de titre de section). Le ruban
    reprend la maquette Claude Design « Ruban de la semaine » (`components/WeekRibbon.tsx`) : les 7 jours en pastilles
    (jour abrégé, numéro, deux barrettes pour le déjeuner et le dîner : vert = menu choisi, vert clair = à proposer,
-   beige = libre), puis la carte du jour touché. Un menu choisi y apparaît avec sa photo (toucher : fiche ; croix :
-   annuler) ; un repas libre se coche (« À proposer ») et reçoit son temps disponible (30 min, 1 h ou sans limite).
+   beige = libre), puis la carte du jour touché. En tête de la carte, un bandeau donne la météo du jour à
+   Rochefort-du-Gard (temps, températures minimale et maximale) et, s'il reste un repas à prévoir, le plat qu'elle
+   suggère (« Il fera froid : un plat chaud et réconfortant (soupe, gratin, mijoté) », « Il fera chaud : un plat frais
+   ou léger sera bienvenu »…), selon les mêmes repères que les propositions ; bleu-gris quand il fait frais ou froid,
+   abricot quand il fait chaud, vert par temps doux. Un menu choisi y apparaît avec sa photo (toucher : fiche ; croix,
+   dans sa propre colonne à droite : annuler) ; un repas libre se coche (« À proposer ») et reçoit son temps disponible (30 min, 1 h ou sans limite).
    Il est toujours affiché ; « Proposer les menus (n repas) » lance les propositions. Les repas du jour passés ne sont
    plus à prévoir : le déjeuner après 14 h, le dîner après 20 h (ils disparaissent de la carte du jour, du décompte et du
    menu du jour par ingrédient). Une fois la semaine choisie (des menus choisis, plus rien à proposer), les repas à
