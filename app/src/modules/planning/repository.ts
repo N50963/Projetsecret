@@ -163,13 +163,14 @@ export async function savePlan(supabase: SupabaseClient, householdId: string, st
     .upsert({ household_id: householdId, start_date: start, end_date: end }, { onConflict: "household_id,start_date" }).select("id").single();
   check(error, "Planification non enregistrée");
   const planId = (plan as Row).id as string;
-  // Repas déjà enregistrés de la planification lus pendant l'enregistrement des repas demandés (une attente de moins) :
-  // ceux qui ne sont plus demandés et pas encore choisis seront retirés.
+  // Repas déjà enregistrés de la semaine lus pendant l'enregistrement des repas demandés (une attente de moins) : ceux
+  // qui ne sont plus demandés et pas encore choisis sont retirés, y compris ceux d'une planification plus ancienne (un
+  // dîner resté « à proposer » d'une planification de la veille revenait sinon dans le calendrier).
   const [{ data: slots, error: e2 }, { data: existing, error: e3 }] = await Promise.all([
     supabase.from("meal_slots").upsert(requests.map((r) => ({
       plan_id: planId, household_id: householdId, meal_date: r.date, meal_type: r.mealType, max_total_min: r.maxTotalMin, servings: r.servings,
     })), { onConflict: "household_id,meal_date,meal_type" }).select("*"),
-    supabase.from("meal_slots").select("id, status").eq("plan_id", planId),
+    supabase.from("meal_slots").select("id, status, plan_id").eq("household_id", householdId).gte("meal_date", start).lte("meal_date", end),
   ]);
   check(e2, "Repas non enregistrés");
   check(e3, "Repas illisibles");
@@ -181,12 +182,36 @@ export async function savePlan(supabase: SupabaseClient, householdId: string, st
     check(e5, "Repas non rouverts");
     for (const s of (slots ?? []) as Row[]) if (reopened.includes(s.id)) s.status = "open";
   }
-  const stale = ((existing ?? []) as Row[]).filter((s) => !keep.has(s.id) && s.status !== "accepted").map((s) => s.id);
-  if (stale.length) {
-    const { error: e4 } = await supabase.from("meal_slots").delete().in("id", stale);
+  const stale = ((existing ?? []) as Row[]).filter((s) => !keep.has(s.id) && s.status !== "accepted");
+  // Repas de cette planification : effacés. Repas d'une planification plus ancienne : passés (articles déjà achetés et
+  // historique des propositions gardés).
+  const drop = stale.filter((s) => s.plan_id === planId).map((s) => s.id);
+  const pass = stale.filter((s) => s.plan_id !== planId && s.status === "open").map((s) => s.id);
+  if (drop.length) {
+    const { error: e4 } = await supabase.from("meal_slots").delete().in("id", drop);
     check(e4, "Repas non retirés");
   }
+  if (pass.length) {
+    const { error: e6 } = await supabase.from("meal_slots").update({ status: "skipped" }).in("id", pass);
+    check(e6, "Repas non retirés");
+  }
   return { planId, slots: ((slots ?? []) as Row[]).map(toSlot) };
+}
+
+/**
+ * Repas coché ou décoché dans le calendrier de l'accueil, enregistré tout de suite : le choix est gardé au retour sur
+ * l'accueil, au redémarrage et sur les autres téléphones du foyer. Coché : repas « à proposer » (créé, ou rouvert, avec
+ * son temps disponible). Décoché : repas passé plutôt qu'effacé (articles déjà achetés et historique des propositions
+ * gardés). Un menu déjà choisi n'est jamais touché.
+ */
+export async function setMealWanted(supabase: SupabaseClient, householdId: string, request: SlotRequest, wanted: boolean): Promise<void> {
+  if (wanted) {
+    await ensureSlot(supabase, householdId, request);
+    return;
+  }
+  const { error } = await supabase.from("meal_slots").update({ status: "skipped" }).eq("household_id", householdId)
+    .eq("meal_date", request.date).eq("meal_type", request.mealType).neq("status", "accepted");
+  check(error, "Repas non retiré");
 }
 
 /**

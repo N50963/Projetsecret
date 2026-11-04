@@ -50,8 +50,13 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    menu du jour par ingrédient). Une fois la semaine choisie (des menus choisis, plus rien à proposer), les repas à
    prévoir sont repliés : la carte d'un jour ne montre que ses menus, le bouton des propositions disparaît, et un lien
    discret « Prévoir un autre repas » rouvre les repas à cocher (rien n'est alors coché d'avance ; ils se replient de
-   nouveau au retour sur l'accueil s'ils n'ont pas été cochés). Semaine encore vide : le dîner de chaque jour est coché
-   d'avance. La liste de courses n'a plus de carte sur l'accueil : une pastille rouge sur l'onglet Courses de la barre du
+   nouveau au retour sur l'accueil s'ils n'ont pas été cochés). Chaque semaine est vide par défaut : aucun repas n'est
+   coché d'avance (jusqu'à la version 0.29.0, le dîner de chaque jour l'était). Chaque case cochée ou décochée, et chaque
+   temps choisi, est enregistré tout de suite dans Supabase (`setMealWanted` : repas « à proposer », ou passé quand il
+   est décoché) : le choix est gardé au retour sur l'accueil, au redémarrage et sur les autres téléphones du foyer.
+   « Proposer les menus » retire aussi les repas de la semaine restés « à proposer » d'une planification plus ancienne
+   et non demandés : auparavant, après avoir choisi un seul menu, les dîners cochés d'avance la veille revenaient dans
+   le calendrier. Un menu annulé redevient à prévoir (décoché). La liste de courses n'a plus de carte sur l'accueil : une pastille rouge sur l'onglet Courses de la barre du
    bas donne le nombre d'articles à acheter (mis à jour par l'accueil, la liste et la fiche recette). Un menu choisi se déplace en
    faisant glisser sa poignée (six points, à droite de la ligne : le menu se détache dès que le doigt bouge) ou par appui
    long sur le menu (250 ms, le téléphone vibre quand il se détache) ; glisser tout de suite ailleurs sur la ligne fait

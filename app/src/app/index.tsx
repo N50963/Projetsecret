@@ -1,7 +1,7 @@
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 // Défilement qui s'accorde avec les gestes natifs : un menu détaché n'est jamais repris par la page.
 import { ScrollView } from "react-native-gesture-handler";
@@ -23,7 +23,7 @@ import { supabase } from "../lib/supabase";
 import { BRAND_FONT, useColors } from "../lib/theme";
 import { useTimers } from "../lib/timers";
 import {
-  addDays, cancelMealChoice, ensureSlot, getShoppingList, getWeekSlots, moveMealChoice, savePlan, toIsoDate, weekDates, type ShoppingItem, type SlotRequest,
+  addDays, cancelMealChoice, ensureSlot, getShoppingList, getWeekSlots, moveMealChoice, savePlan, setMealWanted, toIsoDate, weekDates, type ShoppingItem, type SlotRequest,
   type WeekSlot,
 } from "../modules/planning";
 import type { MealType } from "../modules/recipes";
@@ -46,7 +46,8 @@ interface DayChoice {
  * Sélection d'un jour sans repas enregistré : le dîner coché quand la semaine est encore vide (on la prévoit) ; rien une
  * fois des menus choisis (le foyer coche lui-même un repas de plus).
  */
-const defaultChoice = (fresh: boolean): DayChoice => ({ dejeuner: false, diner: fresh, time: { dejeuner: DEFAULT_TIME, diner: DEFAULT_TIME } });
+/** Semaine vide par défaut : aucun repas coché, le foyer coche ceux à proposer. */
+const defaultChoice = (): DayChoice => ({ dejeuner: false, diner: false, time: { dejeuner: DEFAULT_TIME, diner: DEFAULT_TIME } });
 
 /** Temps enregistré ramené aux choix de la roue (30 min, 1 h, sans limite). */
 const snapTime = (t: number | null) => (t === null ? null : t <= 30 ? 30 : t <= 60 ? 60 : null);
@@ -81,6 +82,8 @@ export default function Accueil() {
   /** Menu en cours de déplacement : la page ne défile pas pendant le glisser-déposer. */
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
+  /** Repas cochés ou décochés en cours d'enregistrement (un enregistrement à la fois par repas, dans l'ordre des touchers). */
+  const writes = useRef(new Map<string, Promise<void>>());
 
   const load = useCallback(async () => {
     try {
@@ -96,18 +99,19 @@ export default function Accueil() {
       setShopping(list);
       setShoppingCount(toBuyLines(list).length);
       setLoaded(true);
-      const fresh = !week.some((s) => s.status === "accepted");
-      // Les repas enregistrés fixent la sélection de leur jour ; les autres jours gardent la sélection en cours.
+      // Repas cochés : ceux enregistrés « à proposer » (chaque toucher est enregistré tout de suite) ; aucun par défaut.
+      // Un repas dont l'enregistrement est en cours garde la sélection affichée.
       setChoices((prev) => Object.fromEntries(days.map((d) => {
-        const saved = MEALS.map((m) => byKey[`${d}:${m}`]).filter((s): s is WeekSlot => s !== undefined);
-        if (!saved.length) return [d, prev[d] ?? defaultChoice(fresh)];
-        const wanted = (m: MealType) => (byKey[`${d}:${m}`] ? byKey[`${d}:${m}`]!.status !== "skipped" : false);
-        // Temps propre à chaque repas : celui du repas enregistré, sinon la sélection en cours.
-        const timeOf = (m: MealType) => {
+        const base = prev[d] ?? defaultChoice();
+        const next: DayChoice = { ...base, time: { ...base.time } };
+        for (const m of MEALS) {
+          if (writes.current.has(`${d}:${m}`)) continue;
           const slot = byKey[`${d}:${m}`];
-          return slot && slot.status !== "accepted" ? snapTime(slot.maxTotalMin) : prev[d]?.time[m] ?? DEFAULT_TIME;
-        };
-        return [d, { dejeuner: wanted("dejeuner"), diner: wanted("diner"), time: { dejeuner: timeOf("dejeuner"), diner: timeOf("diner") } }];
+          next[m] = slot ? slot.status !== "skipped" : false;
+          // Temps propre à chaque repas : celui du repas à proposer enregistré, sinon la sélection en cours.
+          if (slot?.status === "open") next.time[m] = snapTime(slot.maxTotalMin);
+        }
+        return [d, next];
       })));
       // Liste des photos rafraîchie en arrière-plan (nouvelles images, photos du foyer).
       setImages(await illustrationUrls(ids.filter((id): id is string => id !== null)));
@@ -130,12 +134,32 @@ export default function Accueil() {
   }, [load]));
 
   const picture = (recipeId: string | null) => (recipeId ? pictureOf(recipeId) ?? images[recipeId] ?? null : null);
-  const fresh = !Object.values(slots).some((s) => s.status === "accepted");
-  const choiceOf = (d: string): DayChoice => choices[d] ?? defaultChoice(fresh);
+  const choiceOf = (d: string): DayChoice => choices[d] ?? defaultChoice();
   /** Repas du jour passé : le déjeuner après 14 h, le dîner après 20 h. */
   const isPast = (d: string, m: MealType) => d === today && hour >= OVER_HOUR[m];
-  const update = (d: string, patch: Partial<DayChoice>) => setChoices((p) => ({ ...p, [d]: { ...choiceOf(d), ...patch } }));
   const isChosen = (d: string, m: MealType) => slots[`${d}:${m}`]?.status === "accepted";
+  /** Enregistre un repas coché (avec son temps disponible) ou décoché, après les enregistrements déjà en cours pour lui. */
+  const persist = (d: string, m: MealType, choice: DayChoice) => {
+    const key = `${d}:${m}`;
+    const request: SlotRequest = { date: d, mealType: m, maxTotalMin: choice.time[m], servings: household.defaultServings };
+    const run: Promise<void> = (writes.current.get(key) ?? Promise.resolve())
+      .then(() => setMealWanted(supabase, household.id, request, choice[m]))
+      .catch((e) => setError(errorText(e)))
+      .finally(() => {
+        if (writes.current.get(key) === run) writes.current.delete(key);
+      });
+    writes.current.set(key, run);
+  };
+  /** Repas coché, décoché ou temps changé : affiché tout de suite et enregistré, pour être gardé. */
+  const update = (d: string, patch: Partial<DayChoice>) => {
+    const before = choiceOf(d);
+    const next = { ...before, ...patch };
+    setChoices((p) => ({ ...p, [d]: next }));
+    for (const m of MEALS) {
+      if (isChosen(d, m)) continue;
+      if (next[m] !== before[m] || (next[m] && next.time[m] !== before.time[m])) persist(d, m, next);
+    }
+  };
 
   // Menus choisis, dans l'ordre de la semaine : le premier (aujourd'hui, sinon le prochain) s'affiche en grand en tête ;
   // tous les menus choisis se retrouvent ensuite jour par jour dans le ruban de la semaine.
@@ -154,6 +178,8 @@ export default function Accueil() {
     setBusy("plan");
     setError("");
     try {
+      // Cases touchées juste avant : enregistrées d'abord.
+      await Promise.all(writes.current.values());
       const { planId } = await savePlan(supabase, household.id, today, addDays(today, 6), requests);
       router.push({ pathname: "/propositions", params: { plan: planId, start: today } });
     } catch (e) {
@@ -188,6 +214,8 @@ export default function Accueil() {
       setError("");
       try {
         await cancelMealChoice(supabase, s.slotId);
+        // Le repas redevient à prévoir : décoché, comme le reste de la semaine par défaut.
+        await setMealWanted(supabase, household.id, { date: s.date, mealType: s.mealType, maxTotalMin: s.maxTotalMin, servings: household.defaultServings }, false);
         await load();
       } catch (e) {
         setError(errorText(e));
