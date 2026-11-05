@@ -16,21 +16,26 @@ Données : `data/recipes/seed.json` (généré). Migrations : `supabase/migratio
 | Part compatible avec le temps disponible un soir de semaine | ≈ 60 % |
 
 Recettes nécessaires hors répétition : 6 / (0,65 × 0,35 × 0,6) ≈ 44, plus les 24 récemment servies : **≈ 70 au minimum**.
-Le jeu initial en compte **144** : 84 recettes de départ, puis 60 plats du quotidien ajoutés le 2026-11-01
-(`services/recipes/seed_quotidien.py` : cordon bleu et haricots verts, raclette, tartiflette, blanquette de veau,
-pot-au-feu, salade de pâtes au surimi, carottes râpées et œufs durs, pizza reine, tarte à la tomate…). Réparties pour que
-les règles de variété aient de quoi alterner les protéines :
+Le jeu initial en compte **297** (300 avec les 3 recettes ajoutées par le foyer) : 84 recettes de départ, 60 plats du
+quotidien ajoutés le 2026-11-01 (`services/recipes/seed_quotidien.py` : cordon bleu et haricots verts, raclette,
+tartiflette, blanquette de veau, pot-au-feu, pizza reine, quiches, gratins, soupes…), puis 153 recettes le 2026-11-05 :
+les 87 recettes nouvelles de la liste complémentaire du foyer (`seed_complements_a.py`, `seed_complements_b.py` : bowls,
+burritos, cannellonis, nems, parmentiers, poêlées, risottos, salades composées, tajines…) et 66 recettes pour arriver à
+300 (`seed_300_a.py`, `seed_300_b.py` : coq au vin, carbonade, choucroute, cassoulet, fondue, moules marinières,
+waterzoï, pad thaï sans piment, poké bowl, gaspacho, soupes, plats de printemps…). Les recettes de la liste du foyer
+trop proches d'une recette existante (même plat, autre accompagnement) n'ont pas été ajoutées. Réparties pour que les
+règles de variété aient de quoi alterner les protéines :
 
 | Protéine principale | Recettes | | Saison | Recettes |
 |---|---|---|---|---|
-| Volaille | 25 | | Printemps | 91 |
-| Bœuf et veau | 19 | | Été | 105 |
-| Porc et charcuterie | 23 | | Automne | 119 |
-| Poisson | 23 | | Hiver | 110 |
-| Fruits de mer | 4 | | Déjeuner possible | 54 |
-| Œufs | 10 | | 30 min ou moins | 45 |
-| Légumineuses | 12 | | Sans viande ni poisson | 49 |
-| Végétarien (fromage, légumes) | 28 | | | |
+| Volaille | 67 | | Printemps | 204 |
+| Bœuf et veau | 35 | | Été | 198 |
+| Porc et charcuterie | 46 | | Automne | 248 |
+| Poisson | 43 | | Hiver | 219 |
+| Fruits de mer | 9 | | Déjeuner possible | 95 |
+| Œufs | 17 | | 30 min ou moins | 81 |
+| Légumineuses | 25 | | Sans viande ni poisson | 100 |
+| Végétarien (fromage, légumes) | 55 | | | |
 
 Les recettes ont été rédigées pour ce projet à partir des produits que le foyer achète réellement (poulet, saumon et truite,
 courgettes, butternut, feta, chèvre, wraps, gnocchis, lentilles, cordons bleus, raclette…), pour 4 portions. Le veau est

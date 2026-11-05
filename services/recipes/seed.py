@@ -7,10 +7,15 @@ import collections
 import json
 from pathlib import Path
 
-from services.recipes import seed_poissons_oeufs, seed_quotidien, seed_vegetarien, seed_viandes
+from services.recipes import (
+    seed_300_a, seed_300_b, seed_complements_a, seed_complements_b, seed_poissons_oeufs, seed_quotidien, seed_vegetarien, seed_viandes,
+)
 from services.recipes.model import validate
 
-RECIPES = seed_viandes.RECIPES + seed_poissons_oeufs.RECIPES + seed_vegetarien.RECIPES + seed_quotidien.RECIPES
+RECIPES = (seed_viandes.RECIPES + seed_poissons_oeufs.RECIPES + seed_vegetarien.RECIPES + seed_quotidien.RECIPES
+           + seed_complements_a.RECIPES + seed_complements_b.RECIPES + seed_300_a.RECIPES + seed_300_b.RECIPES)
+# Recettes ajoutées le 5 novembre 2026 (liste complémentaire du foyer et complément jusqu'à 300).
+ADDED_300 = [r.slug for r in seed_complements_a.RECIPES + seed_complements_b.RECIPES + seed_300_a.RECIPES + seed_300_b.RECIPES]
 SEED_PATH = Path(__file__).resolve().parents[2] / "data" / "recipes" / "seed.json"
 
 

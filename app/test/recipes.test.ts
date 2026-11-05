@@ -51,8 +51,8 @@ describe("adaptation au nombre de personnes", () => {
 });
 
 describe("validation d'une recette", () => {
-  it("accepte les 144 recettes du jeu initial", () => {
-    expect(seed).toHaveLength(144);
+  it("accepte les 297 recettes du jeu initial", () => {
+    expect(seed).toHaveLength(297);
     const invalid = seed.map(fromSeed).map((r) => [r.slug, validateRecipe(r)] as const).filter(([, issues]) => issues.length);
     expect(invalid).toEqual([]);
   });
