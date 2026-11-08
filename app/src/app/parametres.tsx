@@ -105,7 +105,7 @@ export default function Parametres() {
 
   return (
     <Screen title="Paramètres" nav="profil" padded={false}>
-      <View style={styles.head}><SectionTitle icon="receipt" title="Tickets Lidl Plus" /></View>
+      <View style={styles.head}><SectionTitle icon="receipt" title="Tickets et achats" /></View>
       <View style={[styles.card, { backgroundColor: c.card, borderColor: c.cardLine }, CARD_SHADOW]}>
         {lidl === null
           ? <Muted>Chargement…</Muted>
@@ -118,6 +118,8 @@ export default function Parametres() {
           onPress={sync} disabled={syncing} />
         <Button title={toReview ? `Vérifier ${toReview} nouveau${toReview > 1 ? "x" : ""} produit${toReview > 1 ? "s" : ""}` : "Corriger un produit acheté"}
           kind="secondary" icon={toReview ? "alert" : "search"} onPress={() => router.push("/produits")} />
+        {/* Achats sans ticket Lidl (marché, primeur, autre magasin) : ils comptent comme ceux des tickets. */}
+        <Button title="Fruits et légumes d'un autre magasin" kind="secondary" icon="cart" onPress={() => router.push("/achats-magasin")} />
       </View>
 
       <View style={[styles.head, { marginTop: 2 }]}><SectionTitle icon="sliders" title="Préférences" /></View>

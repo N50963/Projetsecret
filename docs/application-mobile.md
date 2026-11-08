@@ -29,6 +29,14 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    elle-même. Le jeton obtenu reste dans le stockage sécurisé du téléphone (Keychain / Keystore) et n'est jamais envoyé
    à Supabase. Chaque téléphone se connecte une fois. Les tickets sont ensuite lus directement chez Lidl par le
    téléphone, puis enregistrés dans Supabase.
+   **Fruits et légumes d'un autre magasin** (Profil › Tickets et achats, version 0.29.2) : pour les achats sans ticket
+   Lidl (marché, primeur, autre magasin). Grille des fruits, légumes et herbes fraîches du référentiel avec leur photo
+   (recherche, filtres Légumes / Fruits / Herbes) ; toucher un produit le sélectionne, − et + règlent la quantité
+   (paliers de 100 g à 5 kg, pièces, bottes pour les radis et oignons nouveaux, bouquets d'herbes) ; jour d'achat
+   (aujourd'hui, hier, avant-hier) et magasin facultatif. Table `extra_purchases` ; la vue `purchased_ingredients` les
+   ajoute aux achats des tickets : ils comptent de la même façon dans le stock des propositions de menus, la liste de
+   courses cochée toute seule, la recherche de menu par ingrédient et les idées de la réflexion approfondie. Les achats
+   des 30 derniers jours s'affichent en bas de l'écran et se retirent en cas d'erreur.
 3. **Correction des produits** (module ouvert après la récupération des tickets, ou Profil › Vérifier / Corriger un
    produit) : chaque nouveau produit Lidl apparaît avec ce que MenuBily en a compris (rôle et ingrédients), les non
    reconnus d'abord, lus par Mistral qui propose un nom, un rôle et les ingrédients. Le foyer valide (« C'est juste »,
