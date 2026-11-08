@@ -81,10 +81,12 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    (les manques vont sur la liste de courses). La fiche du menu du jour s'ouvre ensuite, avec ses étapes.
 7. **Propositions** (moteur `app/src/modules/planning`) : pour chaque repas, d'abord jusqu'à 5 recettes réalisables
    avec les courses, celles qui équilibrent et varient la semaine en tête. Swipe à droite pour choisir, à gauche pour
-   passer (ou boutons). Si aucune ne convient : 3 recettes avec 1 à 3 ingrédients à acheter, puis 3 idées créées par
-   Mistral, préparées en arrière-plan dès que le foyer cherche encore (un refus parmi les recettes à acheter, la dernière
-   proposition, ou plus rien à proposer) : lancées dès l'arrivée des recettes à acheter, elles partaient pour presque
-   chaque repas et étaient perdues au premier choix (trois demandes à Mistral pour rien). « Repas 1 sur 2 » ne compte que
+   passer (ou boutons). Si aucune ne convient : 15 autres recettes (20 en tout pour le repas, version 0.29.2 ; 8
+   auparavant), d'abord celles faisables avec les courses ou avec 1 à 3 ingrédients à acheter, puis celles qui en
+   demandent davantage. Les 3 idées de la réflexion approfondie (Mistral) ne sont demandées qu'à la 20ᵉ recette
+   proposée (elles se préparent pendant qu'elle est à l'écran), ou quand il n'y a plus rien à proposer : lancées plus
+   tôt, elles étaient souvent perdues au premier choix (trois demandes pour rien). Déjà 18 refus pour ce repas (lors
+   d'une ouverture précédente) : au moins 3 recettes encore avant les idées. « Repas 1 sur 2 » ne compte que
    les repas demandés à l'ouverture. Le choix d'un menu s'enregistre en arrière-plan : le repas suivant s'affiche
    aussitôt (seul ce repas est calculé, la carte part par une animation native). À l'ouverture, toutes les données du
    moteur sont lues en même temps, et les ingrédients des recettes restent en mémoire pendant la session (une version de

@@ -73,7 +73,8 @@ describe("propositions de menus", () => {
     const [first] = planMeals(ctx, [slot("lun", "2026-10-27")]);
     expect(first!.round).toBe(1);
     expect(first!.proposals.map((p) => p.recipeId).sort()).toEqual(["curry-poulet", "dahl"]);
-    const [second] = planMeals(ctx, [slot("lun", "2026-10-27")], { rounds: { lun: 2 } });
+    // Tour 2, une fois les plats du tour 1 refusés.
+    const [second] = planMeals({ ...ctx, rejected: { lun: ["curry-poulet", "dahl"] } }, [slot("lun", "2026-10-27")], { rounds: { lun: 2 } });
     expect(second!.proposals.map((p) => p.recipeId)).toEqual(["chili"]);
     expect(second!.proposals[0]!.missing).toEqual([
       { slug: "boeuf_hache", label: "boeuf_hache", quantity: 300, unit: "g" }, { slug: "poivron", label: "poivron", quantity: 300, unit: "g" },
@@ -98,6 +99,29 @@ describe("propositions de menus", () => {
     const [few] = planMeals(context([stockOnly[0]!, steak, chili], [...purchases, buy("boeuf_hache", SHOP)], { accepted: ctx.accepted }), [slot("lun", "2026-10-26")], { mealsInPlan: 7 });
     expect(few!.proposals.map((p) => p.recipeId)).toEqual(["poulet-a", "steak"]);
     expect(few!.round).toBe(1);
+  });
+
+  it("20 recettes proposées pour un repas avant la réflexion approfondie : 5 avec les achats, puis 15 autres", () => {
+    const stockReady = Array.from({ length: 8 }, (_, n) => recipe(`stock-${n}`, n % 2 ? "volaille" : "poisson", ["poulet_filet", "riz", "courgette"]));
+    const fewToBuy = Array.from({ length: 6 }, (_, n) => recipe(`achat-${n}`, "boeuf", ["boeuf_hache", "riz"]));
+    const manyToBuy = Array.from({ length: 10 }, (_, n) => recipe(`courses-${n}`, "porc", ["porc_tranche", "poivron", "aubergine", "feta", "mais"]));
+    const ctx = context([...stockReady, ...fewToBuy, ...manyToBuy], purchases);
+    const [first] = planMeals(ctx, [slot("lun", "2026-10-27")]);
+    expect(first!.proposals).toHaveLength(5);
+    const refused = first!.proposals.map((p) => p.recipeId);
+    const [second] = planMeals({ ...ctx, rejected: { lun: refused } }, [slot("lun", "2026-10-27")], { rounds: { lun: 2 } });
+    expect(second!.round).toBe(2);
+    expect(second!.proposals).toHaveLength(15);
+    const ids = second!.proposals.map((p) => p.recipeId);
+    expect(ids.some((id) => refused.includes(id))).toBe(false);
+    // Tous les plats faisables avec les achats non encore montrés (3) et ceux à 1 ingrédient à acheter (6) sont proposés ;
+    // les plats qui demandent 5 ingrédients complètent jusqu'à 20.
+    expect(ids.filter((id) => id.startsWith("stock-"))).toHaveLength(3);
+    expect(ids.filter((id) => id.startsWith("achat-"))).toHaveLength(6);
+    expect(ids.filter((id) => id.startsWith("courses-"))).toHaveLength(6);
+    // Déjà 18 refus pour ce repas : au moins 3 recettes encore, puis la réflexion approfondie.
+    const [late] = planMeals({ ...ctx, rejected: { lun: [...refused, ...ids.slice(0, 13)] } }, [slot("lun", "2026-10-27")], { rounds: { lun: 2 } });
+    expect(late!.proposals).toHaveLength(3);
   });
 
   it("propose le poisson frais en premier, avant qu'il ne soit plus consommable", () => {
@@ -160,7 +184,7 @@ describe("menu du jour d'après un ingrédient", () => {
     const ctx = context([curry, poelee, saumon, dahl], ["poulet_filet", "riz", "courgette", "saumon", "lentilles", "tomate_conserve", "carotte"].map((s) => buy(s, SHOP)));
     const [first] = planMeals(ctx, [slot("jour", "2026-10-27")], { mustInclude: { jour: "poulet_filet" } });
     expect(first!.proposals.map((p) => p.recipeId)).toEqual(["curry-poulet"]);
-    const [second] = planMeals(ctx, [slot("jour", "2026-10-27")], { mustInclude: { jour: "poulet_filet" }, rounds: { jour: 2 } });
+    const [second] = planMeals({ ...ctx, rejected: { jour: ["curry-poulet"] } }, [slot("jour", "2026-10-27")], { mustInclude: { jour: "poulet_filet" }, rounds: { jour: 2 } });
     expect(second!.proposals.map((p) => p.recipeId)).toEqual(["poelee-poulet"]);
   });
 

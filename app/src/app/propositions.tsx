@@ -101,6 +101,8 @@ export default function Propositions() {
   const [ctx, setCtx] = useState<PlannerContext | null>(null);
   const [round, setRound] = useState<1 | 2>(1);
   const [deck, setDeck] = useState<Proposal[]>([]);
+  /** Repas et tour du paquet affiché (« id:tour ») : au changement de tour, le paquet vide d'avant ne compte pas. */
+  const [deckKey, setDeckKey] = useState("");
   const [exhausted, setExhausted] = useState(false);
   const [ideas, setIdeas] = useState<Ideas | null>(null);
   /** Idées déjà montrées (refusées) pour le repas courant. */
@@ -197,6 +199,7 @@ export default function Propositions() {
     preloadPictures(proposals.map((p) => p.recipeId));
     if (entry && entry.round !== round) setRound(entry.round);
     setDeck(proposals);
+    setDeckKey(`${current.id}:${entry?.round ?? round}`);
     setExhausted(!proposals.length);
     recordShown(supabase, household.id, current.id, proposals).catch(() => undefined);
     illustrationUrls(proposals.map((p) => p.recipeId)).then((urls) => setImages((prev) => ({ ...prev, ...urls }))).catch(() => undefined);
@@ -363,16 +366,17 @@ export default function Propositions() {
     }, n * IDEA_STAGGER_MS)));
   }, [household.id, ordered.length, focus, weekMeals]);
 
-  // Idées de Mistral préparées en arrière-plan quand le foyer cherche encore : propositions avec achats après un refus pour
-  // ce repas, dernière proposition, ou plus rien à proposer. Lancées dès l'arrivée des propositions avec achats, elles
-  // partaient pour presque chaque repas (sans stock adapté) et étaient perdues dès le premier menu choisi : trois demandes
-  // à Mistral consommées pour rien sur le quota gratuit à chaque fois.
-  const refusedHere = current && ctx ? (ctx.rejected[current.id] ?? []).length : 0;
+  // Idées de la réflexion approfondie, demandées seulement après 20 recettes proposées pour ce repas (tours 1 et 2) : dès
+  // que la dernière est à l'écran (elles se préparent pendant que le foyer la regarde), ou s'il n'y a plus rien à proposer.
+  // Lancées plus tôt, elles étaient souvent perdues au premier menu choisi (trois demandes consommées pour rien sur le
+  // quota gratuit).
   useEffect(() => {
     if (!current || !ctx || ideas?.slotId === current.id) return;
-    if (exhausted || (round === 2 && (refusedHere > 0 || deck.length <= 1))) startIdeas(current, ctx);
+    // Le paquet doit être celui du tour 2 de ce repas : juste après le dernier plat du tour 1, l'ancien paquet (vide) est
+    // encore affiché un instant, et les idées partaient alors avant les 15 recettes du tour 2.
+    if (exhausted || (round === 2 && deckKey === `${current.id}:2` && deck.length <= 1)) startIdeas(current, ctx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id, round, exhausted, refusedHere, deck.length]);
+  }, [current?.id, round, exhausted, deck.length, deckKey]);
 
   // Repas suivant (ou écran quitté) : les idées encore en préparation pour ce repas sont abandonnées.
   useEffect(() => () => {
