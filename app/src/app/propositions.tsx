@@ -72,6 +72,14 @@ const IDEA_STAGGER_MS = 1500;
 /** Idées de Mistral autour d'un ingrédient imposé : trois façons de le cuisiner. */
 const INGREDIENT_STYLES = ["un plat mijoté ou au four", "un plat rapide à la poêle ou au wok", "une salade composée, un gratin ou une tarte"];
 
+/** Carte vue pendant le swipe : rien n'est enregistré avant le récapitulatif de fin. */
+interface Swiped {
+  name: string;
+  approved: boolean;
+  proposal?: Proposal;
+  draft?: Draft;
+}
+
 interface Focus {
   /** Repas du menu du jour choisi d'après un ingrédient. */
   slotId: string;
@@ -120,6 +128,16 @@ export default function Propositions() {
   const [replacing, setReplacing] = useState<Record<string, MissingIngredient[]>>({});
   const [chosenToday, setChosenToday] = useState<string | null>(null);
   const [info, setInfo] = useState("");
+  /** Cartes vues par repas (hors menu du jour), dans l'ordre : approuvées et refusées. */
+  const [swiped, setSwiped] = useState<Record<string, Swiped[]>>({});
+  /** Carte cochée par repas dans le récapitulatif (index dans `swiped`) ; null : aucun menu. */
+  const [picked, setPicked] = useState<Record<string, number | null>>({});
+  /** Repas passés pendant le swipe (enregistrés comme tels s'ils restent sans menu). */
+  const [skipped, setSkipped] = useState<string[]>([]);
+  /** Repas déjà enregistrés au récapitulatif (une nouvelle tentative après une erreur ne les refait pas). */
+  const saved = useRef(new Set<string>());
+  /** Récapitulatif ouvert avant la fin : les repas restants resteront à choisir. */
+  const [reviewing, setReviewing] = useState(false);
   const swipe = useRef<((d: SwipeDirection) => void) | null>(null);
   // Une seule illustration demandée à la fois ; plus aucune pendant la session si Mistral refuse (quota gratuit).
   const illustrating = useRef(false);
@@ -232,6 +250,8 @@ export default function Propositions() {
   // Tous les repas ont leur menu : retour au calendrier de l'accueil (photos et menus de la semaine).
   useEffect(() => {
     if (!slots || !ctx || current || shortages.length) return;
+    // Semaine : le récapitulatif s'affiche, l'écran se ferme une fois les menus validés.
+    if (!focus && asked.length) return;
     // Les choix en cours d'enregistrement sont attendus ; un échec rouvre son repas (et l'on ne quitte pas l'écran).
     let live = true;
     const failed = failures.current;
@@ -245,7 +265,7 @@ export default function Propositions() {
     return () => {
       live = false;
     };
-  }, [slots, ctx, current, router, shortages.length, focus, chosenToday]);
+  }, [slots, ctx, current, router, shortages.length, focus, chosenToday, asked.length]);
 
   const next = useCallback(() => {
     setDeck((d) => {
@@ -308,19 +328,34 @@ export default function Propositions() {
     return next;
   };
 
+  /** Carte vue pendant le swipe de la semaine ; une carte approuvée est cochée pour son repas. */
+  const remember = (slotId: string, item: Swiped) => {
+    const index = swiped[slotId]?.length ?? 0;
+    setSwiped((s) => ({ ...s, [slotId]: [...(s[slotId] ?? []), item] }));
+    if (item.approved) setPicked((p) => ({ ...p, [slotId]: index }));
+  };
+
   const onSwipe = async (p: Proposal, direction: SwipeDirection) => {
     if (!current || !ctx) return;
     setError("");
     if (direction === "left") {
       setCtx({ ...ctx, rejected: { ...ctx.rejected, [current.id]: [...(ctx.rejected[current.id] ?? []), p.recipeId] } });
       next();
-      // Refus enregistré en arrière-plan, réessayé en silence (sans réseau, il n'empêche pas de continuer).
       const slotId = current.id;
-      retryQuietly(() => rejectProposal(supabase, household.id, slotId, p));
+      // Semaine : le refus ne compte qu'au récapitulatif (la recette peut encore y être cochée).
+      if (!focus) remember(slotId, { name: p.name, approved: false, proposal: p });
+      // Refus enregistré en arrière-plan, réessayé en silence (sans réseau, il n'empêche pas de continuer).
+      else retryQuietly(() => rejectProposal(supabase, household.id, slotId, p));
       return;
     }
     if (Date.now() - lastChoice.current < 450) return;
     lastChoice.current = Date.now();
+    if (!focus) {
+      // Semaine : recette approuvée, cochée au récapitulatif ; elle compte déjà pour l'équilibre des repas suivants.
+      remember(current.id, { name: p.name, approved: true, proposal: p });
+      chosen(p.recipeId, ctx);
+      return;
+    }
     // Le menu suivant s'affiche tout de suite ; le choix s'enregistre en arrière-plan.
     const missing = withIngredient(p.missing, p.recipeId, ctx);
     const slotId = current.id;
@@ -389,6 +424,14 @@ export default function Propositions() {
     if (!current || !ctx) return;
     if (direction === "left") {
       setSeen((n) => n + 1);
+      if (!focus) remember(current.id, { name: d.recipe.name, approved: false, draft: d });
+      return;
+    }
+    if (!focus) {
+      // Semaine : l'idée devient une recette seulement si elle reste cochée au récapitulatif.
+      remember(current.id, { name: d.recipe.name, approved: true, draft: d });
+      markSlot(current.id, "accepted");
+      setRound(1);
       return;
     }
     setBusy("accept");
@@ -421,10 +464,54 @@ export default function Propositions() {
       setReplacing(({ [slotId]: _kept, ...rest }) => rest);
     } else if (current.status === "open") {
       markSlot(slotId, "skipped");
-      track(skipSlot(supabase, slotId), slotId);
+      if (focus) track(skipSlot(supabase, slotId), slotId);
+      else setSkipped((s) => [...s, slotId]);
     }
     if (focus) setPending((p) => p.slice(1));
     setRound(1);
+  };
+
+  /**
+   * Récapitulatif validé : le plat coché de chaque repas est choisi (une idée devient alors une recette), les recettes
+   * refusées et restées décochées comptent comme refus ; un repas passé sans plat coché est passé, les autres restent à choisir.
+   */
+  const validate = async () => {
+    if (!ctx) return;
+    setBusy("validate");
+    setError("");
+    const created: string[] = [];
+    try {
+      for (const slot of ordered.filter((s) => asked.includes(s.id))) {
+        if (saved.current.has(slot.id)) continue;
+        const list = swiped[slot.id] ?? [];
+        const sel = picked[slot.id];
+        const item = sel === null || sel === undefined ? undefined : list[sel];
+        if (item?.proposal) {
+          await acceptProposal(supabase, slot.id, { recipeId: item.proposal.recipeId, missing: item.proposal.missing });
+        } else if (item?.draft) {
+          const recipeId = await createRecipe(supabase, household.id, draftToInput(item.draft.recipe, "mistral"));
+          const recipes = await loadRecipesForPlanning(supabase, household.id);
+          const recipe = recipes.find((r) => r.id === recipeId);
+          const base = { ...ctx, recipes, accepted: ctx.accepted.filter((m) => m.slotId !== slot.id) };
+          await acceptProposal(supabase, slot.id, { recipeId, missing: recipe ? missingForSlot(base, recipe, slot) : [] });
+          created.push(recipeId);
+        } else if (skipped.includes(slot.id)) {
+          await skipSlot(supabase, slot.id);
+        }
+        saved.current.add(slot.id);
+        for (const s of list) {
+          const p = s.proposal;
+          if (p && !s.approved && s !== item) retryQuietly(() => rejectProposal(supabase, household.id, slot.id, p));
+        }
+      }
+      created.forEach((id) => illustrateRecipe(household.id, id).catch(() => undefined));
+      if (router.canGoBack()) router.back();
+      else router.replace("/");
+    } catch (e) {
+      setError(isNetworkError(e) ? "Pas de connexion Internet : réessayez quand le réseau revient." : errorText(e));
+    } finally {
+      setBusy(null);
+    }
   };
 
   /** Repas prévu plus tard qui manquera d'un ingrédient : nouvelles propositions selon ce qui reste et ce qui est prévu. */
@@ -473,6 +560,64 @@ export default function Propositions() {
               busy={busy === s.slotId} disabled={busy !== null} />
           </View>
         ))}
+      </Screen>
+    );
+  }
+
+  if (!focus && (!current || reviewing) && asked.length) {
+    const meals = ordered.filter((s) => asked.includes(s.id));
+    const count = meals.filter((s) => picked[s.id] !== null && picked[s.id] !== undefined).length;
+    return (
+      <Screen title="Vos menus" footer={(
+        <View style={[styles.reviewFooter, { borderColor: c.cardLine, backgroundColor: c.background }]}>
+          <Button title={count ? `Valider ${count > 1 ? `les ${count} menus` : "le menu"}` : "Valider sans menu"} icon="check"
+            onPress={validate} busy={busy === "validate"} disabled={busy !== null} />
+        </View>
+      )}>
+        <Text style={{ color: c.muted, fontSize: 16, lineHeight: 22 }}>
+          Rien n'est encore enregistré. Les plats approuvés sont cochés : touchez un plat pour l'annuler, ou cochez un plat refusé à la place (un seul par repas).
+        </Text>
+        <ErrorText>{error}</ErrorText>
+        {current ? <Button title="Reprendre les propositions" kind="secondary" icon="back" onPress={() => setReviewing(false)} disabled={busy !== null} /> : null}
+        {meals.map((slot) => {
+          const list = swiped[slot.id] ?? [];
+          const sel = picked[slot.id];
+          return (
+            <View key={slot.id} style={[styles.shortage, { backgroundColor: c.card, borderColor: c.cardLine }]}>
+              <Text style={{ color: c.primary, fontSize: 15, fontWeight: "700" }}>{dayLabel(slot.date, today)} · {mealLabel(slot.mealType)}</Text>
+              {list.map((s, i) => {
+                const on = sel === i;
+                const id = s.proposal?.recipeId;
+                const picture = id ? pictureOf(id) ?? images[id] : null;
+                return (
+                  <Pressable key={i} onPress={() => setPicked((p) => ({ ...p, [slot.id]: p[slot.id] === i ? null : i }))}
+                    accessibilityRole="checkbox" accessibilityState={{ checked: on }} disabled={busy !== null}
+                    style={[styles.pickRow, { borderColor: on ? c.greenInk : c.cardLine, backgroundColor: on ? c.greenSoft : c.background }]}>
+                    <View style={[styles.pickThumb, { backgroundColor: c.chip }]}>
+                      {picture
+                        ? <Image source={sourceOf(picture)} placeholder={placeholderOf(picture)} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+                        : <Icon name={s.draft ? "sparkle" : "image"} size={22} color={c.muted} />}
+                    </View>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={{ color: c.text, fontSize: 16, fontWeight: "600" }} numberOfLines={2}>{s.name}</Text>
+                      <Text style={{ color: s.approved ? c.greenInk : c.muted, fontSize: 13.5 }}>
+                        {s.approved ? "Approuvé" : "Refusé"}{s.draft ? " · nouvelle idée" : ""}
+                      </Text>
+                    </View>
+                    <View style={[styles.pickBox, on ? { backgroundColor: c.greenInk, borderColor: c.greenInk } : { borderColor: c.muted }]}>
+                      {on ? <Icon name="check" size={18} color="#FFFFFF" /> : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+              {sel === null || sel === undefined ? (
+                <Text style={{ color: c.orangeInk, fontSize: 14.5 }}>
+                  {skipped.includes(slot.id) ? "Repas passé : aucun menu." : "Aucun menu coché : ce repas restera à choisir."}
+                </Text>
+              ) : null}
+            </View>
+          );
+        })}
       </Screen>
     );
   }
@@ -583,7 +728,8 @@ export default function Propositions() {
               {slotIdeas?.drafts.length ? "Plus d'idées pour ce repas" : "La réflexion approfondie ne répond pas pour le moment"}
             </Text>
             <Text style={{ color: c.muted, fontSize: 16, textAlign: "center" }}>
-              {!slotIdeas?.drafts.length && slotIdeas?.failed ? slotIdeas.failed : "Les repas déjà choisis sont enregistrés."}
+              {!slotIdeas?.drafts.length && slotIdeas?.failed ? slotIdeas.failed
+                : focus ? "Les repas déjà choisis sont enregistrés." : "Vos plats approuvés seront à valider à la fin."}
             </Text>
           </View>
         )}
@@ -595,7 +741,7 @@ export default function Propositions() {
         ) : (top && !exhausted) || draft ? (
           <View style={{ flexDirection: "row", gap: 10 }}>
             <Button title="Autre idée" kind="secondary" icon="close" onPress={() => swipe.current?.("left")} style={{ flex: 1 }} disabled={busy !== null} />
-            <Button title="Je choisis" icon="check" onPress={() => swipe.current?.("right")} style={{ flex: 1.25 }} busy={busy === "accept"} />
+            <Button title={focus ? "Je choisis" : "J'approuve"} icon="check" onPress={() => swipe.current?.("right")} style={{ flex: 1.25 }} busy={busy === "accept"} />
           </View>
         ) : <View style={{ height: 48 }} />}
         <Pressable onPress={skip} accessibilityRole="button" style={styles.skip}>
@@ -603,6 +749,11 @@ export default function Propositions() {
             {focus && replacing[current.id] ? "Garder l'ancien menu (manques sur la liste de courses)" : "Passer ce repas"}
           </Text>
         </Pressable>
+        {!focus && Object.keys(swiped).length ? (
+          <Pressable onPress={() => setReviewing(true)} accessibilityRole="button" style={styles.skip}>
+            <Text style={{ color: c.primary, fontSize: 16, fontWeight: "600", textDecorationLine: "underline" }}>Terminer et voir mes menus</Text>
+          </Pressable>
+        ) : null}
       </View>
     </Screen>
   );
@@ -619,6 +770,10 @@ const styles = StyleSheet.create({
   toBuy: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 38, borderRadius: 13, paddingHorizontal: 12, paddingVertical: 6 },
   note: { flexDirection: "row", alignItems: "center", gap: 7 },
   state: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: 17, borderWidth: 1, padding: 24, alignItems: "center", justifyContent: "center", gap: 18 },
+  reviewFooter: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8, borderTopWidth: 1 },
+  pickRow: { flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1.5, borderRadius: 13, padding: 8 },
+  pickThumb: { width: 54, height: 54, borderRadius: 10, overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  pickBox: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   slot: { width: 84, height: 84, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   stateTitle: { fontSize: 19, lineHeight: 25, fontWeight: "700", textAlign: "center" },
   footer: { paddingTop: 21, paddingHorizontal: 14, paddingBottom: 6, gap: 2 },
