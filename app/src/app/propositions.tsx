@@ -115,6 +115,12 @@ export default function Propositions() {
   const [ideas, setIdeas] = useState<Ideas | null>(null);
   /** Idées déjà montrées (refusées) pour le repas courant. */
   const [seen, setSeen] = useState(0);
+  /** Carrousel : recette affichée dans le paquet du repas (le swipe parcourt, seuls les boutons décident). */
+  const [pos, setPos] = useState(0);
+  /** Idées de la réflexion approfondie écartées par le bouton pour le repas courant. */
+  const [droppedDrafts, setDroppedDrafts] = useState<Draft[]>([]);
+  /** Dernier geste du carrousel : la carte suivante arrive du bon côté. */
+  const [lastMove, setLastMove] = useState<SwipeDirection | null>(null);
   const [images, setImages] = useState<Record<string, Picture | null>>({});
   usePictures();
   const [busy, setBusy] = useState<string | null>(null);
@@ -217,6 +223,7 @@ export default function Propositions() {
     preloadPictures(proposals.map((p) => p.recipeId));
     if (entry && entry.round !== round) setRound(entry.round);
     setDeck(proposals);
+    setPos(0);
     setDeckKey(`${current.id}:${entry?.round ?? round}`);
     setExhausted(!proposals.length);
     recordShown(supabase, household.id, current.id, proposals).catch(() => undefined);
@@ -225,7 +232,7 @@ export default function Propositions() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, round, ctx?.accepted.length, ctx?.recipes.length]);
 
-  const shown = deck[0]?.recipeId;
+  const shown = deck[pos]?.recipeId;
   useEffect(() => {
     if (!shown || images[shown] !== null || illustrating.current || imagesPaused.current) return;
     illustrating.current = true;
@@ -267,16 +274,20 @@ export default function Propositions() {
     };
   }, [slots, ctx, current, router, shortages.length, focus, chosenToday, asked.length]);
 
-  const next = useCallback(() => {
-    setDeck((d) => {
-      const rest = d.slice(1);
-      if (!rest.length) {
-        if (round === 1) setRound(2);
-        else setExhausted(true);
-      }
-      return rest;
-    });
+  /** Fin du paquet : recettes du tour suivant, puis idées de la réflexion approfondie. */
+  const endOfDeck = useCallback(() => {
+    if (round === 1) setRound(2);
+    else setExhausted(true);
   }, [round]);
+
+  /** Carrousel : recette suivante (au-delà de la dernière, le tour suivant). */
+  const forward = () => {
+    if (pos + 1 < deck.length) setPos(pos + 1);
+    else endOfDeck();
+  };
+
+  /** Carrousel : recette précédente. */
+  const backward = () => setPos((n) => Math.max(0, n - 1));
 
   const markSlot = (slotId: string, status: PlannedSlot["status"], recipeId: string | null = null) =>
     setSlots((s) => (s ?? []).map((x) => (x.id === slotId ? { ...x, status, recipeId } : x)));
@@ -335,12 +346,19 @@ export default function Propositions() {
     if (item.approved) setPicked((p) => ({ ...p, [slotId]: index }));
   };
 
-  const onSwipe = async (p: Proposal, direction: SwipeDirection) => {
+  /** Bouton « Écarter » ou « J'approuve » : seule façon de décider (le swipe ne fait que parcourir). */
+  const decide = async (p: Proposal, decision: "refuse" | "approve") => {
     if (!current || !ctx) return;
     setError("");
-    if (direction === "left") {
+    // Carte écartée : la suivante arrive de la droite ; recette choisie : le repas suivant s'affiche directement.
+    setLastMove(decision === "refuse" ? "left" : null);
+    if (decision === "refuse") {
       setCtx({ ...ctx, rejected: { ...ctx.rejected, [current.id]: [...(ctx.rejected[current.id] ?? []), p.recipeId] } });
-      next();
+      const rest = deck.filter((x) => x.recipeId !== p.recipeId);
+      setDeck(rest);
+      // La recette suivante prend sa place (la précédente si c'était la dernière) ; paquet vide : tour suivant.
+      if (!rest.length) endOfDeck();
+      else if (pos >= rest.length) setPos(rest.length - 1);
       const slotId = current.id;
       // Semaine : le refus ne compte qu'au récapitulatif (la recette peut encore y être cochée).
       if (!focus) remember(slotId, { name: p.name, approved: false, proposal: p });
@@ -388,6 +406,7 @@ export default function Propositions() {
     const forSlot = (update: (i: Ideas) => Ideas) => setIdeas((i) => (i?.slotId === slot.id ? update(i) : i));
     setIdeas({ slotId: slot.id, drafts: [], pending: variants.length, failed: null });
     setSeen(0);
+    setDroppedDrafts([]);
     variants.forEach(({ protein, hint }, n) => ideaTimers.current.push(setTimeout(() => {
       generateRecipes(household.id, {
         brief: `${weatherBrief(context.weather?.[slot.date])}${hint}${brief}`, count: 1, servings: slot.servings,
@@ -409,9 +428,9 @@ export default function Propositions() {
     if (!current || !ctx || ideas?.slotId === current.id) return;
     // Le paquet doit être celui du tour 2 de ce repas : juste après le dernier plat du tour 1, l'ancien paquet (vide) est
     // encore affiché un instant, et les idées partaient alors avant les 15 recettes du tour 2.
-    if (exhausted || (round === 2 && deckKey === `${current.id}:2` && deck.length <= 1)) startIdeas(current, ctx);
+    if (exhausted || (round === 2 && deckKey === `${current.id}:2` && deck.length - pos <= 1)) startIdeas(current, ctx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id, round, exhausted, deck.length, deckKey]);
+  }, [current?.id, round, exhausted, deck.length, deckKey, pos]);
 
   // Repas suivant (ou écran quitté) : les idées encore en préparation pour ce repas sont abandonnées.
   useEffect(() => () => {
@@ -420,10 +439,12 @@ export default function Propositions() {
     ideaTimers.current = [];
   }, [current?.id]);
 
-  const onDraftSwipe = async (d: Draft, direction: SwipeDirection) => {
+  const decideDraft = async (d: Draft, decision: "refuse" | "approve") => {
     if (!current || !ctx) return;
-    if (direction === "left") {
-      setSeen((n) => n + 1);
+    setLastMove(decision === "refuse" ? "left" : null);
+    if (decision === "refuse") {
+      // L'idée écartée disparaît ; la suivante prend sa place.
+      setDroppedDrafts((list) => [...list, d]);
       if (!focus) remember(current.id, { name: d.recipe.name, approved: false, draft: d });
       return;
     }
@@ -624,12 +645,13 @@ export default function Propositions() {
 
   if (!current) return <Loading label={focus && chosenToday ? "Ouverture de la fiche…" : "Menus choisis : retour au calendrier…"} />;
 
-  const top = deck[0];
+  const top = deck[pos];
   /** Menu du jour avec un ingrédient à acheter : il s'ajoute à ce qui manque (il rejoindra la liste de courses). */
   const extra = isFocusSlot && focus?.toBuy && focus.ingredient ? [focus.ingredient.name.toLowerCase()] : [];
   const toBuyLabels = top ? [...extra, ...top.missing.map((m) => m.label).filter((l) => !extra.includes(l.toLowerCase()))] : extra;
   const slotIdeas = ideas?.slotId === current.id ? ideas : null;
-  const draft = exhausted ? slotIdeas?.drafts[seen] : undefined;
+  const drafts = slotIdeas ? slotIdeas.drafts.filter((d) => !droppedDrafts.includes(d)) : [];
+  const draft = exhausted ? drafts[Math.min(seen, Math.max(0, drafts.length - 1))] : undefined;
   const waiting = slotIdeas ? slotIdeas.pending : 3;
   const ready = slotIdeas ? slotIdeas.drafts.length : 0;
   const failed = exhausted && !draft && waiting === 0;
@@ -691,7 +713,8 @@ export default function Propositions() {
       <View style={styles.main}>
         <View style={[styles.pile, { backgroundColor: c.card, borderColor: c.border }]} />
         {top && !exhausted && (
-          <SwipeCard key={`${current.id}-${top.recipeId}`} swipeRef={swipe} onSwipe={(d) => onSwipe(top, d)} style={StyleSheet.absoluteFill}
+          <SwipeCard key={`${current.id}-${round}-${pos}-${top.recipeId}`} swipeRef={swipe} canBack={pos > 0} enter={lastMove}
+            onSwipe={(d) => { setLastMove(d); if (d === "left") forward(); else backward(); }} style={StyleSheet.absoluteFill}
             onPress={() => router.push(`/recette/${top.recipeId}`)}>
             {card(top.name, pictureOf(top.recipeId) ?? images[top.recipeId], top.totalMin, proteinLabel(top.mainProtein, top.name),
               ctx.recipes.find((r) => r.id === top.recipeId)?.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", ") ?? "",
@@ -699,7 +722,8 @@ export default function Propositions() {
           </SwipeCard>
         )}
         {draft && (
-          <SwipeCard key={`draft-${seen}-${draft.recipe.name}`} swipeRef={swipe} onSwipe={(d) => onDraftSwipe(draft, d)} style={StyleSheet.absoluteFill}>
+          <SwipeCard key={`${current.id}-idea-${draft.recipe.name}`} swipeRef={swipe} canBack={seen > 0} canForward={seen + 1 < drafts.length}
+            enter={lastMove} onSwipe={(d) => { setLastMove(d); setSeen((n) => Math.max(0, Math.min(drafts.length - 1, n + (d === "left" ? 1 : -1)))); }} style={StyleSheet.absoluteFill}>
             {card(draft.recipe.name, null, draft.recipe.prep_min + draft.recipe.cook_min, proteinLabel(draft.recipe.main_protein, draft.recipe.name),
               draft.recipe.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", "))}
           </SwipeCard>
@@ -717,7 +741,7 @@ export default function Propositions() {
               })}
             </View>
             <Text style={[styles.stateTitle, { color: c.text }]}>
-              {seen ? `Réflexion approfondie : encore ${waiting} idée${waiting > 1 ? "s" : ""} en préparation…` : "Réflexion approfondie : 3 idées en préparation…"}
+              {droppedDrafts.length ? `Réflexion approfondie : encore ${waiting} idée${waiting > 1 ? "s" : ""} en préparation…` : "Réflexion approfondie : 3 idées en préparation…"}
             </Text>
           </View>
         )}
@@ -736,12 +760,19 @@ export default function Propositions() {
       </View>
 
       <View style={styles.footer}>
+        {(top && !exhausted) || draft ? (
+          <Text style={{ color: c.muted, fontSize: 14, textAlign: "center", marginBottom: 8 }}>
+            Glissez pour parcourir · {draft ? `idée ${Math.min(seen, drafts.length - 1) + 1} sur ${drafts.length}` : `${pos + 1} sur ${deck.length}`}
+          </Text>
+        ) : null}
         {failed ? (
           <Button title={slotIdeas?.drafts.length ? "Demander 3 autres idées" : "Réessayer"} onPress={() => startIdeas(current, ctx)} />
         ) : (top && !exhausted) || draft ? (
           <View style={{ flexDirection: "row", gap: 10 }}>
-            <Button title="Autre idée" kind="secondary" icon="close" onPress={() => swipe.current?.("left")} style={{ flex: 1 }} disabled={busy !== null} />
-            <Button title={focus ? "Je choisis" : "J'approuve"} icon="check" onPress={() => swipe.current?.("right")} style={{ flex: 1.25 }} busy={busy === "accept"} />
+            <Button title="Écarter" kind="secondary" icon="close" style={{ flex: 1 }} disabled={busy !== null}
+              onPress={() => (draft ? decideDraft(draft, "refuse") : top && decide(top, "refuse"))} />
+            <Button title={focus ? "Je choisis" : "J'approuve"} icon="check" style={{ flex: 1.25 }} busy={busy === "accept"}
+              onPress={() => (draft ? decideDraft(draft, "approve") : top && decide(top, "approve"))} />
           </View>
         ) : <View style={{ height: 48 }} />}
         <Pressable onPress={skip} accessibilityRole="button" style={styles.skip}>

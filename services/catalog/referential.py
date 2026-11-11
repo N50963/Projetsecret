@@ -69,6 +69,7 @@ INGREDIENTS = [
     ("celeri_rave", "Céleri-rave", "legume", "g", False),
     ("betterave", "Betterave cuite", "legume", "g", False),
     ("epinard", "Épinard", "legume", "g", False),
+    ("blette", "Blette", "legume", "g", False),
     ("haricot_vert", "Haricot vert", "legume", "g", False),
     ("haricot_beurre", "Haricot beurre", "legume", "g", False),
     ("petit_pois", "Petit pois", "legume", "g", False),
@@ -563,6 +564,7 @@ rule(r" celeri branche ", "ingredient", "celeri_branche")
 rule(r" celeri rave ", "ingredient", "celeri_rave")
 rule(r" betteraves? ", "ingredient", "betterave")
 rule(r" epinards? ", "ingredient", "epinard")
+rule(r" (blettes?|bettes?|poirees?) ", "ingredient", "blette")
 rule(r" haricots? beurre ", "ingredient", "haricot_beurre")
 rule(r" (haricots? verts?|haricots plats) ", "ingredient", "haricot_vert")
 rule(r" (petits? pois|pois doux) ", "ingredient", "petit_pois")
