@@ -88,8 +88,9 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    « Proposer un autre repas » (nouvelles propositions selon ce qui reste et ce qui est prévu) ou « Le garder »
    (les manques vont sur la liste de courses). La fiche du menu du jour s'ouvre ensuite, avec ses étapes.
 7. **Propositions** (moteur `app/src/modules/planning`) : pour chaque repas, d'abord jusqu'à 5 recettes réalisables
-   avec les courses, celles qui équilibrent et varient la semaine en tête. Swipe à droite pour approuver, à gauche pour
-   refuser (ou boutons « J'approuve » / « Autre idée »). Depuis la 0.29.3, rien n'est enregistré pendant le swipe : à la
+   avec les courses, celles qui équilibrent et varient la semaine en tête. Depuis la 0.29.4, les propositions forment un
+   carrousel : glisser fait seulement défiler les recettes dans les deux sens (« 3 sur 20 »), et l'on décide avec les
+   boutons « J'approuve » (« Je choisis » pour le menu du jour) et « Écarter ». Depuis la 0.29.3, rien n'est enregistré pendant le swipe : à la
    fin (ou via « Terminer et voir mes menus »), le récapitulatif « Vos menus » liste par repas les plats vus, les
    approuvés cochés et les refusés décochés ; un plat approuvé peut y être annulé, un refusé coché à sa place (un seul
    par repas). « Valider » enregistre les choix (une idée de la réflexion approfondie ne devient une recette qu'à ce
