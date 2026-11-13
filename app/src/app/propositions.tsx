@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { SwipeCard, type SwipeDirection } from "../components/SwipeCard";
+import { CardPager } from "../components/CardPager";
 import { Icon } from "../components/icons";
 import { Button, ErrorText, Loading, Pill, Screen, Tag } from "../components/ui";
 import { dayLabel, mealLabel, minutes, proteinLabel } from "../lib/format";
@@ -119,8 +119,6 @@ export default function Propositions() {
   const [pos, setPos] = useState(0);
   /** Idées de la réflexion approfondie écartées par le bouton pour le repas courant. */
   const [droppedDrafts, setDroppedDrafts] = useState<Draft[]>([]);
-  /** Dernier geste du carrousel : la carte suivante arrive du bon côté. */
-  const [lastMove, setLastMove] = useState<SwipeDirection | null>(null);
   const [images, setImages] = useState<Record<string, Picture | null>>({});
   usePictures();
   const [busy, setBusy] = useState<string | null>(null);
@@ -144,7 +142,6 @@ export default function Propositions() {
   const saved = useRef(new Set<string>());
   /** Récapitulatif ouvert avant la fin : les repas restants resteront à choisir. */
   const [reviewing, setReviewing] = useState(false);
-  const swipe = useRef<((d: SwipeDirection) => void) | null>(null);
   // Une seule illustration demandée à la fois ; plus aucune pendant la session si Mistral refuse (quota gratuit).
   const illustrating = useRef(false);
   const imagesPaused = useRef(false);
@@ -214,7 +211,7 @@ export default function Propositions() {
     // Seul le repas affiché est calculé : les repas précédents sont déjà choisis ou passés, et les suivants le seront
     // d'après ce choix. Recalculer toute la semaine à chaque choix (14 repas × 144 recettes) ralentissait la validation.
     const plan = planMeals(planCtx, [current], {
-      rounds: { [current.id]: round }, mealsInPlan: focus ? weekMeals : ordered.length, todayFirst: Boolean(focus),
+      rounds: { [current.id]: round }, mealsInPlan: focus ? weekMeals : ordered.length, todayFirst: Boolean(focus), combined: true,
       mustInclude: isFocusSlot && focus?.ingredient ? { [current.id]: focus.ingredient.slug } : undefined,
     });
     const entry = plan.find((p) => p.slotId === current.id);
@@ -224,7 +221,7 @@ export default function Propositions() {
     if (entry && entry.round !== round) setRound(entry.round);
     setDeck(proposals);
     setPos(0);
-    setDeckKey(`${current.id}:${entry?.round ?? round}`);
+    setDeckKey(current.id);
     setExhausted(!proposals.length);
     recordShown(supabase, household.id, current.id, proposals).catch(() => undefined);
     illustrationUrls(proposals.map((p) => p.recipeId)).then((urls) => setImages((prev) => ({ ...prev, ...urls }))).catch(() => undefined);
@@ -274,20 +271,8 @@ export default function Propositions() {
     };
   }, [slots, ctx, current, router, shortages.length, focus, chosenToday, asked.length]);
 
-  /** Fin du paquet : recettes du tour suivant, puis idées de la réflexion approfondie. */
-  const endOfDeck = useCallback(() => {
-    if (round === 1) setRound(2);
-    else setExhausted(true);
-  }, [round]);
-
-  /** Carrousel : recette suivante (au-delà de la dernière, le tour suivant). */
-  const forward = () => {
-    if (pos + 1 < deck.length) setPos(pos + 1);
-    else endOfDeck();
-  };
-
-  /** Carrousel : recette précédente. */
-  const backward = () => setPos((n) => Math.max(0, n - 1));
+  /** Fin du paquet (les 20 recettes du repas écartées) : idées de la réflexion approfondie. */
+  const endOfDeck = useCallback(() => setExhausted(true), []);
 
   const markSlot = (slotId: string, status: PlannedSlot["status"], recipeId: string | null = null) =>
     setSlots((s) => (s ?? []).map((x) => (x.id === slotId ? { ...x, status, recipeId } : x)));
@@ -350,8 +335,7 @@ export default function Propositions() {
   const decide = async (p: Proposal, decision: "refuse" | "approve") => {
     if (!current || !ctx) return;
     setError("");
-    // Carte écartée : la suivante arrive de la droite ; recette choisie : le repas suivant s'affiche directement.
-    setLastMove(decision === "refuse" ? "left" : null);
+    // Carte écartée : la suivante prend sa place ; recette choisie : le repas suivant s'affiche directement.
     if (decision === "refuse") {
       setCtx({ ...ctx, rejected: { ...ctx.rejected, [current.id]: [...(ctx.rejected[current.id] ?? []), p.recipeId] } });
       const rest = deck.filter((x) => x.recipeId !== p.recipeId);
@@ -426,9 +410,9 @@ export default function Propositions() {
   // quota gratuit).
   useEffect(() => {
     if (!current || !ctx || ideas?.slotId === current.id) return;
-    // Le paquet doit être celui du tour 2 de ce repas : juste après le dernier plat du tour 1, l'ancien paquet (vide) est
-    // encore affiché un instant, et les idées partaient alors avant les 15 recettes du tour 2.
-    if (exhausted || (round === 2 && deckKey === `${current.id}:2` && deck.length - pos <= 1)) startIdeas(current, ctx);
+    // Le paquet doit être celui de ce repas (jusqu'à 20 recettes : avec les courses, puis les autres) : à l'ouverture d'un
+    // repas, l'ancien paquet est encore affiché un instant, et les idées partaient alors trop tôt.
+    if (exhausted || (deckKey === current.id && deck.length - pos <= 1)) startIdeas(current, ctx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, round, exhausted, deck.length, deckKey, pos]);
 
@@ -441,7 +425,6 @@ export default function Propositions() {
 
   const decideDraft = async (d: Draft, decision: "refuse" | "approve") => {
     if (!current || !ctx) return;
-    setLastMove(decision === "refuse" ? "left" : null);
     if (decision === "refuse") {
       // L'idée écartée disparaît ; la suivante prend sa place.
       setDroppedDrafts((list) => [...list, d]);
@@ -648,7 +631,9 @@ export default function Propositions() {
   const top = deck[pos];
   /** Menu du jour avec un ingrédient à acheter : il s'ajoute à ce qui manque (il rejoindra la liste de courses). */
   const extra = isFocusSlot && focus?.toBuy && focus.ingredient ? [focus.ingredient.name.toLowerCase()] : [];
-  const toBuyLabels = top ? [...extra, ...top.missing.map((m) => m.label).filter((l) => !extra.includes(l.toLowerCase()))] : extra;
+  /** Ce qui manque pour une recette (et l'ingrédient imposé à acheter, pour le menu du jour). */
+  const toBuyOf = (p: Proposal) => [...extra, ...p.missing.map((m) => m.label).filter((l) => !extra.includes(l.toLowerCase()))];
+  const toBuyLabels = top ? toBuyOf(top) : extra;
   const slotIdeas = ideas?.slotId === current.id ? ideas : null;
   const drafts = slotIdeas ? slotIdeas.drafts.filter((d) => !droppedDrafts.includes(d)) : [];
   const draft = exhausted ? drafts[Math.min(seen, Math.max(0, drafts.length - 1))] : undefined;
@@ -711,22 +696,22 @@ export default function Propositions() {
       <View style={{ paddingHorizontal: 14 }}><ErrorText>{error}</ErrorText></View>
 
       <View style={styles.main}>
-        <View style={[styles.pile, { backgroundColor: c.card, borderColor: c.border }]} />
-        {top && !exhausted && (
-          <SwipeCard key={`${current.id}-${round}-${pos}-${top.recipeId}`} swipeRef={swipe} canBack={pos > 0} enter={lastMove}
-            onSwipe={(d) => { setLastMove(d); if (d === "left") forward(); else backward(); }} style={StyleSheet.absoluteFill}
-            onPress={() => router.push(`/recette/${top.recipeId}`)}>
-            {card(top.name, pictureOf(top.recipeId) ?? images[top.recipeId], top.totalMin, proteinLabel(top.mainProtein, top.name),
-              ctx.recipes.find((r) => r.id === top.recipeId)?.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", ") ?? "",
-              toBuyLabels.length ? toBuyLabels.join(", ") : undefined, top.weatherNote)}
-          </SwipeCard>
+        {/* Paquet de ce repas seulement : à l'ouverture d'un repas, celui du précédent est encore en mémoire un instant. */}
+        {top && !exhausted && deckKey === current.id && (
+          <CardPager key={current.id} items={deck} index={pos} onIndex={setPos} keyOf={(p) => `${current.id}-${p.recipeId}`} style={StyleSheet.absoluteFill}
+            render={(p) => (
+              <Pressable onPress={() => router.push(`/recette/${p.recipeId}`)} accessibilityHint="Ouvre la fiche de la recette" style={{ flex: 1 }}>
+                {card(p.name, pictureOf(p.recipeId) ?? images[p.recipeId], p.totalMin, proteinLabel(p.mainProtein, p.name),
+                  ctx.recipes.find((r) => r.id === p.recipeId)?.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", ") ?? "",
+                  toBuyOf(p).length ? toBuyOf(p).join(", ") : undefined, p.weatherNote)}
+              </Pressable>
+            )} />
         )}
         {draft && (
-          <SwipeCard key={`${current.id}-idea-${draft.recipe.name}`} swipeRef={swipe} canBack={seen > 0} canForward={seen + 1 < drafts.length}
-            enter={lastMove} onSwipe={(d) => { setLastMove(d); setSeen((n) => Math.max(0, Math.min(drafts.length - 1, n + (d === "left" ? 1 : -1)))); }} style={StyleSheet.absoluteFill}>
-            {card(draft.recipe.name, null, draft.recipe.prep_min + draft.recipe.cook_min, proteinLabel(draft.recipe.main_protein, draft.recipe.name),
-              draft.recipe.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", "))}
-          </SwipeCard>
+          <CardPager key={`${current.id}-idees`} items={drafts} index={Math.min(seen, drafts.length - 1)} onIndex={setSeen} keyOf={(d) => `${current.id}-idea-${d.recipe.name}`}
+            style={StyleSheet.absoluteFill}
+            render={(d) => card(d.recipe.name, null, d.recipe.prep_min + d.recipe.cook_min, proteinLabel(d.recipe.main_protein, d.recipe.name),
+              d.recipe.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", "))} />
         )}
         {exhausted && !draft && waiting > 0 && (
           <View style={[styles.state, { backgroundColor: c.card, borderColor: c.border }]} accessibilityRole="progressbar">
@@ -793,7 +778,6 @@ export default function Propositions() {
 const styles = StyleSheet.create({
   line: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 9, marginHorizontal: 19, minHeight: 28, flexWrap: "wrap" },
   main: { flex: 1, marginTop: 10, marginHorizontal: 14 },
-  pile: { position: "absolute", left: 12, right: 12, top: 20, bottom: -9, borderRadius: 17, borderWidth: 1 },
   card: { flex: 1, borderRadius: 17, borderWidth: 1, overflow: "hidden" },
   placeholder: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   cardText: { paddingTop: 7, paddingHorizontal: 14, paddingBottom: 12, gap: 9 },

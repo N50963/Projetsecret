@@ -124,6 +124,26 @@ describe("propositions de menus", () => {
     expect(late!.proposals).toHaveLength(3);
   });
 
+  it("carrousel : les 20 recettes d'un repas dans un seul paquet, celles avec les achats d'abord", () => {
+    const stockReady = Array.from({ length: 8 }, (_, n) => recipe(`stock-${n}`, n % 2 ? "volaille" : "poisson", ["poulet_filet", "riz", "courgette"]));
+    const fewToBuy = Array.from({ length: 6 }, (_, n) => recipe(`achat-${n}`, "boeuf", ["boeuf_hache", "riz"]));
+    const manyToBuy = Array.from({ length: 10 }, (_, n) => recipe(`courses-${n}`, "porc", ["porc_tranche", "poivron", "aubergine", "feta", "mais"]));
+    const ctx = context([...stockReady, ...fewToBuy, ...manyToBuy], purchases);
+    const [deck] = planMeals(ctx, [slot("lun", "2026-10-27")], { combined: true });
+    expect(deck!.round).toBe(1);
+    expect(deck!.proposals).toHaveLength(20);
+    expect(new Set(deck!.proposals.map((p) => p.recipeId)).size).toBe(20);
+    // Les 5 premières se font avec les achats (tour 1), les 15 suivantes gardent leur tour (2).
+    expect(deck!.proposals.slice(0, 5).every((p) => p.round === 1 && p.missing.length === 0)).toBe(true);
+    expect(deck!.proposals.slice(5).every((p) => p.round === 2)).toBe(true);
+    const ids = deck!.proposals.map((p) => p.recipeId);
+    expect(ids.filter((id) => id.startsWith("stock-"))).toHaveLength(8);
+    expect(ids.filter((id) => id.startsWith("achat-"))).toHaveLength(6);
+    expect(ids.filter((id) => id.startsWith("courses-"))).toHaveLength(6);
+    // Sans le carrousel, le tour 1 reste limité à 5 recettes.
+    expect(planMeals(ctx, [slot("lun", "2026-10-27")])[0]!.proposals).toHaveLength(5);
+  });
+
   it("propose le poisson frais en premier, avant qu'il ne soit plus consommable", () => {
     const plan = planMeals(context([curry, saumon, dahl, omelette], purchases), [slot("lun", "2026-10-27"), slot("mar", "2026-10-28"), slot("mer", "2026-10-29")]);
     expect(plan[0]!.proposals[0]!.recipeId).toBe("saumon-riz");
@@ -186,6 +206,9 @@ describe("menu du jour d'après un ingrédient", () => {
     expect(first!.proposals.map((p) => p.recipeId)).toEqual(["curry-poulet"]);
     const [second] = planMeals({ ...ctx, rejected: { jour: ["curry-poulet"] } }, [slot("jour", "2026-10-27")], { mustInclude: { jour: "poulet_filet" }, rounds: { jour: 2 } });
     expect(second!.proposals.map((p) => p.recipeId)).toEqual(["poelee-poulet"]);
+    // Carrousel du menu du jour : les deux recettes au poulet dans le même paquet, celle sans achat d'abord.
+    const [deck] = planMeals(ctx, [slot("jour", "2026-10-27")], { mustInclude: { jour: "poulet_filet" }, combined: true });
+    expect(deck!.proposals.map((p) => [p.recipeId, p.round])).toEqual([["curry-poulet", 1], ["poelee-poulet", 2]]);
   });
 
   it("prévient quand un repas prévu plus tard n'aura plus assez d'un ingrédient déjà compté", () => {

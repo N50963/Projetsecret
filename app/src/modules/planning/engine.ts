@@ -75,6 +75,11 @@ export interface PlanOptions {
    * tard (le foyer est prévenu ensuite, voir `shortagesAfter`). Par défaut, les repas choisis réservent leurs ingrédients.
    */
   todayFirst?: boolean;
+  /**
+   * Carrousel : un seul paquet par repas, les plats faisables avec les courses (tour 1) suivis des autres (tour 2),
+   * jusqu'à 20 recettes en tout avant la réflexion approfondie. Chaque proposition garde son tour.
+   */
+  combined?: boolean;
 }
 
 interface Evaluation {
@@ -307,11 +312,18 @@ export function planMeals(ctx: PlannerContext, slots: MealSlot[], options: PlanO
     // Tour 2 : ce qui manque pour arriver à 20 recettes proposées pour ce repas (celles du tour 1 ont été refusées).
     const refused = ctx.rejected[slot.id]?.length ?? 0;
     const count = options.count ?? (round === 1 ? PROPOSALS_FROM_STOCK : Math.max(PROPOSALS_PER_ROUND, PROPOSALS_BEFORE_IDEAS - refused));
-    const proposals: Proposal[] = pickDiverse(ranked, count, round === 1 ? (c) => c.score >= 0 : undefined).map((c) => ({
+    const toProposal = (r: 1 | 2) => (c: (typeof ranked)[number]): Proposal => ({
       recipeId: c.recipe.id, versionId: c.recipe.versionId, name: c.recipe.name, totalMin: c.recipe.totalMin,
-      mainProtein: c.recipe.mainProtein, round, score: c.score, missing: c.missing, usesPurchased: c.usesPurchased, reasons: c.reasons,
+      mainProtein: c.recipe.mainProtein, round: r, score: c.score, missing: c.missing, usesPurchased: c.usesPurchased, reasons: c.reasons,
       weatherNote: c.weatherNote,
-    }));
+    });
+    const proposals: Proposal[] = pickDiverse(ranked, count, round === 1 ? (c) => c.score >= 0 : undefined).map(toProposal(round));
+    // Carrousel : les recettes du tour 2 suivent celles du tour 1 dans le même paquet, jusqu'à 20 en tout.
+    if (options.combined && round === 1 && options.count === undefined) {
+      const shown = new Set(proposals.map((p) => p.recipeId));
+      const more = Math.max(0, PROPOSALS_BEFORE_IDEAS - refused - proposals.length);
+      proposals.push(...pickDiverse(candidates(2).filter((c) => !shown.has(c.recipe.id)), more).map(toProposal(2)));
+    }
     plans.push({ slotId: slot.id, round, proposals });
 
     const first = proposals[0] && byId.get(proposals[0].recipeId);

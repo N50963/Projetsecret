@@ -95,9 +95,14 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    approuvés cochés et les refusés décochés ; un plat approuvé peut y être annulé, un refusé coché à sa place (un seul
    par repas). « Valider » enregistre les choix (une idée de la réflexion approfondie ne devient une recette qu'à ce
    moment), les refus restés décochés, et les repas passés ; un repas sans plat coché reste à choisir. Le menu du
-   jour garde le choix immédiat. Si aucune ne convient : 15 autres recettes (20 en tout pour le repas, version 0.29.2 ; 8
+   jour garde le choix immédiat. Viennent ensuite 15 autres recettes (20 en tout pour le repas, version 0.29.2 ; 8
    auparavant), d'abord celles faisables avec les courses ou avec 1 à 3 ingrédients à acheter, puis celles qui en
-   demandent davantage. Les 3 idées de la réflexion approfondie (Mistral) ne sont demandées qu'à la 20ᵉ recette
+   demandent davantage. Depuis la 0.29.6, les 20 recettes sont dans le même carrousel dès l'ouverture (« 1 sur 20 »,
+   menu du jour compris ; avant, il en montrait 5, puis les 15 autres seulement après la dernière) : l'étiquette
+   « avec vos courses » ou « 2 à acheter » suit la carte affichée. Le carrousel utilise le défilement natif du
+   téléphone, page par page (composant `CardPager`) : la carte suit le doigt, la suivante arrive à côté, et elle se
+   cale toujours sur l'écran entier ; l'ancienne carte animée à la main pouvait rester décalée pendant et après le
+   geste sur Android. Les 3 idées de la réflexion approfondie (Mistral) ne sont demandées qu'à la 20ᵉ recette
    proposée (elles se préparent pendant qu'elle est à l'écran), ou quand il n'y a plus rien à proposer : lancées plus
    tôt, elles étaient souvent perdues au premier choix (trois demandes pour rien). Déjà 18 refus pour ce repas (lors
    d'une ouverture précédente) : au moins 3 recettes encore avant les idées. « Repas 1 sur 2 » ne compte que
