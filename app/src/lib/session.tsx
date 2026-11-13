@@ -5,11 +5,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 import { supabase } from "./supabase";
 import { errorText } from "./errors";
+import { DEFAULT_PLACE, setWeatherPlace, type WeatherPlace } from "./weather";
 
 export interface Household {
   id: string;
   name: string;
   defaultServings: number;
+  /** Commune du foyer (météo des menus). */
+  place: WeatherPlace;
 }
 
 interface SessionState {
@@ -30,11 +33,16 @@ interface SessionState {
 const SessionContext = createContext<SessionState | null>(null);
 
 async function loadHousehold(userId: string): Promise<Household | null> {
-  const { data, error } = await supabase.from("household_members").select("household_id, households(id, name, default_servings)")
+  // Toutes les colonnes : la commune (ajoutée en novembre 2026) n'empêche pas de lire le foyer si elle manque.
+  const { data, error } = await supabase.from("household_members").select("household_id, households(*)")
     .eq("user_id", userId).order("created_at").limit(1).maybeSingle();
   if (error) throw new Error(`Foyer illisible : ${error.message}`);
   const h = (data as any)?.households;
-  return h ? { id: h.id, name: h.name, defaultServings: h.default_servings ?? 4 } : null;
+  if (!h) return null;
+  const place: WeatherPlace = h.place_key && typeof h.latitude === "number" && typeof h.longitude === "number"
+    ? { key: h.place_key, name: h.place_name ?? h.place_key, latitude: h.latitude, longitude: h.longitude }
+    : DEFAULT_PLACE;
+  return { id: h.id, name: h.name, defaultServings: h.default_servings ?? 4, place };
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -57,7 +65,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (!userId) return;
     setHouseholdError("");
     try {
-      setHousehold(await loadHousehold(userId));
+      const loaded = await loadHousehold(userId);
+      // Météo de la commune de ce foyer (un autre compte peut habiter ailleurs).
+      if (loaded) setWeatherPlace(loaded.place);
+      setHousehold(loaded);
       setHouseholdUser(userId);
     } catch (e) {
       setHouseholdError(errorText(e));

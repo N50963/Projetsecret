@@ -188,7 +188,7 @@ export function WeekRibbon({ days, today, planOf, slotOf, picture, busy, onChang
   /** Semaine choisie : seuls les menus choisis s'affichent ; un lien discret rouvre les repas à prévoir. */
   compact?: boolean;
   onPlanMore?: () => void;
-  /** Prévisions de Rochefort-du-Gard par jour (bandeau de la carte du jour : icône du temps et températures). */
+  /** Prévisions de la commune du foyer par jour (bandeau de la carte du jour : icône du temps et températures). */
   weather?: Record<string, DayWeather>;
 }) {
   const past = (d: string, m: MealType) => isPast?.(d, m) ?? false;

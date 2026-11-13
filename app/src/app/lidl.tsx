@@ -5,6 +5,7 @@ import { WebView } from "react-native-webview";
 
 import { Body, Button, Card, ErrorText, Loading, Muted, Screen } from "../components/ui";
 import { finishLidlLogin, startLidlLogin, type PkceLogin } from "../lib/lidl";
+import { useHousehold } from "../lib/session";
 import { extractCode, isLidlCallback } from "../modules/lidl-sync";
 import { errorText } from "../lib/errors";
 
@@ -14,6 +15,7 @@ import { errorText } from "../lib/errors";
  */
 export default function LidlConnexion() {
   const router = useRouter();
+  const home = useHousehold();
   const [login, setLogin] = useState<PkceLogin | null>(null);
   const [state, setState] = useState<"page" | "exchange" | "done">("page");
   const [error, setError] = useState("");
@@ -32,7 +34,7 @@ export default function LidlConnexion() {
       return;
     }
     setState("exchange");
-    finishLidlLogin(code, login.verifier)
+    finishLidlLogin(code, login.verifier, home.id)
       .then(() => setState("done"))
       .catch((e) => {
         handled.current = false;
@@ -62,7 +64,7 @@ export default function LidlConnexion() {
 
   return (
     <Screen title="Connexion Lidl Plus" scroll={false}>
-      <Muted>Connectez-vous avec le compte Lidl Plus du foyer. Votre mot de passe reste sur la page de Lidl.</Muted>
+      <Muted>Connectez-vous avec votre compte Lidl Plus. Votre mot de passe reste sur la page de Lidl.</Muted>
       <ErrorText>{error}</ErrorText>
       <View style={{ flex: 1, borderRadius: 12, overflow: "hidden" }}>
         <WebView

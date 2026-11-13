@@ -1,10 +1,15 @@
-/** Lidl Plus sur le téléphone : jeton dans le stockage sécurisé, client, PKCE et synchronisation. */
+/**
+ * Lidl Plus sur le téléphone : jeton dans le stockage sécurisé (un par foyer : chaque foyer a son compte Lidl Plus),
+ * client, PKCE et synchronisation.
+ */
 
 import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
-import { base64Url, buildLoginUrl, createSecureTokenStore, exchangeCode, LidlClient, syncNewReceipts, type SyncResult } from "../modules/lidl-sync";
+import {
+  adoptLegacyToken, base64Url, buildLoginUrl, createSecureTokenStore, exchangeCode, LidlClient, syncNewReceipts, type SyncResult,
+} from "../modules/lidl-sync";
 import { supabase } from "./supabase";
 
 const memory = new Map<string, string>();
@@ -14,10 +19,21 @@ const store = Platform.OS === "web"
       deleteItemAsync: async (k: string) => void memory.delete(k) }
   : SecureStore;
 
-export const lidlTokenStore = createSecureTokenStore(store);
+/**
+ * Jeton Lidl Plus du foyer. Celui d'une version précédente (clé unique) revient au foyer qui a déjà récupéré des
+ * tickets avec ce compte ; un autre foyer (les parents) se connecte avec son propre compte Lidl Plus.
+ */
+async function tokenStoreFor(householdId: string) {
+  await adoptLegacyToken(store, householdId, async () => {
+    const { count, error } = await supabase.from("sync_runs").select("id", { count: "exact", head: true })
+      .eq("household_id", householdId).eq("status", "success");
+    return !error && (count ?? 0) > 0;
+  }).catch(() => false);
+  return createSecureTokenStore(store, householdId);
+}
 
-export async function isLidlConnected(): Promise<boolean> {
-  return Boolean(await lidlTokenStore.getRefreshToken());
+export async function isLidlConnected(householdId: string): Promise<boolean> {
+  return Boolean(await (await tokenStoreFor(householdId)).getRefreshToken());
 }
 
 export interface PkceLogin {
@@ -31,12 +47,12 @@ export async function startLidlLogin(): Promise<PkceLogin> {
   return { url: buildLoginUrl(base64Url(new Uint8Array(digest))), verifier };
 }
 
-export async function finishLidlLogin(code: string, verifier: string): Promise<void> {
+export async function finishLidlLogin(code: string, verifier: string, householdId: string): Promise<void> {
   const tokens = await exchangeCode(code, verifier);
-  await lidlTokenStore.setRefreshToken(tokens.refreshToken);
+  await (await tokenStoreFor(householdId)).setRefreshToken(tokens.refreshToken);
 }
 
 export async function syncLidl(householdId: string): Promise<SyncResult> {
-  const lidl = new LidlClient({ tokenStore: lidlTokenStore });
+  const lidl = new LidlClient({ tokenStore: await tokenStoreFor(householdId) });
   return syncNewReceipts({ lidl, supabase, householdId, maxPages: 4 });
 }

@@ -51,7 +51,7 @@ export default function Parametres() {
   const load = useCallback(async () => {
     try {
       const [connected, receipt, sync, preferences, review] = await Promise.all([
-        isLidlConnected(),
+        isLidlConnected(home.id),
         supabase.from("receipts").select("purchased_at").eq("household_id", home.id).order("purchased_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("last_sync").select("finished_at, status").eq("household_id", home.id).maybeSingle(),
         getHouseholdPreferences(supabase, home.id),
@@ -135,6 +135,17 @@ export default function Parametres() {
           </Pressable>
         ))}
       </View>
+
+      <Pressable onPress={() => router.push("/commune")} accessibilityRole="button" accessibilityLabel={`Commune pour la météo : ${home.place.name}`}
+        style={({ pressed }) => [styles.card, styles.list, { backgroundColor: c.card, borderColor: c.cardLine, marginTop: 14, opacity: pressed ? 0.7 : 1 }, CARD_SHADOW]}>
+        <View style={styles.row}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.rowName, { color: c.text }]}>Commune pour la météo</Text>
+            <Text style={[styles.rowValue, { color: c.muted }]}>{home.place.name}</Text>
+          </View>
+          <Icon name="chevronRight" width={9} height={15} color={c.text} />
+        </View>
+      </Pressable>
 
       <Pressable onPress={() => router.push("/meteo-recettes")} accessibilityRole="button"
         style={({ pressed }) => [styles.card, styles.list, { backgroundColor: c.card, borderColor: c.cardLine, marginTop: 14, opacity: pressed ? 0.7 : 1 }, CARD_SHADOW]}>

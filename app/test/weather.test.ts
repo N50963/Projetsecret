@@ -104,7 +104,7 @@ describe("bonus et malus selon la météo du jour", () => {
     expect(weatherText(63)).toEqual({ label: "pluie", icon: "rain" });
     expect(weatherText(95).icon).toBe("storm");
     expect(weatherBrief(day(33))).toContain("plat frais ou léger, sans four");
-    expect(weatherBrief(day(7, { code: 3 }))).toBe("Météo à Rochefort-du-Gard : 7 °C au plus, couvert : plat chaud et réconfortant. ");
+    expect(weatherBrief(day(7, { code: 3 }))).toBe("Météo prévue : 7 °C au plus, couvert : plat chaud et réconfortant. ");
     expect(weatherBrief(day(19))).toBe("");
   });
 

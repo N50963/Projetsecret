@@ -21,7 +21,7 @@ import { createClient } from "@supabase/supabase-js";
 import { LidlClient, createSecureTokenStore, syncNewReceipts, getIngredientPurchases } from "./modules/lidl-sync";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY); // clé publique : la sécurité repose sur RLS
-const lidl = new LidlClient({ tokenStore: createSecureTokenStore(SecureStore) });
+const lidl = new LidlClient({ tokenStore: createSecureTokenStore(SecureStore, foyer.id) });
 
 const result = await syncNewReceipts({ lidl, supabase, householdId });
 // result.status : "success" | "partial" | "reauth_required" | "error"
@@ -39,6 +39,9 @@ Première synchronisation d'un appareil : appeler `syncNewReceipts` avec `maxPag
 - **Une seule synchronisation à la fois** par appareil ; plusieurs téléphones peuvent synchroniser le même foyer
   (chacun avec son propre refresh token, ce qui évite qu'ils s'invalident mutuellement).
 - **Rotation du token** : si Lidl renvoie un nouveau refresh token, il est enregistré avant toute autre requête.
+- **Un jeton par foyer** (0.29.7) : `createSecureTokenStore(SecureStore, foyer.id)` range le jeton sous
+  `lidl_plus_refresh_token.<foyer>` ; `adoptLegacyToken` fait passer le jeton de l'ancienne clé unique au foyer qui a
+  déjà des synchronisations réussies, jamais à un autre foyer ouvert sur le même téléphone.
 - **Tolérance aux pannes** : 429 et erreurs 5xx réessayées (1 s, 2 s, 4 s) ; un ticket en échec n'empêche pas les suivants.
 - **Reconnexion** : un refresh token refusé donne le statut `reauth_required`, visible dans `sync_runs` / `last_sync`.
 - **Confidentialité** : le token ne quitte jamais le téléphone et n'apparaît dans aucun journal (vérifié par un test).

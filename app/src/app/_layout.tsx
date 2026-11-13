@@ -67,6 +67,7 @@ function Gate() {
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="lidl" options={{ title: "Tickets Lidl Plus" }} />
         <Stack.Screen name="achats-magasin" options={{ title: "Fruits et légumes" }} />
+        <Stack.Screen name="commune" options={{ title: "Commune" }} />
         <Stack.Screen name="propositions" options={{ title: "Propositions" }} />
         <Stack.Screen name="courses" options={{ title: "Liste de courses", animation: "none" }} />
         <Stack.Screen name="recettes" options={{ title: "Recettes", animation: "none" }} />

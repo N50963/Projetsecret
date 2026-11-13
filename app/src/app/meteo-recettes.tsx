@@ -1,7 +1,7 @@
 /**
  * Recettes selon la météo (Profil) : toutes les recettes, chacune avec un sélecteur à cinq boutons — temps froid, plutôt
  * froid, tout temps, plutôt chaud, temps chaud. Le choix est enregistré pour le foyer et guide les propositions selon la
- * météo prévue à Rochefort-du-Gard. Sans choix, la suggestion déduite du nom du plat s'affiche en pointillés.
+ * météo prévue dans la commune du foyer. Sans choix, la suggestion déduite du nom du plat s'affiche en pointillés.
  */
 
 import { useRouter } from "expo-router";
@@ -17,6 +17,7 @@ import { getWeatherLevels, setWeatherLevel } from "../lib/recipeWeather";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { CARD_SHADOW, useColors, type Colors } from "../lib/theme";
+import { useWeatherPlace } from "../lib/weather";
 import { autoLevel, WEATHER_LEVELS, type WeatherLevel } from "../modules/planning";
 import { listRecipes, type RecipeSummary } from "../modules/recipes";
 
@@ -42,6 +43,7 @@ export default function MeteoRecettes() {
   const router = useRouter();
   const household = useHousehold();
   const c = useColors();
+  const town = useWeatherPlace();
   const [recipes, setRecipes] = useState<RecipeSummary[] | null>(null);
   const [chosen, setChosen] = useState<Map<string, WeatherLevel>>(new Map());
   const [images, setImages] = useState<Record<string, Picture | null>>({});
@@ -129,7 +131,7 @@ export default function MeteoRecettes() {
   const header = (
     <View style={styles.header}>
       <Muted>
-        Les menus proposés suivent ce classement selon la météo prévue à Rochefort-du-Gard : par temps froid, les plats
+        Les menus proposés suivent ce classement selon la météo prévue à {town} : par temps froid, les plats
         « temps froid », « plutôt froid » et « tout temps » sont proposés, les plats chauds reculent ; inversement par temps
         chaud. En pointillés : suggestion d'après le nom du plat, en attendant votre choix.
       </Muted>

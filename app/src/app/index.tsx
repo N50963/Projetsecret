@@ -121,7 +121,7 @@ export default function Accueil() {
     }
   }, [household.id, today, days]);
 
-  // Prévision de Rochefort-du-Gard lue à l'ouverture de l'application : météo sur les cartes des jours.
+  // Prévision de la commune du foyer lue à l'ouverture de l'application : météo sur les cartes des jours.
   const weather = useWeather();
 
   useFocusEffect(useCallback(() => {

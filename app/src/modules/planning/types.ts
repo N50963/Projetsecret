@@ -121,6 +121,6 @@ export interface PlannerContext {
   /** Nombre de refus passés par recette, toutes planifications confondues. */
   rejectionCounts?: Record<string, number>;
   targets?: Partial<BalanceTargets>;
-  /** Prévisions de Rochefort-du-Gard par jour (absentes hors réseau : la météo ne compte pas). */
+  /** Prévisions de la commune du foyer par jour (absentes hors réseau : la météo ne compte pas). */
   weather?: Record<IsoDate, DayWeather>;
 }

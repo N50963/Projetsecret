@@ -93,6 +93,6 @@ pas à une publication sur le Play Store.
 
 - `app/android/` est désormais versionné : ne pas relancer `npx expo prebuild --clean`, qui l'écraserait. Si un module
   natif est ajouté, lancer `npx expo prebuild --platform android --no-install` puis vérifier le diff de
-  `app/android/`, notamment `gradle.properties` (`reactNativeArchitectures=armeabi-v7a,arm64-v8a` : seulement les
-  processeurs de téléphone, pour une compilation plus rapide et un APK plus léger).
+  `app/android/`, notamment `gradle.properties` (`reactNativeArchitectures=arm64-v8a` : depuis la 0.29.7, seulement
+  les téléphones 64 bits ; l'APK 32 bits n'est plus produit ni livré, et la compilation est plus rapide).
 - La variante release active la réduction du code (R8) : `android.enableMinifyInReleaseBuilds=true`.

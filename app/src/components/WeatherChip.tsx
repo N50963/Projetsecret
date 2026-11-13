@@ -1,5 +1,5 @@
 /**
- * Météo d'un jour à Rochefort-du-Gard : en une ligne discrète (icône du temps, température maximale, minimale en gris),
+ * Météo d'un jour dans la commune du foyer : en une ligne discrète (icône du temps, température maximale, minimale en gris),
  * ou en bandeau sur la carte du jour choisi dans le calendrier (icône du temps et températures).
  */
 
@@ -7,6 +7,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { weatherText, weatherTone, type DayWeather, type WeatherTone } from "../modules/planning";
 import { useColors, type Colors } from "../lib/theme";
+import { useWeatherPlace } from "../lib/weather";
 import { Icon } from "./icons";
 
 export function WeatherChip({ day, size = 14 }: { day: DayWeather | undefined; size?: number }) {
@@ -32,12 +33,13 @@ function toneColors(tone: WeatherTone, c: Colors) {
 /** Bandeau météo de la carte du jour : icône du temps, températures minimale et maximale. */
 export function WeatherBand({ day }: { day: DayWeather | undefined }) {
   const c = useColors();
+  const town = useWeatherPlace();
   if (!day) return null;
   const { label, icon } = weatherText(day.code);
   const t = toneColors(weatherTone(day), c);
   return (
     <View style={[styles.band, { backgroundColor: t.bg }]} accessible
-      accessibilityLabel={`Météo à Rochefort-du-Gard : ${label}, de ${Math.round(day.tMin)} à ${Math.round(day.tMax)} degrés`}>
+      accessibilityLabel={`Météo à ${town} : ${label}, de ${Math.round(day.tMin)} à ${Math.round(day.tMax)} degrés`}>
       <Icon name={icon} size={24} color={t.ink} />
       <Text style={[styles.bandTitle, { color: t.ink }]}>{Math.round(day.tMin)} à {Math.round(day.tMax)} °C</Text>
     </View>

@@ -1,5 +1,5 @@
 /**
- * Météo et choix des menus (Rochefort-du-Gard) : un plat frais quand il fait chaud, un plat chaud et réconfortant quand
+ * Météo et choix des menus (commune du foyer) : un plat frais quand il fait chaud, un plat chaud et réconfortant quand
  * il fait froid ou qu'il pleut. Fonctions pures, sans réseau : la prévision est lue par `src/lib/weather.ts`.
  *
  * Repères (température maximale du jour du repas) :
@@ -152,7 +152,7 @@ export function weatherTone(day: DayWeather): WeatherTone {
 /** Consigne pour les idées de Mistral (début du brief, limité à 600 caractères côté serveur). */
 export function weatherBrief(day: DayWeather | undefined): string {
   if (!day) return "";
-  const at = `Météo à Rochefort-du-Gard : ${degrees(day.tMax)} au plus, ${weatherText(day.code).label}`;
+  const at = `Météo prévue : ${degrees(day.tMax)} au plus, ${weatherText(day.code).label}`;
   if (day.tMax >= HOT) return `${at} : plat frais ou léger, sans four ni longue cuisson. `;
   if (day.tMax >= WARM) return `${at} : plutôt un plat frais ou léger. `;
   if (day.tMax <= COLD || (day.rainMm >= RAINY_MM && day.tMax <= COOL)) return `${at} : plat chaud et réconfortant. `;

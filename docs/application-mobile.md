@@ -27,7 +27,9 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    barres du système et la fenêtre n'est plus réduite par le clavier.
 2. **Tickets Lidl Plus** : la page de connexion officielle de Lidl s'ouvre dans l'application ; la personne s'y connecte
    elle-même. Le jeton obtenu reste dans le stockage sécurisé du téléphone (Keychain / Keystore) et n'est jamais envoyé
-   à Supabase. Chaque téléphone se connecte une fois. Les tickets sont ensuite lus directement chez Lidl par le
+   à Supabase. Chaque téléphone se connecte une fois. Depuis la 0.29.7, le jeton est rangé par foyer : un téléphone
+   ouvert un jour sur le compte d'un autre foyer (les parents) ne lui envoie jamais les tickets du premier ; le jeton
+   d'une version précédente revient au seul foyer qui a déjà récupéré des tickets avec lui. Les tickets sont ensuite lus directement chez Lidl par le
    téléphone, puis enregistrés dans Supabase.
    **Fruits et légumes d'un autre magasin** (Profil › Tickets et achats, version 0.29.2) : pour les achats sans ticket
    Lidl (marché, primeur, autre magasin). Grille des fruits, légumes et herbes fraîches du référentiel avec leur photo
@@ -195,10 +197,14 @@ légumes 7…) ; un repas choisi réserve ses ingrédients. Les recettes aimées
 Aliments exclus par le foyer : la viande principale du plat, mais aussi ses ingrédients (porc : jambon, lardons, chorizo,
 saucisses, charcuterie, cordon bleu ; bœuf : bœuf, veau, corned beef) ; un ingrédient facultatif peut être laissé de côté.
 
-## Saison et météo (Rochefort-du-Gard)
+## Saison et météo (commune du foyer)
 
+- **Commune** (version 0.29.7) : chaque foyer a la sienne (colonnes `place_key`, `place_name`, `latitude`, `longitude`
+  de `households`), choisie dans **Profil › Commune pour la météo** (recherche des communes de France par le
+  géocodage d'Open-Meteo ; fonction `set_household_place`, qui demande aussitôt la prévision d'une nouvelle commune).
+  Le premier foyer reste à Rochefort-du-Gard. La commune choisie vaut pour tous les téléphones du foyer.
 - **Prévision** : Open-Meteo (gratuit, sans compte ni clé ; modèles de Météo-France pour la France), 16 jours, lue
-  chaque heure par Supabase (tâches planifiées `meteo-demande` à hh:12 et `meteo-enregistrement` à hh:14, table
+  chaque heure par Supabase pour chaque commune des foyers (tâches planifiées `meteo-demande` à hh:12 et `meteo-enregistrement` à hh:14, table
   `weather_days`) ; le téléphone lit cette table et n'interroge Open-Meteo lui-même qu'en secours (table vide ou
   prévision de plus de 6 heures), car le quota gratuit d'Open-Meteo est compté par adresse internet. L'application ne
   relit la prévision qu'à son ouverture : au lancement, et au retour au premier plan après au moins 30 minutes en
@@ -278,6 +284,19 @@ npm install
 npx expo start          # même réseau Wi-Fi que le téléphone ; scanner le QR code avec Expo Go
 ```
 
+### Deuxième foyer : les parents (version 0.29.7)
+
+Un foyer séparé, sur le même Supabase et le même APK : ses menus, ses tickets Lidl, son stock et sa liste de courses
+ne se mélangent pas à ceux du premier foyer (règles d'accès par foyer). Foyer « Parents », 2 personnes.
+
+1. Créer le compte des parents dans Supabase (tableau de bord › Authentication › Users › Add user › Create new user),
+   e-mail et mot de passe, case « Auto Confirm User » cochée : le mot de passe ne passe par personne d'autre.
+2. Relier le compte au foyer « Parents » (par son e-mail, ou en saisissant le code du foyer à la première connexion).
+3. Sur chacun des deux téléphones des parents : installer l'APK, se connecter avec ce compte, puis Profil ›
+   « Connecter Lidl Plus » avec leur propre compte Lidl Plus, et « Récupérer les nouveaux tickets ». Aucun jeton Lidl
+   n'est à transmettre : chaque téléphone se connecte lui-même sur la page de Lidl.
+4. Une seule fois : Profil › Commune pour la météo, et Préférences (composition du foyer, aliments exclus…).
+
 ### Première ouverture
 
 1. Se connecter avec l'e-mail et le mot de passe du compte du foyer. Ce compte est créé à l'avance (l'application ne
@@ -321,8 +340,6 @@ de menu non enregistré le dit et rouvre le repas ; un refus de proposition est 
 
 ## Limites connues
 
-- La connexion Lidl dans l'application et la récupération des tickets depuis un téléphone n'ont pas encore été essayées
-  sur un vrai téléphone (le même échange a été validé depuis l'ordinateur).
 - Les recettes générées par un petit modèle sont parfois approximatives (étapes, portions) : elles sont montrées avant
   d'être enregistrées et peuvent être adaptées ensuite.
 - Le stock est estimé d'après les tickets et les repas choisis dans l'application (pas d'inventaire).

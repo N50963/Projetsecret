@@ -165,7 +165,7 @@ export default function Propositions() {
           loadPlannerContext(supabase, household.id, start, planId),
           loadWeather(),
         ]);
-        // Météo de Rochefort-du-Gard : plat frais quand il fait chaud, réconfortant quand il fait froid ou pleut.
+        // Météo de la commune du foyer : plat frais quand il fait chaud, réconfortant quand il fait froid ou pleut.
         const context = { ...loaded, weather };
         let ready = context;
         const target = params.slot ? s.find((x) => x.id === params.slot) : undefined;
