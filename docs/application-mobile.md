@@ -197,6 +197,23 @@ légumes 7…) ; un repas choisi réserve ses ingrédients. Les recettes aimées
 Aliments exclus par le foyer : la viande principale du plat, mais aussi ses ingrédients (porc : jambon, lardons, chorizo,
 saucisses, charcuterie, cordon bleu ; bœuf : bœuf, veau, corned beef) ; un ingrédient facultatif peut être laissé de côté.
 
+## Grand écran : Galaxy Z Fold déplié (version 0.29.8)
+
+L'écran intérieur du Z Fold 7 déplié fait environ 984 × 1 092 points (presque carré, selon le zoom d'affichage choisi
+dans les réglages) ; sous Android 16, l'application y tourne aussi en paysage, l'orientation portrait n'étant plus
+imposée sur grand écran. À partir de 700 points de large (`app/src/lib/layout.ts`) :
+
+- textes et formulaires (Profil, Préférences, Courses, Commune…) dans une colonne centrée de 720 points au plus
+  (`Screen`, `width="column"` par défaut) ; barre des onglets groupée au centre ; feuilles de confirmation et de
+  rappel centrées (640 points) ;
+- **Recettes** sur deux colonnes de cartes ; **Fruits et légumes** jusqu'à six cases par ligne ;
+- **fiche recette** : ingrédients à gauche et préparation à droite, sans onglets ;
+- **propositions** : carte centrée de 760 points au plus, qui glisse toujours jusqu'au bord de l'écran ;
+- **connexion** : formulaire centré de 480 points.
+
+Plier ou déplier le téléphone change la présentation aussitôt, sans relancer l'application (MainActivity gère
+`screenSize` et `smallestScreenSize`). Sur un téléphone plié ou un téléphone ordinaire, rien ne change.
+
 ## Saison et météo (commune du foyer)
 
 - **Commune** (version 0.29.7) : chaque foyer a la sienne (colonnes `place_key`, `place_name`, `latitude`, `longitude`

@@ -7,6 +7,7 @@ import { CardPager } from "../components/CardPager";
 import { Icon } from "../components/icons";
 import { Button, ErrorText, Loading, Pill, Screen, Tag } from "../components/ui";
 import { dayLabel, mealLabel, minutes, proteinLabel } from "../lib/format";
+import { CARD_MAX, sideMargin, useLayout } from "../lib/layout";
 import { forgetIllustration, illustrationUrls, pictureOf, preloadPictures, placeholderOf, sourceOf, usePictures, type Picture } from "../lib/images";
 import { draftToInput, generateRecipes, illustrateRecipe, type Draft } from "../lib/mistral";
 import { useHousehold } from "../lib/session";
@@ -101,6 +102,7 @@ export default function Propositions() {
   const router = useRouter();
   const household = useHousehold();
   const c = useColors();
+  const { width: screenWidth } = useLayout();
   const today = toIsoDate(new Date());
 
   const [slots, setSlots] = useState<PlannedSlot[] | null>(null);
@@ -629,6 +631,8 @@ export default function Propositions() {
   if (!current) return <Loading label={focus && chosenToday ? "Ouverture de la fiche…" : "Menus choisis : retour au calendrier…"} />;
 
   const top = deck[pos];
+  /** Marge de chaque côté : 14 sur téléphone ; sur grand écran (Z Fold déplié), la carte garde une largeur confortable. */
+  const side = sideMargin(screenWidth, CARD_MAX);
   /** Menu du jour avec un ingrédient à acheter : il s'ajoute à ce qui manque (il rejoindra la liste de courses). */
   const extra = isFocusSlot && focus?.toBuy && focus.ingredient ? [focus.ingredient.name.toLowerCase()] : [];
   /** Ce qui manque pour une recette (et l'ingrédient imposé à acheter, pour le menu du jour). */
@@ -683,8 +687,8 @@ export default function Propositions() {
   );
 
   return (
-    <Screen title={`${dayLabel(current.date, today)} · ${mealLabel(current.mealType)}`} scroll={false} padded={false}>
-      <View style={styles.line}>
+    <Screen title={`${dayLabel(current.date, today)} · ${mealLabel(current.mealType)}`} scroll={false} padded={false} width="full">
+      <View style={[styles.line, { marginHorizontal: side + 5 }]}>
         <Text style={{ color: c.muted, fontSize: 15 }}>
           {isFocusSlot ? (focus?.ingredient ? `Menu du jour avec ${focus.ingredient.name.toLowerCase()}${focus.toBuy ? " (à acheter)" : ""}` : "Menu du jour")
             : focus ? `Nouveau menu (il manquerait : ${(replacing[current.id] ?? []).map((m) => m.label).join(", ")})`
@@ -693,12 +697,12 @@ export default function Propositions() {
         <WeatherChip day={ctx.weather?.[current.date]} size={13} />
         {tag}
       </View>
-      <View style={{ paddingHorizontal: 14 }}><ErrorText>{error}</ErrorText></View>
+      <View style={{ paddingHorizontal: side }}><ErrorText>{error}</ErrorText></View>
 
-      <View style={styles.main}>
+      <View style={[styles.main, { marginHorizontal: side }]}>
         {/* Paquet de ce repas seulement : à l'ouverture d'un repas, celui du précédent est encore en mémoire un instant. */}
         {top && !exhausted && deckKey === current.id && (
-          <CardPager key={current.id} items={deck} index={pos} onIndex={setPos} keyOf={(p) => `${current.id}-${p.recipeId}`} style={StyleSheet.absoluteFill}
+          <CardPager key={current.id} items={deck} index={pos} onIndex={setPos} keyOf={(p) => `${current.id}-${p.recipeId}`} style={StyleSheet.absoluteFill} gutter={side}
             render={(p) => (
               <Pressable onPress={() => router.push(`/recette/${p.recipeId}`)} accessibilityHint="Ouvre la fiche de la recette" style={{ flex: 1 }}>
                 {card(p.name, pictureOf(p.recipeId) ?? images[p.recipeId], p.totalMin, proteinLabel(p.mainProtein, p.name),
@@ -709,7 +713,7 @@ export default function Propositions() {
         )}
         {draft && (
           <CardPager key={`${current.id}-idees`} items={drafts} index={Math.min(seen, drafts.length - 1)} onIndex={setSeen} keyOf={(d) => `${current.id}-idea-${d.recipe.name}`}
-            style={StyleSheet.absoluteFill}
+            style={StyleSheet.absoluteFill} gutter={side}
             render={(d) => card(d.recipe.name, null, d.recipe.prep_min + d.recipe.cook_min, proteinLabel(d.recipe.main_protein, d.recipe.name),
               d.recipe.ingredients.filter((i) => !i.optional).map((i) => i.label).join(", "))} />
         )}
@@ -744,7 +748,7 @@ export default function Propositions() {
         )}
       </View>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingHorizontal: side }]}>
         {(top && !exhausted) || draft ? (
           <Text style={{ color: c.muted, fontSize: 14, textAlign: "center", marginBottom: 8 }}>
             Glissez pour parcourir · {draft ? `idée ${Math.min(seen, drafts.length - 1) + 1} sur ${drafts.length}` : `${pos + 1} sur ${deck.length}`}

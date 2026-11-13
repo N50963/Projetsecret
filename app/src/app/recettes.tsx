@@ -8,6 +8,7 @@ import { Illustration } from "../components/Illustration";
 import { Button, Chip, ErrorText, Field, Muted, Screen } from "../components/ui";
 import { minutes, proteinLabel } from "../lib/format";
 import { illustrationUrls, pictureOf, usePictures, type Picture } from "../lib/images";
+import { columnsFor, useLayout } from "../lib/layout";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { CARD_SHADOW, useColors } from "../lib/theme";
@@ -38,6 +39,7 @@ export default function Recettes() {
   const router = useRouter();
   const household = useHousehold();
   const c = useColors();
+  const { width } = useLayout();
   const [search, setSearch] = useState("");
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [rating, setRating] = useState<RatingFilter>("toutes");
@@ -102,6 +104,11 @@ export default function Recettes() {
     return true;
   });
 
+  // Cartes d'au moins 420 points de large : une colonne sur téléphone, deux sur le Z Fold déplié.
+  const listWidth = width - 24;
+  const cols = columnsFor(listWidth, 420, 3);
+  const itemWidth = (listWidth - 8 * (cols - 1)) / cols;
+
   const header = (
     <View style={styles.header}>
       <Button icon="plus" title="Ajouter une recette" onPress={() => router.push("/ajout-recette")} />
@@ -131,8 +138,12 @@ export default function Recettes() {
   // Liste virtualisée : seules les cartes visibles (et quelques-unes autour) sont dessinées, ce qui garde l'onglet fluide
   // et léger en mémoire avec des centaines de recettes et leurs photos.
   return (
-    <Screen title="Recettes" nav="recettes" scroll={false} padded={false}>
+    <Screen title="Recettes" nav="recettes" scroll={false} padded={false} width="full">
       <FlatList
+        // Grand écran (Z Fold déplié) : 2 ou 3 colonnes de cartes ; la liste est recréée quand le nombre change.
+        key={`colonnes-${cols}`}
+        numColumns={cols}
+        columnWrapperStyle={cols > 1 ? { gap: 8 } : undefined}
         data={shown}
         style={styles.fill}
         keyExtractor={(r) => r.id}
@@ -149,7 +160,7 @@ export default function Recettes() {
           return (
             <Pressable onPress={() => router.push(`/recette/${r.id}`)} onLongPress={() => remove(r)} delayLongPress={450}
               accessibilityRole="button" accessibilityLabel={`Ouvrir la fiche : ${r.name}`} accessibilityHint="Appui long pour supprimer la recette"
-              style={({ pressed }) => [styles.item, { backgroundColor: c.card, borderColor: c.cardLine, opacity: pressed ? 0.8 : 1 }, CARD_SHADOW]}>
+              style={({ pressed }) => [styles.item, cols > 1 && { width: itemWidth }, { backgroundColor: c.card, borderColor: c.cardLine, opacity: pressed ? 0.8 : 1 }, CARD_SHADOW]}>
               <Illustration picture={pictureOf(r.id) ?? images[r.id]} height={66} width={86} rounded={9} />
               <View style={styles.text}>
                 <Text style={[styles.name, { color: c.text }]} numberOfLines={2}>{r.name}</Text>

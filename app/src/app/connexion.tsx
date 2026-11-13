@@ -8,6 +8,7 @@ import { Button, ErrorText, Field, Muted } from "../components/ui";
 import { useSession } from "../lib/session";
 import { useColors } from "../lib/theme";
 import { errorText } from "../lib/errors";
+import { sideMargin, useLayout } from "../lib/layout";
 
 /**
  * Connexion MenuBily : photo d'un plat en haut, panneau crème avec le logo, l'e-mail et le mot de passe du compte du foyer.
@@ -17,6 +18,7 @@ import { errorText } from "../lib/errors";
 export default function Connexion() {
   const { signIn } = useSession();
   const c = useColors();
+  const { width } = useLayout();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -59,7 +61,8 @@ export default function Connexion() {
       <View style={{ height: insets.top, backgroundColor: c.statusBar }} />
       <ScrollView ref={scroll} contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" bounces={false}>
         <Image source={require("../../assets/connexion.webp")} style={typing ? styles.photoFolded : styles.photo} contentFit="cover" accessibilityIgnoresInvertColors />
-        <View style={[styles.sheet, { backgroundColor: c.background, paddingBottom: (typing ? 16 : 26) + (typing ? 0 : insets.bottom) }]}>
+        {/* Grand écran (Z Fold déplié) : le formulaire garde une largeur de téléphone, centré. */}
+        <View style={[styles.sheet, { backgroundColor: c.background, paddingHorizontal: sideMargin(width, 480, 17), paddingBottom: (typing ? 16 : 26) + (typing ? 0 : insets.bottom) }]}>
           <View style={styles.brand}><Logo height={84} /></View>
           <ErrorText>{error}</ErrorText>
           <View style={styles.group}>

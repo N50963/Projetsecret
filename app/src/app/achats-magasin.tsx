@@ -22,6 +22,7 @@ import { dayLabel } from "../lib/format";
 import { ingredientPictureUrls, ingredientSource } from "../lib/images";
 import { useHousehold } from "../lib/session";
 import { refreshShoppingCount } from "../lib/shoppingCount";
+import { columnsFor, useLayout } from "../lib/layout";
 import { CARD_SHADOW, useColors } from "../lib/theme";
 import { toIsoDate } from "../modules/planning";
 
@@ -36,6 +37,7 @@ const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/\p{M}/gu, 
 export default function AchatsMagasin() {
   const household = useHousehold();
   const c = useColors();
+  const { width } = useLayout();
   const insets = useSafeAreaInsets();
   const [ask, confirmSheet] = useConfirm();
   const [products, setProducts] = useState<FreshProduct[] | null>(null);
@@ -182,8 +184,11 @@ export default function AchatsMagasin() {
     </View>
   );
 
+  const cols = Math.max(3, columnsFor(width - 24, 150, 6));
+  const tileWidth = (width - 24 - 8 * (cols - 1)) / cols;
+
   return (
-    <Screen title="Fruits et légumes" scroll={false} padded={false} footer={count ? (
+    <Screen title="Fruits et légumes" scroll={false} padded={false} width="full" footer={count ? (
       <View style={[styles.bar, { backgroundColor: c.background, borderTopColor: c.border, paddingBottom: 10 + insets.bottom }]}>
         <Button title={`Ajouter ${count} produit${count > 1 ? "s" : ""}`} icon="plus" onPress={save} busy={busy} />
       </View>
@@ -192,7 +197,9 @@ export default function AchatsMagasin() {
         <FlatList
           data={shown}
           keyExtractor={(p) => p.slug}
-          numColumns={3}
+          // 3 cases par ligne sur téléphone ; davantage sur grand écran (Z Fold déplié), cases de même taille.
+          key={`colonnes-${cols}`}
+          numColumns={cols}
           ListHeaderComponent={header}
           ListFooterComponent={footer}
           keyboardShouldPersistTaps="handled"
@@ -209,7 +216,7 @@ export default function AchatsMagasin() {
             return (
               <Pressable onPress={() => toggle(p)} accessibilityRole="checkbox" accessibilityState={{ checked: on }}
                 accessibilityLabel={on ? `${p.name}, ${quantityLabel(p.slug, p.unit, qty)}` : p.name}
-                style={({ pressed }) => [styles.tile, { backgroundColor: on ? c.greenSoft : c.card, borderColor: on ? c.primary : c.cardLine, opacity: pressed ? 0.85 : 1 }, CARD_SHADOW]}>
+                style={({ pressed }) => [styles.tile, { maxWidth: tileWidth }, { backgroundColor: on ? c.greenSoft : c.card, borderColor: on ? c.primary : c.cardLine, opacity: pressed ? 0.85 : 1 }, CARD_SHADOW]}>
                 <View style={styles.thumb}>
                   {src ? <Image source={src} style={StyleSheet.absoluteFill} contentFit="cover" transition={0} />
                     : <Icon name="image" size={22} color={c.muted} />}
@@ -249,7 +256,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 15, fontWeight: "600" },
   row: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
   searchIcon: { position: "absolute", left: 14, top: 0, bottom: 0, justifyContent: "center" },
-  tile: { flex: 1, maxWidth: "33.3%", minHeight: 118, borderRadius: 12, borderWidth: 1.5, padding: 7, alignItems: "center", gap: 5 },
+  tile: { flex: 1, minHeight: 118, borderRadius: 12, borderWidth: 1.5, padding: 7, alignItems: "center", gap: 5 },
   thumb: { width: 58, height: 58, borderRadius: 10, overflow: "hidden", backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
   name: { fontSize: 13.5, lineHeight: 16, fontWeight: "600", textAlign: "center" },
   stepper: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: "auto" },

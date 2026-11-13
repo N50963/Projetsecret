@@ -15,6 +15,7 @@ import { CARD_SHADOW, useColors } from "../lib/theme";
 import { stopTimer, useTimers } from "../lib/timers";
 import type { WeekSlot } from "../modules/planning";
 import { Icon, type IconName } from "./icons";
+import { sideMargin, useLayout } from "../lib/layout";
 
 function Section({ icon, title, children }: { icon: IconName; title: string; children: ReactNode }) {
   const c = useColors();
@@ -34,6 +35,8 @@ export function ReminderSheet({ visible, onClose, today, menus, toBuy, onOpenRec
   onOpenRecipe: (recipeId: string) => void; onOpenShopping: () => void;
 }) {
   const c = useColors();
+  // Grand écran (Z Fold déplié) : la feuille garde une largeur de téléphone, centrée.
+  const edge = sideMargin(useLayout().width, 640, 0);
   const insets = useSafeAreaInsets();
   const { timers, now } = useTimers();
   const todays = menus.filter((s) => s.date === today);
@@ -48,7 +51,7 @@ export function ReminderSheet({ visible, onClose, today, menus, toBuy, onOpenRec
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Fermer les rappels" />
-      <View style={[styles.sheet, { backgroundColor: c.background, paddingBottom: 16 + insets.bottom }]}>
+      <View style={[styles.sheet, { left: edge, right: edge, backgroundColor: c.background, paddingBottom: 16 + insets.bottom }]}>
         <View style={[styles.handle, { backgroundColor: c.border }]} />
         <View style={styles.head}>
           <View style={[styles.bell, { backgroundColor: c.greenSoft }]}><Icon name="bell" width={22} height={23} color={c.greenInk} /></View>

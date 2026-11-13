@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { COLUMN_MAX, useLayout } from "../lib/layout";
 import { useShoppingCount } from "../lib/shoppingCount";
 import { CARD_SHADOW, PRIMARY_GRADIENT, PRIMARY_GRADIENT_STOPS, useColors } from "../lib/theme";
 import { UpdateBar } from "./UpdateBar";
@@ -19,14 +20,17 @@ export type NavTab = "accueil" | "courses" | "recettes" | "profil";
 /**
  * Écran : fond crème, contenu défilant ; `title` règle la bande verte du haut ; `nav` affiche la barre du bas
  * (Accueil, Courses, Recettes, Profil) ; `footer` s'affiche juste au-dessus (minuteurs, bouton fixe) ; `scrollRef` permet de
- * faire défiler l'écran (montrer un contenu qui vient de se déplier).
+ * faire défiler l'écran (montrer un contenu qui vient de se déplier). Sur grand écran (Z Fold déplié), le contenu tient
+ * dans une colonne centrée (`width="column"`, par défaut) ; `width="full"` laisse l'écran gérer toute la largeur
+ * (grilles, colonnes côte à côte).
  */
-export function Screen({ title, headerRight, children, footer, nav, scroll = true, padded = true, scrollRef }: {
+export function Screen({ title, headerRight, children, footer, nav, scroll = true, padded = true, scrollRef, width = "column" }: {
   title?: string; headerRight?: () => ReactNode; children: ReactNode; footer?: ReactNode; nav?: NavTab; scroll?: boolean; padded?: boolean;
-  scrollRef?: RefObject<ScrollViewInstance | null>;
+  scrollRef?: RefObject<ScrollViewInstance | null>; width?: "column" | "full";
 }) {
   const c = useColors();
-  const content = [padded ? styles.content : styles.bare];
+  const { wide } = useLayout();
+  const content = [padded ? styles.content : styles.bare, wide && width === "column" ? styles.column : null];
   const body = scroll
     ? <ScrollView ref={scrollRef} contentContainerStyle={content} keyboardShouldPersistTaps="handled">{children}</ScrollView>
     : <View style={[content, { flex: 1 }]}>{children}</View>;
@@ -58,7 +62,9 @@ export function BottomNav({ active }: { active: NavTab }) {
     <View>
     {/* Barre discrète de mise à jour des illustrations, juste au-dessus des onglets. */}
     <UpdateBar />
-    <View accessibilityRole="tablist" style={[styles.nav, { backgroundColor: c.nav, borderTopColor: c.navLine, paddingBottom: insets.bottom }]}>
+    <View style={{ backgroundColor: c.nav, borderTopColor: c.navLine, borderTopWidth: 1, paddingBottom: insets.bottom }}>
+    {/* Grand écran : les quatre onglets restent groupés au centre. */}
+    <View accessibilityRole="tablist" style={styles.nav}>
       {TABS.map((t) => {
         const on = t.tab === active;
         const color = on ? c.navActive : c.text;
@@ -84,6 +90,7 @@ export function BottomNav({ active }: { active: NavTab }) {
           </Pressable>
         );
       })}
+    </View>
     </View>
     </View>
   );
@@ -255,6 +262,7 @@ export function Loading({ label }: { label?: string }) {
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 12, paddingTop: 12, paddingBottom: 20, gap: 12 },
   bare: { paddingBottom: 20 },
+  column: { width: "100%", maxWidth: COLUMN_MAX, alignSelf: "center" },
   card: { borderRadius: 12, borderWidth: 1, padding: 14, gap: 10 },
   h1: { fontSize: 26.5, lineHeight: 30, fontWeight: "700" },
   h2: { fontSize: 16, lineHeight: 20, fontWeight: "700" },
@@ -274,7 +282,7 @@ const styles = StyleSheet.create({
   field: { minHeight: 52, borderRadius: 13, borderWidth: 1.5, paddingHorizontal: 14, fontSize: 16 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" },
   loading: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
-  nav: { flexDirection: "row", justifyContent: "space-around", borderTopWidth: 1, paddingTop: 3 },
+  nav: { flexDirection: "row", justifyContent: "space-around", paddingTop: 3, width: "100%", maxWidth: 640, alignSelf: "center" },
   tab: { width: 72, height: 50, alignItems: "center", justifyContent: "center", gap: 2 },
   tabLabel: { fontSize: 11, lineHeight: 14 },
   // Pastille du nombre d'articles à acheter, en haut à droite de l'icône du panier.

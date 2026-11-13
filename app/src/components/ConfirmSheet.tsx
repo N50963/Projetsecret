@@ -15,6 +15,7 @@ import { placeholderOf, sourceOf, type Picture } from "../lib/images";
 import { useColors } from "../lib/theme";
 import { Icon, type IconName } from "./icons";
 import { Button } from "./ui";
+import { sideMargin, useLayout } from "../lib/layout";
 
 export interface ConfirmRequest {
   /** Question (« Annuler ce menu ? »). */
@@ -34,6 +35,8 @@ export interface ConfirmRequest {
 
 export function ConfirmSheet({ request, onClose }: { request: ConfirmRequest | null; onClose: () => void }) {
   const c = useColors();
+  // Grand écran (Z Fold déplié) : la feuille garde une largeur de téléphone, centrée.
+  const edge = sideMargin(useLayout().width, 640, 0);
   const insets = useSafeAreaInsets();
   const r = request;
   const confirm = () => {
@@ -45,7 +48,7 @@ export function ConfirmSheet({ request, onClose }: { request: ConfirmRequest | n
     <Modal visible={Boolean(r)} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={r?.cancelLabel ?? "Fermer"} />
       {r && (
-        <View style={[styles.sheet, { backgroundColor: c.background, paddingBottom: 18 + insets.bottom }]}
+        <View style={[styles.sheet, { left: edge, right: edge, backgroundColor: c.background, paddingBottom: 18 + insets.bottom }]}
           accessibilityViewIsModal accessibilityRole="alert">
           <View style={[styles.handle, { backgroundColor: c.border }]} />
           <Text style={[styles.title, { color: c.text }]} accessibilityRole="header">{r.title}</Text>

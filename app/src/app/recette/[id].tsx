@@ -17,6 +17,7 @@ import { minutes, proteinLabel, quantity } from "../../lib/format";
 import { forgetIllustration, ingredientPictureUrls, ingredientSource, illustrationUrls, pictureOf, uploadRecipePhoto, usePictures, type Picture } from "../../lib/images";
 import { adaptRecipeDraft, draftToInput, type DraftRecipe } from "../../lib/mistral";
 import { pickDishPhoto } from "../../lib/photo";
+import { useLayout } from "../../lib/layout";
 import { useHousehold } from "../../lib/session";
 import { clock, stepTimer } from "../../lib/steps";
 import { supabase } from "../../lib/supabase";
@@ -67,6 +68,7 @@ export default function FicheRecette() {
   const household = useHousehold();
   const [ask, confirmSheet] = useConfirm();
   const c = useColors();
+  const { wide } = useLayout();
   const { timers, now } = useTimers();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   // Photo connue du téléphone affichée tout de suite ; la liste est rafraîchie au chargement.
@@ -349,8 +351,157 @@ export default function FicheRecette() {
     } else await load();
   });
 
+  const ingredientsPart = (
+    <View style={styles.section}>
+      <View>
+        {ingredients.map((i, n) => (
+          // Ligne touchable seulement en sélection « Je n'en ai plus » (sinon son panier reste seul actif).
+          <Row_ key={n} pressable={canPick(i.slug)} onPress={() => i.slug && togglePick(i.slug)}
+            accessibilityRole={canPick(i.slug) ? "checkbox" : undefined} accessibilityState={canPick(i.slug) ? { checked: outOf?.has(i.slug!) } : undefined}
+            style={[styles.ingredient, n < ingredients.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.border }]}>
+            {ingredientSource(i.slug)
+              ? <Image source={ingredientSource(i.slug)!} cachePolicy="memory-disk" style={styles.thumb} contentFit="cover" transition={0}
+                accessibilityIgnoresInvertColors />
+              : <View style={[styles.thumb, { backgroundColor: c.chip, alignItems: "center", justifyContent: "center" }]}>
+                <Icon name="cutlery" size={18} color={c.muted} />
+              </View>}
+            <View style={{ flex: 1, gap: 5 }}>
+              <Text style={{ color: c.muted, fontSize: 16, lineHeight: 21 }}>
+                {i.label}{i.optional ? " (facultatif)" : ""}
+                {i.slug && toBuy.has(i.slug) ? <Text style={{ color: c.orangeInk, fontSize: 15, fontWeight: "500" }}> · à acheter</Text> : null}
+                {isListed(i) ? <Text style={{ color: c.greenInk, fontSize: 15, fontWeight: "500" }}> · sur la liste</Text> : null}
+              </Text>
+              {(() => {
+                // Retiré de la liste par le foyer : mention discrète, et de quoi le remettre.
+                const removed = removedOf(i.slug);
+                if (!removed) return null;
+                return (
+                  <View style={[styles.removedNote, { backgroundColor: c.chip }]}>
+                    <Icon name="info" size={13} color={c.orangeInk} />
+                    <Text style={{ color: c.orangeInk, fontSize: 13, lineHeight: 16 }}>Retiré de votre liste</Text>
+                    <Pressable onPress={() => putBack(removed)} disabled={busy !== null} hitSlop={8} accessibilityRole="button"
+                      accessibilityLabel={`Remettre ${i.label} sur la liste de courses`} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+                      {busy === `un:${removed.slug}` ? <ActivityIndicator size="small" color={c.primary} />
+                        : <Text style={{ color: c.primary, fontSize: 13, lineHeight: 16, fontWeight: "700", textDecorationLine: "underline" }}>Remettre</Text>}
+                    </Pressable>
+                  </View>
+                );
+              })()}
+            </View>
+            <Text style={{ color: c.text, fontSize: 16, fontWeight: "500", fontVariant: ["tabular-nums"] }}>{quantity(i.quantity, i.unit)}</Text>
+            {canPick(i.slug) ? <Icon name={outOf?.has(i.slug!) ? "checkCircle" : "circle"} size={24} color={outOf?.has(i.slug!) ? c.primary : c.muted} /> : null}
+            {(() => {
+              // Tout ingrédient qui n'est pas déjà sur la liste (ni retiré par le foyer) a son panier : il va sur la liste à
+              // lui seul (acheté mais épuisé, à acheter, de placard comme le sel ou l'huile, facultatif, hors référentiel).
+              if (outOf || isListed(i) || removedOf(i.slug) || stock === undefined) return null;
+              const home = i.slug ? atHome.find((x) => x.slug === i.slug) : undefined;
+              const key = `un:${i.slug ?? i.label}`;
+              return (
+                <Pressable onPress={() => (home ? addOne(home) : addRow(i))} disabled={busy !== null} hitSlop={6} accessibilityRole="button"
+                  accessibilityLabel={home ? `Je n'en ai plus : ajouter ${i.label} à la liste de courses` : `Ajouter ${i.label} à la liste de courses`}
+                  style={({ pressed }) => [styles.addOne, { borderColor: c.border, backgroundColor: c.card, opacity: pressed ? 0.6 : 1 }]}>
+                  {busy === key ? <ActivityIndicator size="small" color={c.primary} /> : (
+                    <>
+                      <Icon name="cart" size={19} color={c.text} />
+                      <View style={[styles.addOnePlus, { backgroundColor: c.primary }]}><Icon name="plus" size={10} color="#FFFFFF" /></View>
+                    </>
+                  )}
+                </Pressable>
+              );
+            })()}
+          </Row_>
+        ))}
+      </View>
+      {!outOf ? <Muted>Un ingrédient vous manque (sel, ail, huile…) ? Touchez son panier pour l'ajouter à la liste.</Muted> : null}
+      {outOf ? (
+        <View style={{ gap: 8 }}>
+          <Muted>Cochez ce qui manque à la maison (consommé en dehors des menus prévus) : il rejoint la liste de courses.</Muted>
+          <Button icon="cartFilled" title={outOf.size ? `Ajouter à ma liste (${outOf.size})` : "Cochez ce qui manque"} busy={busy === "list"}
+            disabled={!outOf.size} onPress={() => addToList(atHome.filter((n) => outOf.has(n.slug)))} />
+          <Button title="Annuler" kind="secondary" onPress={() => setOutOf(null)} />
+        </View>
+      ) : missing.length ? (
+        <Button icon="cartFilled" title="Ajouter à ma liste" onPress={() => addToList(missing)} busy={busy === "list"} />
+      ) : atHome.length ? (
+        // Tout est normalement à la maison : le foyer peut quand même ne plus en avoir.
+        <Button icon="cartFilled" kind="secondary" title="Je n'en ai plus, j'ajoute à ma liste"
+          onPress={() => setOutOf(new Set(atHome.map((n) => n.slug)))} disabled={stock === undefined} />
+      ) : (
+        <Button icon="cartFilled" title={needs.length ? "Tout est sur la liste" : "Ajouter à ma liste"} disabled onPress={() => undefined} />
+      )}
+    </View>
+  );
+  const stepsPart = (
+    <View style={[styles.section, { gap: 10 }]}>
+      <Muted>Touchez une étape pour la suivre ; chaque minuteur sonne et vibre à la fin.</Muted>
+      {recipe.steps.map((s, n) => {
+        const isCurrent = n === current;
+        const done = n < current;
+        const timer = stepTimer(s, recipe.steps.slice(0, n));
+        const running = timers.find((t) => t.id === timerId(recipe.id, n + 1));
+        return (
+          <Pressable key={n} onPress={() => setCurrent(n)} accessibilityRole="button" accessibilityState={{ selected: isCurrent }}
+            accessibilityLabel={`Étape ${n + 1}${done ? ", faite" : ""}`}
+            style={[styles.step, isCurrent && { backgroundColor: c.card, borderColor: c.primary, borderWidth: 1.5 }]}>
+            <View style={[styles.badge, { backgroundColor: isCurrent ? c.primary : done ? c.greenSoft : c.chip }]}>
+              {done
+                ? <Icon name="check" size={18} color={c.greenInk} />
+                : <Text style={{ fontWeight: "700", fontSize: 16, color: isCurrent ? c.primaryText : c.text }}>{n + 1}</Text>}
+            </View>
+            <View style={{ flex: 1, gap: 10, paddingTop: 4 }}>
+              <StepText text={s} current={isCurrent} done={done} />
+              {timer && (running ? (
+                <Pressable onPress={() => stopTimer(running.id)} accessibilityRole="button"
+                  accessibilityLabel={running.done ? "Fermer le minuteur" : `Arrêter le minuteur, ${clock((running.endsAt - now) / 1000)} restantes`}
+                  style={({ pressed }) => [styles.timer, { backgroundColor: running.done ? c.danger : c.primary, borderColor: running.done ? c.danger : c.primary, opacity: pressed ? 0.7 : 1 }]}>
+                  <Icon name={running.done ? "bell" : "stop"} size={18} color={c.primaryText} />
+                  <Text style={{ color: c.primaryText, fontWeight: "700", fontVariant: ["tabular-nums"] }}>
+                    {running.done ? "Terminé" : clock((running.endsAt - now) / 1000)}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Pressable accessibilityRole="button" accessibilityLabel={`Lancer le minuteur : ${timer.subject}, ${timer.label}`}
+                  onPress={() => startTimer({ recipeId: recipe.id, recipeName: recipe.name, step: n + 1, subject: timer.subject, detail: s }, timer.seconds)}
+                  style={({ pressed }) => [styles.timer, { backgroundColor: c.greenSoft, borderColor: c.primary, opacity: pressed ? 0.6 : 1 }]}>
+                  <Icon name="timer" size={18} color={c.greenInk} />
+                  <Text style={{ color: c.greenInk, fontWeight: "600" }}>Minuteur {timer.label}</Text>
+                </Pressable>
+              ))}
+              {isCurrent && (
+                <Row>
+                  {n > 0 && <Button title="Précédente" kind="secondary" onPress={() => setCurrent(n - 1)} style={{ flex: 1 }} />}
+                  {n < recipe.steps.length - 1
+                    ? <Button title="Étape suivante" onPress={() => setCurrent(n + 1)} style={{ flex: 1 }} />
+                    : <Button title={cooking.length ? "Minuteurs en cours" : "C'est prêt"} onPress={finish} disabled={cooking.length > 0}
+                      style={{ flex: 1 }} />}
+                </Row>
+              )}
+              {isCurrent && n === recipe.steps.length - 1 && cooking.length > 0 && (
+                <Muted>
+                  Le plat sera prêt à la fin {cooking.length > 1 ? "des minuteurs" : "du minuteur"} :{" "}
+                  {cooking.map((t) => `${t.subject} (étape ${t.step}, ${clock((t.endsAt - now) / 1000)})`).join(", ")}.
+                </Muted>
+              )}
+            </View>
+          </Pressable>
+        );
+      })}
+      {current >= recipe.steps.length && (
+        <Card>
+          <H2>Bon appétit !</H2>
+          <Muted>Prenez votre plat en photo : elle remplacera l'image de la recette.</Muted>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Button title="Prendre une photo" kind="secondary" icon="camera" onPress={() => changePhoto(true)} busy={busy === "photo"} style={{ flex: 1.6 }} />
+            <Button title="Galerie" kind="secondary" icon="gallery" onPress={() => changePhoto(false)} style={{ flex: 1 }} />
+          </View>
+          <Button title="Reprendre depuis le début" kind="secondary" onPress={() => setCurrent(0)} />
+        </Card>
+      )}
+    </View>
+  );
+
   return (
-    <Screen title="Recette" padded={false} footer={<TimersBar />} scrollRef={scroll} headerRight={() => (
+    <Screen title="Recette" padded={false} width="full" footer={<TimersBar />} scrollRef={scroll} headerRight={() => (
       <View style={{ flexDirection: "row" }}>
         <HeaderIcon name="share" label="Partager" onPress={share} size={23} />
         <HeaderIcon name={favorite ? "heart" : "heartOutline"} label={favorite ? "Retirer des favoris" : "Ajouter aux favoris"} onPress={toggleFavorite} />
@@ -423,164 +574,34 @@ export default function FicheRecette() {
         </View>
       </View>
 
-      <View style={styles.tabs} accessibilityRole="tablist">
-        {(["ingredients", "preparation"] as Tab[]).map((t) => {
-          const on = tab === t;
-          return (
-            <Pressable key={t} onPress={() => setTab(t)} accessibilityRole="tab" accessibilityState={{ selected: on }}
-              style={[styles.tab, { borderBottomColor: on ? c.primary : c.border, borderBottomWidth: on ? 2.5 : 1 }]}>
-              <Text style={{ color: on ? c.primary : c.text, fontSize: 16.4, fontWeight: "700" }}>{t === "ingredients" ? "Ingrédients" : "Préparation"}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {tab === "ingredients" ? (
-        <View style={styles.section}>
-          <View>
-            {ingredients.map((i, n) => (
-              // Ligne touchable seulement en sélection « Je n'en ai plus » (sinon son panier reste seul actif).
-              <Row_ key={n} pressable={canPick(i.slug)} onPress={() => i.slug && togglePick(i.slug)}
-                accessibilityRole={canPick(i.slug) ? "checkbox" : undefined} accessibilityState={canPick(i.slug) ? { checked: outOf?.has(i.slug!) } : undefined}
-                style={[styles.ingredient, n < ingredients.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.border }]}>
-                {ingredientSource(i.slug)
-                  ? <Image source={ingredientSource(i.slug)!} cachePolicy="memory-disk" style={styles.thumb} contentFit="cover" transition={0}
-                    accessibilityIgnoresInvertColors />
-                  : <View style={[styles.thumb, { backgroundColor: c.chip, alignItems: "center", justifyContent: "center" }]}>
-                    <Icon name="cutlery" size={18} color={c.muted} />
-                  </View>}
-                <View style={{ flex: 1, gap: 5 }}>
-                  <Text style={{ color: c.muted, fontSize: 16, lineHeight: 21 }}>
-                    {i.label}{i.optional ? " (facultatif)" : ""}
-                    {i.slug && toBuy.has(i.slug) ? <Text style={{ color: c.orangeInk, fontSize: 15, fontWeight: "500" }}> · à acheter</Text> : null}
-                    {isListed(i) ? <Text style={{ color: c.greenInk, fontSize: 15, fontWeight: "500" }}> · sur la liste</Text> : null}
-                  </Text>
-                  {(() => {
-                    // Retiré de la liste par le foyer : mention discrète, et de quoi le remettre.
-                    const removed = removedOf(i.slug);
-                    if (!removed) return null;
-                    return (
-                      <View style={[styles.removedNote, { backgroundColor: c.chip }]}>
-                        <Icon name="info" size={13} color={c.orangeInk} />
-                        <Text style={{ color: c.orangeInk, fontSize: 13, lineHeight: 16 }}>Retiré de votre liste</Text>
-                        <Pressable onPress={() => putBack(removed)} disabled={busy !== null} hitSlop={8} accessibilityRole="button"
-                          accessibilityLabel={`Remettre ${i.label} sur la liste de courses`} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
-                          {busy === `un:${removed.slug}` ? <ActivityIndicator size="small" color={c.primary} />
-                            : <Text style={{ color: c.primary, fontSize: 13, lineHeight: 16, fontWeight: "700", textDecorationLine: "underline" }}>Remettre</Text>}
-                        </Pressable>
-                      </View>
-                    );
-                  })()}
-                </View>
-                <Text style={{ color: c.text, fontSize: 16, fontWeight: "500", fontVariant: ["tabular-nums"] }}>{quantity(i.quantity, i.unit)}</Text>
-                {canPick(i.slug) ? <Icon name={outOf?.has(i.slug!) ? "checkCircle" : "circle"} size={24} color={outOf?.has(i.slug!) ? c.primary : c.muted} /> : null}
-                {(() => {
-                  // Tout ingrédient qui n'est pas déjà sur la liste (ni retiré par le foyer) a son panier : il va sur la liste à
-                  // lui seul (acheté mais épuisé, à acheter, de placard comme le sel ou l'huile, facultatif, hors référentiel).
-                  if (outOf || isListed(i) || removedOf(i.slug) || stock === undefined) return null;
-                  const home = i.slug ? atHome.find((x) => x.slug === i.slug) : undefined;
-                  const key = `un:${i.slug ?? i.label}`;
-                  return (
-                    <Pressable onPress={() => (home ? addOne(home) : addRow(i))} disabled={busy !== null} hitSlop={6} accessibilityRole="button"
-                      accessibilityLabel={home ? `Je n'en ai plus : ajouter ${i.label} à la liste de courses` : `Ajouter ${i.label} à la liste de courses`}
-                      style={({ pressed }) => [styles.addOne, { borderColor: c.border, backgroundColor: c.card, opacity: pressed ? 0.6 : 1 }]}>
-                      {busy === key ? <ActivityIndicator size="small" color={c.primary} /> : (
-                        <>
-                          <Icon name="cart" size={19} color={c.text} />
-                          <View style={[styles.addOnePlus, { backgroundColor: c.primary }]}><Icon name="plus" size={10} color="#FFFFFF" /></View>
-                        </>
-                      )}
-                    </Pressable>
-                  );
-                })()}
-              </Row_>
-            ))}
+      {wide ? (
+        // Grand écran (Z Fold déplié) : les ingrédients et la préparation côte à côte, sans onglets.
+        <View style={styles.columns}>
+          <View style={{ flex: 1 }}>
+            <H2 style={styles.columnTitle}>Ingrédients</H2>
+            {ingredientsPart}
           </View>
-          {!outOf ? <Muted>Un ingrédient vous manque (sel, ail, huile…) ? Touchez son panier pour l'ajouter à la liste.</Muted> : null}
-          {outOf ? (
-            <View style={{ gap: 8 }}>
-              <Muted>Cochez ce qui manque à la maison (consommé en dehors des menus prévus) : il rejoint la liste de courses.</Muted>
-              <Button icon="cartFilled" title={outOf.size ? `Ajouter à ma liste (${outOf.size})` : "Cochez ce qui manque"} busy={busy === "list"}
-                disabled={!outOf.size} onPress={() => addToList(atHome.filter((n) => outOf.has(n.slug)))} />
-              <Button title="Annuler" kind="secondary" onPress={() => setOutOf(null)} />
-            </View>
-          ) : missing.length ? (
-            <Button icon="cartFilled" title="Ajouter à ma liste" onPress={() => addToList(missing)} busy={busy === "list"} />
-          ) : atHome.length ? (
-            // Tout est normalement à la maison : le foyer peut quand même ne plus en avoir.
-            <Button icon="cartFilled" kind="secondary" title="Je n'en ai plus, j'ajoute à ma liste"
-              onPress={() => setOutOf(new Set(atHome.map((n) => n.slug)))} disabled={stock === undefined} />
-          ) : (
-            <Button icon="cartFilled" title={needs.length ? "Tout est sur la liste" : "Ajouter à ma liste"} disabled onPress={() => undefined} />
-          )}
+          <View style={{ flex: 1.3 }}>
+            <H2 style={styles.columnTitle}>Préparation</H2>
+            {stepsPart}
+          </View>
         </View>
       ) : (
-        <View style={[styles.section, { gap: 10 }]}>
-          <Muted>Touchez une étape pour la suivre ; chaque minuteur sonne et vibre à la fin.</Muted>
-          {recipe.steps.map((s, n) => {
-            const isCurrent = n === current;
-            const done = n < current;
-            const timer = stepTimer(s, recipe.steps.slice(0, n));
-            const running = timers.find((t) => t.id === timerId(recipe.id, n + 1));
+        <>
+        <View style={styles.tabs} accessibilityRole="tablist">
+          {(["ingredients", "preparation"] as Tab[]).map((t) => {
+            const on = tab === t;
             return (
-              <Pressable key={n} onPress={() => setCurrent(n)} accessibilityRole="button" accessibilityState={{ selected: isCurrent }}
-                accessibilityLabel={`Étape ${n + 1}${done ? ", faite" : ""}`}
-                style={[styles.step, isCurrent && { backgroundColor: c.card, borderColor: c.primary, borderWidth: 1.5 }]}>
-                <View style={[styles.badge, { backgroundColor: isCurrent ? c.primary : done ? c.greenSoft : c.chip }]}>
-                  {done
-                    ? <Icon name="check" size={18} color={c.greenInk} />
-                    : <Text style={{ fontWeight: "700", fontSize: 16, color: isCurrent ? c.primaryText : c.text }}>{n + 1}</Text>}
-                </View>
-                <View style={{ flex: 1, gap: 10, paddingTop: 4 }}>
-                  <StepText text={s} current={isCurrent} done={done} />
-                  {timer && (running ? (
-                    <Pressable onPress={() => stopTimer(running.id)} accessibilityRole="button"
-                      accessibilityLabel={running.done ? "Fermer le minuteur" : `Arrêter le minuteur, ${clock((running.endsAt - now) / 1000)} restantes`}
-                      style={({ pressed }) => [styles.timer, { backgroundColor: running.done ? c.danger : c.primary, borderColor: running.done ? c.danger : c.primary, opacity: pressed ? 0.7 : 1 }]}>
-                      <Icon name={running.done ? "bell" : "stop"} size={18} color={c.primaryText} />
-                      <Text style={{ color: c.primaryText, fontWeight: "700", fontVariant: ["tabular-nums"] }}>
-                        {running.done ? "Terminé" : clock((running.endsAt - now) / 1000)}
-                      </Text>
-                    </Pressable>
-                  ) : (
-                    <Pressable accessibilityRole="button" accessibilityLabel={`Lancer le minuteur : ${timer.subject}, ${timer.label}`}
-                      onPress={() => startTimer({ recipeId: recipe.id, recipeName: recipe.name, step: n + 1, subject: timer.subject, detail: s }, timer.seconds)}
-                      style={({ pressed }) => [styles.timer, { backgroundColor: c.greenSoft, borderColor: c.primary, opacity: pressed ? 0.6 : 1 }]}>
-                      <Icon name="timer" size={18} color={c.greenInk} />
-                      <Text style={{ color: c.greenInk, fontWeight: "600" }}>Minuteur {timer.label}</Text>
-                    </Pressable>
-                  ))}
-                  {isCurrent && (
-                    <Row>
-                      {n > 0 && <Button title="Précédente" kind="secondary" onPress={() => setCurrent(n - 1)} style={{ flex: 1 }} />}
-                      {n < recipe.steps.length - 1
-                        ? <Button title="Étape suivante" onPress={() => setCurrent(n + 1)} style={{ flex: 1 }} />
-                        : <Button title={cooking.length ? "Minuteurs en cours" : "C'est prêt"} onPress={finish} disabled={cooking.length > 0}
-                          style={{ flex: 1 }} />}
-                    </Row>
-                  )}
-                  {isCurrent && n === recipe.steps.length - 1 && cooking.length > 0 && (
-                    <Muted>
-                      Le plat sera prêt à la fin {cooking.length > 1 ? "des minuteurs" : "du minuteur"} :{" "}
-                      {cooking.map((t) => `${t.subject} (étape ${t.step}, ${clock((t.endsAt - now) / 1000)})`).join(", ")}.
-                    </Muted>
-                  )}
-                </View>
+              <Pressable key={t} onPress={() => setTab(t)} accessibilityRole="tab" accessibilityState={{ selected: on }}
+                style={[styles.tab, { borderBottomColor: on ? c.primary : c.border, borderBottomWidth: on ? 2.5 : 1 }]}>
+                <Text style={{ color: on ? c.primary : c.text, fontSize: 16.4, fontWeight: "700" }}>{t === "ingredients" ? "Ingrédients" : "Préparation"}</Text>
               </Pressable>
             );
           })}
-          {current >= recipe.steps.length && (
-            <Card>
-              <H2>Bon appétit !</H2>
-              <Muted>Prenez votre plat en photo : elle remplacera l'image de la recette.</Muted>
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                <Button title="Prendre une photo" kind="secondary" icon="camera" onPress={() => changePhoto(true)} busy={busy === "photo"} style={{ flex: 1.6 }} />
-                <Button title="Galerie" kind="secondary" icon="gallery" onPress={() => changePhoto(false)} style={{ flex: 1 }} />
-              </View>
-              <Button title="Reprendre depuis le début" kind="secondary" onPress={() => setCurrent(0)} />
-            </Card>
-          )}
         </View>
+
+          {tab === "ingredients" ? ingredientsPart : stepsPart}
+        </>
       )}
 
       {cookedToday && (
@@ -662,6 +683,8 @@ const styles = StyleSheet.create({
   tabs: { flexDirection: "row", gap: 12, marginHorizontal: 18.5, marginTop: 8 },
   tab: { flex: 1, height: 42, alignItems: "center", justifyContent: "center" },
   section: { marginHorizontal: 17, marginTop: 12, gap: 10 },
+  columns: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginTop: 10 },
+  columnTitle: { marginHorizontal: 17, marginTop: 4 },
   ingredient: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 52, paddingVertical: 6 },
   // Panier « Je n'en ai plus » d'un ingrédient acheté (ajout à la liste de cet ingrédient seul).
   // Mention « Retiré de votre liste » sous l'ingrédient : petite pastille crème, texte orangé, lien « Remettre ».
