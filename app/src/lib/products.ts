@@ -28,6 +28,8 @@ export interface ShopProduct {
 export interface IngredientOption {
   slug: string;
   name: string;
+  /** Unité de référence (achats et stock) : g, ml ou pièce. */
+  default_unit?: string | null;
 }
 
 /** Nouveaux produits à vérifier, les non reconnus d'abord. */
@@ -71,7 +73,7 @@ let options: Promise<IngredientOption[]> | null = null;
 /** Référentiel des ingrédients (choix proposés à la correction). */
 export function ingredientOptions(): Promise<IngredientOption[]> {
   options ??= (async () => {
-    const { data, error } = await supabase.from("ingredients").select("slug, name").order("name");
+    const { data, error } = await supabase.from("ingredients").select("slug, name, default_unit").order("name");
     if (error) throw new Error(`Ingrédients illisibles : ${error.message}`);
     return (data ?? []) as IngredientOption[];
   })().catch((e) => {

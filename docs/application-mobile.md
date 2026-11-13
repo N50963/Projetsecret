@@ -126,9 +126,21 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
 10. **Recettes** (onglet de la barre du bas) : recherche (lancée quand la saisie marque une pause ; une réponse plus
    ancienne n'écrase jamais les résultats), filtre Favoris, filtre par note (5 étoiles, 4 et +, 3 et +,
    non notées), note affichée sur chaque ligne. Un appui long sur une recette propose de la supprimer (panneau de
-   confirmation au style de l'application). Sur la fiche, la corbeille de la bande verte supprime la recette ; les
-   recettes ajoutées par le foyer ont en bas de fiche « Modifier la recette » et « Supprimer » ; les recettes de la base
-   commune ne sont pas modifiables. Une recette supprimée est masquée pour le foyer (table `hidden_recipes`), pas
+   confirmation au style de l'application). Sur la fiche, la corbeille de la bande verte supprime la recette ; toutes
+   les recettes ont en bas de fiche « Modifier la recette » (et « Supprimer » pour celles ajoutées par le foyer). Une
+   recette commune corrigée devient la version du foyer (variante, avec la même photo) et la recette commune est masquée
+   pour lui : pas de doublon dans l'onglet Recettes ni dans les propositions (version 0.29.5 ; auparavant, les recettes
+   communes n'étaient pas modifiables). **Éditeur de recette** (correction, version améliorée, ajout) :
+   - étapes : flèches pour monter ou descendre une étape, « + » pour en insérer une juste après, « Ajouter une étape au
+     début » ou « à la fin », croix pour la retirer ; les champs gardent leur contenu quand l'ordre change ;
+   - ingrédients : chacun est relié à un ingrédient du référentiel (`src/lib/ingredientMatch.ts`), ce qui lui donne sa
+     photo sur la fiche, le panier « à acheter », la comparaison avec les achats et le stock des propositions. Relié
+     d'office quand le libellé le désigne sans ambiguïté (« 2 courgettes » → Courgette, « 4 dos de cabillaud » →
+     Poisson blanc) ; sinon des suggestions s'affichent sous la ligne (« crème » : épaisse ou liquide ?), et
+     « chercher » ouvre la recherche dans le référentiel. « Ajouter un ingrédient » ouvre directement cette recherche.
+     Une quantité tapée en tête du libellé (« 200 g de lardons ») passe dans les cases quantité et unité. Un ingrédient
+     déjà présent n'est pas relié une seconde fois (l'éditeur le signale) ; flèches pour changer l'ordre. Une recette
+     supprimée est masquée pour le foyer (table `hidden_recipes`), pas
    effacée : elle quitte l'onglet Recettes, le tableau météo et les propositions, mais les menus déjà prévus avec elle
    gardent leur nom et leur fiche, qui propose « Remettre dans mes recettes ».
 11. **Ajout de recettes** : cinq sources, mises en forme par Mistral (durées de cuisson, feu et température précisés :

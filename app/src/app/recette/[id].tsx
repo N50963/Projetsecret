@@ -14,7 +14,7 @@ import { StarRating } from "../../components/StarRating";
 import { StepText, TimersBar } from "../../components/Steps";
 import { Body, Button, Card, ErrorText, Field, H1, H2, HeaderIcon, Muted, Pill, Row, Screen } from "../../components/ui";
 import { minutes, proteinLabel, quantity } from "../../lib/format";
-import { ingredientPictureUrls, ingredientSource, illustrationUrls, pictureOf, uploadRecipePhoto, usePictures, type Picture } from "../../lib/images";
+import { forgetIllustration, ingredientPictureUrls, ingredientSource, illustrationUrls, pictureOf, uploadRecipePhoto, usePictures, type Picture } from "../../lib/images";
 import { adaptRecipeDraft, draftToInput, type DraftRecipe } from "../../lib/mistral";
 import { pickDishPhoto } from "../../lib/photo";
 import { useHousehold } from "../../lib/session";
@@ -24,7 +24,7 @@ import { addDays, loadPurchases, PURCHASE_WINDOW_DAYS, setShoppingItemsRemoved, 
 import { CARD_SHADOW, useColors } from "../../lib/theme";
 import { startTimer, stopTimer, timerId, useTimers } from "../../lib/timers";
 import {
-  adaptRecipe, addNeedsToShoppingList, addRecipeVersion, getHouseholdPreferences, getLatestRating, getListedIngredients, getRecipe, getShoppingStatus, ingredientIds, isFavorite, isLabelListed, isRecipeHidden, rateRecipe, removeRecipe, restoreRecipe,
+  adaptRecipe, addNeedsToShoppingList, addRecipeVersion, copyRecipeImage, getHouseholdPreferences, getLatestRating, getListedIngredients, getRecipe, getShoppingStatus, ingredientIds, isFavorite, isLabelListed, isRecipeHidden, rateRecipe, removeRecipe, restoreRecipe,
   scaleIngredients, setFavorite, toPayload, validateRecipe, type IngredientShopping, type ListedIngredients, type Recipe, type RecipeIngredient, type RecipeRating,
 } from "../../modules/recipes";
 import { errorText } from "../../lib/errors";
@@ -57,8 +57,9 @@ const cookedKey = (recipeId: string) => `recette-faite:${recipeId}`;
  * barre de notation, en haut : la note seule ne sollicite pas Mistral et pondère les propositions. La recette faite
  * (« C'est prêt »), et ce jour-là seulement : une remarque sur le contenu (goût, quantités) part à Mistral, qui propose
  * une version améliorée si la recette est améliorable (l'utilisateur la corrige et la garde, ou garde la recette actuelle). Photo du plat : icône blanche discrète en haut de la photo (appareil photo ou
- * galerie). Partage, favoris et suppression dans la bande verte ; « Modifier la recette » (recettes ajoutées par le
- * foyer) en bas de la fiche. Une recette supprimée (fiche ouverte depuis un menu déjà prévu) peut y être remise.
+ * galerie). Partage, favoris et suppression dans la bande verte ; « Modifier la recette » (toutes les recettes ; une recette
+ * commune corrigée devient la version du foyer, qui la remplace) ; « Supprimer » en bas de la fiche aussi pour les
+ * recettes ajoutées par le foyer. Une recette supprimée (fiche ouverte depuis un menu déjà prévu) peut y être remise.
  */
 export default function FicheRecette() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -327,17 +328,25 @@ export default function FicheRecette() {
     const input = draftToInput(cleanDraft(draft.recipe), draft.kind === "edit" ? recipe.source : "mistral");
     const issues = validateRecipe(input);
     if (issues.length) throw new Error(`À corriger : ${issues.map((i) => i.message).join(" ; ")}`);
-    if (draft.kind === "edit") {
+    if (draft.kind === "edit" && own) {
       await addRecipeVersion(supabase, recipe.id, input, "Modifiée à la main");
       setDraft(null);
       await load();
       return;
     }
-    const newId = await adaptRecipe(supabase, household.id, recipe, input, draft.change_note || "Améliorée après un avis du foyer");
+    // Recette commune : la version corrigée devient une recette du foyer, et la recette commune est masquée pour lui
+    // (elle n'apparaît plus en double dans l'onglet Recettes ni dans les propositions ; les menus prévus restent).
+    const newId = await adaptRecipe(supabase, household.id, recipe, input,
+      draft.kind === "edit" ? "Modifiée à la main" : draft.change_note || "Améliorée après un avis du foyer");
     setDraft(null);
     setCurrent(0);
-    if (newId && recipe.householdId !== household.id) router.replace(`/recette/${newId}`);
-    else await load();
+    if (newId && !own) {
+      await Promise.all([
+        copyRecipeImage(supabase, recipe.id, newId, household.id).then(() => forgetIllustration(newId)).catch(() => undefined),
+        removeRecipe(supabase, recipe.id, household.id).catch(() => undefined),
+      ]);
+      router.replace(`/recette/${newId}`);
+    } else await load();
   });
 
   return (
@@ -604,12 +613,15 @@ export default function FicheRecette() {
             <Button title="Remettre dans mes recettes" kind="secondary" onPress={restore} busy={busy === "restore"} />
           </Card>
         </View>
-      ) : own ? (
-        <View style={[styles.section, { flexDirection: "row", gap: 8 }]}>
-          <Button title="Modifier la recette" kind="secondary" onPress={editRecipe} style={{ flex: 1 }} />
-          <Button title="Supprimer" kind="danger" icon="trash" onPress={deleteRecipe} busy={busy === "delete"} style={{ flex: 1 }} />
+      ) : (
+        <View style={[styles.section, { gap: 6 }]}>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Button title="Modifier la recette" kind="secondary" onPress={editRecipe} style={{ flex: 1 }} />
+            {own ? <Button title="Supprimer" kind="danger" icon="trash" onPress={deleteRecipe} busy={busy === "delete"} style={{ flex: 1 }} /> : null}
+          </View>
+          {!own ? <Muted style={{ fontSize: 13.5 }}>Recette de MenuBily : vos corrections en font votre version, qui la remplace pour le foyer.</Muted> : null}
         </View>
-      ) : null}
+      )}
 
       {draft && (
         <View style={[styles.section, { gap: 12 }]}>

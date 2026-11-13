@@ -208,6 +208,22 @@ export async function adaptRecipe(supabase: SupabaseClient, householdId: string,
   return createRecipe(supabase, householdId, { ...input, slug: `${original.slug ?? slugify(original.name)}-variante`, parentRecipeId: original.id, source: "manual" });
 }
 
+/**
+ * La version du foyer d'une recette commune garde la photo du plat : même fichier (celle du foyer s'il en a pris une,
+ * sinon l'illustration commune), sans attendre une nouvelle illustration.
+ */
+export async function copyRecipeImage(supabase: SupabaseClient, fromRecipeId: string, toRecipeId: string, householdId: string): Promise<void> {
+  const { data, error } = await supabase.from("recipe_images").select("household_id, storage_path, source, created_at")
+    .eq("recipe_id", fromRecipeId).neq("source", "pollinations");
+  if (error || !data?.length) return;
+  const rows = data as Row[];
+  const image = rows.find((r) => r.household_id === householdId) ?? rows.find((r) => r.household_id === null);
+  if (!image) return;
+  await supabase.from("recipe_images").upsert({
+    recipe_id: toRecipeId, household_id: householdId, storage_path: image.storage_path, source: image.source, created_at: image.created_at,
+  }, { onConflict: "recipe_id,household_id" });
+}
+
 export async function archiveRecipe(supabase: SupabaseClient, recipeId: string, archived = true): Promise<void> {
   const { error } = await supabase.rpc("set_recipe_archived", { p_recipe_id: recipeId, p_archived: archived });
   check(error, "Archivage refusé");
