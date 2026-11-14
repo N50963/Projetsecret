@@ -159,6 +159,19 @@ pub fn open(data: Vec<u8>, name: &str) -> Result<Document, String> {
             let pkg = Package::open(data)?;
             doc.pages = crate::ooxml::pptx::load(&pkg)?;
         }
+        Format::Odt => {
+            let pkg = Package::open(data)?;
+            let flow = crate::odf::odt::load(&pkg)?;
+            doc.pages = crate::flow::paginate(&flow);
+        }
+        Format::Ods => {
+            let pkg = Package::open(data)?;
+            doc.workbook = Some(crate::odf::ods::load(&pkg)?);
+        }
+        Format::Odp => {
+            let pkg = Package::open(data)?;
+            doc.pages = crate::odf::odp::load(&pkg)?;
+        }
         _ => return Err(format!("Le format {} n'est pas encore pris en charge.", format.label())),
     }
     if doc.pages.is_empty() && doc.workbook.is_none() {
