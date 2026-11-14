@@ -1286,7 +1286,7 @@ pub fn render_drawing_part(pkg: &Package, path: &str, theme: &Theme, rect: Rect)
 }
 
 /// Objets d'une feuille Excel : (rectangle dans la feuille, éléments relatifs).
-pub fn sheet_drawings(pkg: &Package, path: &str, theme: &Theme, pos: &dyn Fn(u32, f32, u32, f32) -> (f32, f32)) -> Vec<(Rect, Vec<Item>)> {
+pub fn sheet_drawings(pkg: &Package, path: &str, theme: &Theme, pos: &dyn Fn(u32, f32, u32, f32) -> (f32, f32), res: Option<&super::chart::Resolver>) -> Vec<(Rect, Vec<Item>)> {
     let Some(xml) = pkg.read_string(path) else { return Vec::new() };
     let Some(doc) = parse_xml(&xml) else { return Vec::new() };
     let ctx = DrawCtx { pkg, theme, clr_map: None, rels: pkg.rels(path), title_style: empty_list(), body_style: empty_list(), other_style: empty_list(), slide_number: 1, table_styles: None };
@@ -1325,7 +1325,7 @@ pub fn sheet_drawings(pkg: &Package, path: &str, theme: &Theme, pos: &dyn Fn(u32
                 if let Some(gd) = shape.path(&["graphic", "graphicData"]) {
                     if let Some(ch) = gd.child("chart") {
                         if let Some(rel) = ch.rid().and_then(|id| ctx.rels.get(id)) {
-                            v.extend(super::chart::render_chart(pkg, &rel.target, local, theme));
+                            v.extend(super::chart::render_chart_with(pkg, &rel.target, local, theme, res));
                         }
                     }
                 }

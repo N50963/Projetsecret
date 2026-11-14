@@ -1,11 +1,11 @@
 //! Lecture des classeurs Excel (.xlsx, .xlsm, .xltx).
 
-use super::drawingml::emu;
 use super::theme::Theme;
 use crate::color::{excel_indexed, Color};
-use crate::display::{DashStyle, Item, Rect};
+use crate::display::{DashStyle, Rect};
 use crate::numfmt;
 use crate::package::{parse_xml, NodeExt, Package};
+use crate::formula::{self, Values, V};
 use crate::sheet::*;
 use crate::text::{BorderLine, TextStyle, VertAlign};
 use roxmltree::Node;
@@ -335,6 +335,7 @@ pub fn load(pkg: &Package) -> Result<Workbook, String> {
     let wroot = wb_doc.root_element();
     let date1904 = wroot.child("workbookPr").and_then(|p| p.attr("date1904")).map(|v| v == "1" || v == "true").unwrap_or(false);
     let mut sheets = Vec::new();
+    let mut loaded: Vec<(usize, LoadedSheet)> = Vec::new();
     if let Some(sh) = wroot.child("sheets") {
         for s in sh.children_named("sheet") {
             let name = s.attr("name").unwrap_or("Feuille").to_string();
@@ -351,13 +352,82 @@ pub fn load(pkg: &Package) -> Result<Workbook, String> {
                 continue;
             }
             match load_sheet(pkg, &rel.target, &name, &styles, &shared, &theme, date1904) {
-                Ok(mut sheet) => {
-                    sheet.hidden = hidden;
-                    sheets.push(sheet);
+                Ok(mut ls) => {
+                    ls.builder.hidden = hidden;
+                    loaded.push((sheets.len(), ls));
+                    // emplacement réservé, remplacé après la seconde passe
+                    sheets.push(SheetBuilder::new(&name, styles.cell_styles.clone()).build());
                 }
                 Err(e) => log::warn!("feuille {name} : {e}"),
             }
         }
+    }
+    // seconde passe : formules sans valeur, puis graphiques
+    let mut vals: Values = HashMap::new();
+    for (_, ls) in &loaded {
+        vals.insert(ls.builder.name.to_lowercase(), ls.values.clone());
+    }
+    for _ in 0..3 {
+        let mut changed = false;
+        for (_, ls) in &loaded {
+            let sname = ls.builder.name.clone();
+            for (r, c, f) in &ls.formulas {
+                let v = formula::eval(f, &sname, &vals);
+                let m = vals.get_mut(&sname.to_lowercase()).unwrap();
+                if m.get(&(*r, *c)) != Some(&v) {
+                    m.insert((*r, *c), v);
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    for (idx, mut ls) in loaded {
+        let sname = ls.builder.name.to_lowercase();
+        if !ls.formulas.is_empty() {
+            let m = &vals[&sname];
+            for (r, c, _) in &ls.formulas {
+                let Some(v) = m.get(&(*r, *c)) else { continue };
+                if let Some((_, cell)) = ls.builder.cells.iter_mut().find(|(rr, cc)| *rr == *r && cc.col == *c) {
+                    let fmt = styles.num_fmts.get(cell.style as usize).map(|s| s.as_str()).unwrap_or("General");
+                    match v {
+                        V::Num(n) => {
+                            let (t, col) = numfmt::format_value(*n, fmt, date1904);
+                            cell.text = t;
+                            cell.color = col;
+                            cell.kind = CellKind::Number;
+                        }
+                        V::Str(t) => {
+                            cell.text = t.clone();
+                            cell.kind = CellKind::Text;
+                        }
+                        V::Bool(b) => {
+                            cell.text = bool_text(*b);
+                            cell.kind = CellKind::Bool;
+                        }
+                        V::Err(e) => {
+                            cell.text = error_text(e);
+                            cell.kind = CellKind::Error;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        let drawing = ls.drawing.take();
+        let mut sheet = ls.builder.build();
+        if let Some(d) = drawing {
+            let sn = sheet.name.clone();
+            let res = |f: &str| formula::resolve_range(&vals, f, &sn);
+            let geo = &sheet;
+            let pos = |col: u32, coff: f32, row: u32, roff: f32| -> (f32, f32) { (geo.col_x(col as usize) + coff, geo.row_y(row as usize) + roff) };
+            let drawings = super::pptx::sheet_drawings(pkg, &d, &theme, &pos, Some(&res));
+            let drawings: Vec<Drawing> = drawings.into_iter().map(|(rect, items)| Drawing { rect, items }).collect();
+            sheet.add_drawings(drawings);
+        }
+        sheets[idx] = sheet;
     }
     if sheets.is_empty() {
         return Err("Aucune feuille lisible dans le classeur.".into());
@@ -379,7 +449,17 @@ fn load_chartsheet(pkg: &Package, path: &str, name: &str, styles: &XStyles, them
 }
 
 #[allow(clippy::too_many_arguments)]
-fn load_sheet(pkg: &Package, path: &str, name: &str, styles: &XStyles, shared: &[(String, Option<Vec<(String, TextStyle)>>)], theme: &Theme, date1904: bool) -> Result<Sheet, String> {
+struct LoadedSheet {
+    builder: SheetBuilder,
+    drawing: Option<String>,
+    values: HashMap<(u32, u32), V>,
+    formulas: Vec<(u32, u32, String)>,
+}
+
+fn load_sheet(pkg: &Package, path: &str, name: &str, styles: &XStyles, shared: &[(String, Option<Vec<(String, TextStyle)>>)], theme: &Theme, date1904: bool) -> Result<LoadedSheet, String> {
+    let mut values: HashMap<(u32, u32), V> = HashMap::new();
+    let mut formulas: Vec<(u32, u32, String)> = Vec::new();
+    let mut shared_formulas: HashMap<String, (u32, u32, String)> = HashMap::new();
     let xml = pkg.read_string(path).ok_or("partie introuvable")?;
     let doc = parse_xml(&xml).ok_or("XML invalide")?;
     let root = doc.root_element();
@@ -441,11 +521,33 @@ fn load_sheet(pkg: &Package, path: &str, name: &str, styles: &XStyles, shared: &
                 let fmt = styles.num_fmts.get(s as usize).map(|s| s.as_str()).unwrap_or("General");
                 let t = c.attr("t").unwrap_or("n");
                 let v = c.child("v").and_then(|v| v.text());
+                // formule sans valeur en cache (fichiers générés par programme)
+                if let Some(fnode) = c.child("f") {
+                    let mut ftext = fnode.text().map(String::from);
+                    if fnode.attr("t") == Some("shared") {
+                        if let Some(si) = fnode.attr("si") {
+                            match &ftext {
+                                Some(t) if !t.is_empty() => {
+                                    shared_formulas.insert(si.to_string(), (r, col, t.clone()));
+                                }
+                                _ => {
+                                    ftext = shared_formulas.get(si).map(|(r0, c0, t)| shift_formula(t, r as i64 - *r0 as i64, col as i64 - *c0 as i64));
+                                }
+                            }
+                        }
+                    }
+                    if v.is_none() {
+                        if let Some(f) = ftext {
+                            formulas.push((r, col, f));
+                        }
+                    }
+                }
                 let mut cell = Cell { col, style: s, ..Default::default() };
                 match t {
                     "s" => {
                         if let Some(idx) = v.and_then(|v| v.trim().parse::<usize>().ok()) {
                             if let Some((text, runs)) = shared.get(idx) {
+                                values.insert((r, col), V::Str(text.clone()));
                                 cell.text = numfmt::format_text(text, fmt);
                                 cell.kind = CellKind::Text;
                                 if let Some(runs) = runs {
@@ -457,15 +559,19 @@ fn load_sheet(pkg: &Package, path: &str, name: &str, styles: &XStyles, shared: &
                     "inlineStr" => {
                         if let Some(is) = c.child("is") {
                             cell.text = si_text(is);
+                            values.insert((r, col), V::Str(cell.text.clone()));
                             cell.kind = CellKind::Text;
                         }
                     }
                     "str" => {
                         cell.text = v.unwrap_or("").to_string();
+                        values.insert((r, col), V::Str(cell.text.clone()));
                         cell.kind = CellKind::Text;
                     }
                     "b" => {
-                        cell.text = bool_text(v.map(|v| v.trim() == "1").unwrap_or(false));
+                        let bv = v.map(|v| v.trim() == "1").unwrap_or(false);
+                        values.insert((r, col), V::Bool(bv));
+                        cell.text = bool_text(bv);
                         cell.kind = CellKind::Bool;
                     }
                     "e" => {
@@ -474,6 +580,7 @@ fn load_sheet(pkg: &Package, path: &str, name: &str, styles: &XStyles, shared: &
                     }
                     "d" => {
                         if let Some(serial) = v.and_then(numfmt::iso_to_serial) {
+                            values.insert((r, col), V::Num(serial));
                             let code = if numfmt::is_date_format(fmt) { fmt } else { "dd/mm/yyyy" };
                             let (txt, col) = numfmt::format_value(serial, code, date1904);
                             cell.text = txt;
@@ -483,6 +590,7 @@ fn load_sheet(pkg: &Package, path: &str, name: &str, styles: &XStyles, shared: &
                     }
                     _ => {
                         if let Some(num) = v.and_then(|v| v.trim().parse::<f64>().ok()) {
+                            values.insert((r, col), V::Num(num));
                             let (txt, col) = numfmt::format_value(num, fmt, date1904);
                             cell.text = txt;
                             cell.color = col;
@@ -501,29 +609,69 @@ fn load_sheet(pkg: &Package, path: &str, name: &str, styles: &XStyles, shared: &
             }
         }
     }
-    // dessins (images, graphiques, formes)
     let rels = pkg.rels(path);
-    if let Some(d) = root.child("drawing").and_then(|d| d.rid()).and_then(|id| rels.get(id)) {
-        let col_w = |c: u32, b: &SheetBuilder| -> f32 {
-            let mut w = b.default_col_width;
-            for (a, z, cw, hidden) in &b.col_widths {
-                if c >= *a && c <= *z {
-                    w = if *hidden { 0.0 } else { *cw };
-                }
-            }
-            w
-        };
-        let row_h = |r: u32, b: &SheetBuilder| -> f32 { b.row_heights.iter().rev().find(|x| x.0 == r).map(|x| x.1).unwrap_or(b.default_row_height) };
-        // positions cumulées approximatives (avant mise à l'échelle automatique)
-        let pos = |col: u32, coff: f32, row: u32, roff: f32, b: &SheetBuilder| -> (f32, f32) {
-            let x: f32 = (0..col).map(|c| col_w(c, b)).sum::<f32>() + coff;
-            let y: f32 = (0..row).map(|r| row_h(r, b)).sum::<f32>() + roff;
-            (x, y)
-        };
-        let drawings = super::pptx::sheet_drawings(pkg, &d.target, theme, &|col, coff, row, roff| pos(col, coff, row, roff, &b));
-        b.drawings = drawings.into_iter().map(|(rect, items)| Drawing { rect, items }).collect();
-    }
-    let _ = emu;
-    let _: Option<Item> = None;
-    Ok(b.build())
+    let drawing = root.child("drawing").and_then(|d| d.rid()).and_then(|id| rels.get(id)).map(|r| r.target.clone());
+    Ok(LoadedSheet { builder: b, drawing, values, formulas })
 }
+
+/// Décale les références relatives d'une formule partagée.
+fn shift_formula(f: &str, dr: i64, dc: i64) -> String {
+    let mut out = String::new();
+    let chars: Vec<char> = f.chars().collect();
+    let mut i = 0;
+    let mut in_str = false;
+    while i < chars.len() {
+        let c = chars[i];
+        if c == '"' {
+            in_str = !in_str;
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        if in_str || !(c.is_ascii_alphabetic() || c == '$') || (i > 0 && (chars[i - 1].is_ascii_alphanumeric() || chars[i - 1] == '_' || chars[i - 1] == '.')) {
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        // tentative de lecture d'une référence A1
+        let st = i;
+        let col_abs = chars[i] == '$';
+        if col_abs {
+            i += 1;
+        }
+        let cs = i;
+        while i < chars.len() && chars[i].is_ascii_alphabetic() {
+            i += 1;
+        }
+        let letters: String = chars[cs..i].iter().collect();
+        let row_abs = i < chars.len() && chars[i] == '$';
+        if row_abs {
+            i += 1;
+        }
+        let rs = i;
+        while i < chars.len() && chars[i].is_ascii_digit() {
+            i += 1;
+        }
+        let digits: String = chars[rs..i].iter().collect();
+        let next_is_paren = i < chars.len() && chars[i] == '(';
+        if letters.is_empty() || letters.len() > 3 || digits.is_empty() || next_is_paren {
+            out.extend(&chars[st..i]);
+            continue;
+        }
+        let mut col = 0i64;
+        for ch in letters.chars() {
+            col = col * 26 + (ch.to_ascii_uppercase() as i64 - 'A' as i64 + 1);
+        }
+        let mut row: i64 = digits.parse().unwrap_or(1);
+        if !col_abs {
+            col += dc;
+        }
+        if !row_abs {
+            row += dr;
+        }
+        let name = crate::sheet::Sheet::col_name((col.max(1) - 1) as usize);
+        out.push_str(&format!("{}{}{}{}", if col_abs { "$" } else { "" }, name, if row_abs { "$" } else { "" }, row.max(1)));
+    }
+    out
+}
+

@@ -5,6 +5,7 @@ use crate::display::{Item, Rect};
 use crate::ooxml::chart::{draw_chart, Chart, ChartKind, Grouping, Series};
 use crate::ooxml::theme::Theme;
 use crate::package::Package;
+use crate::formula::{Values, V};
 use crate::sheet::*;
 use tiny_skia::Transform;
 
@@ -130,8 +131,12 @@ pub fn load(pkg: &Package) -> Result<Workbook, String> {
         sheets_raw.push((name, hidden, cols, col_default_style, rows_nodes, t));
     }
     let mut sheets = Vec::new();
+    let mut vals: Values = HashMap::new();
+    let mut pending: Vec<(usize, Vec<(Option<(u32, u32)>, Node)>)> = Vec::new();
     for (name, hidden, cols, col_default_style, rows_nodes, tnode) in sheets_raw {
         let mut cells: Vec<(u32, Cell)> = Vec::new();
+        let mut values: HashMap<(u32, u32), V> = HashMap::new();
+        let mut frames: Vec<(Option<(u32, u32)>, Node)> = Vec::new();
         let mut merges = Vec::new();
         let mut row_heights = Vec::new();
         let mut r = 0u32;
@@ -172,6 +177,18 @@ pub fn load(pkg: &Package) -> Result<Workbook, String> {
                     let empty = text.is_empty() && vtype.is_none();
                     let sidx = idx_of(style_name.as_deref(), &styles, &mut style_list);
                     let styled = sidx != 0 && style_list.get(sidx as usize).map(|s| s.fill.is_some() || s.borders.iter().any(|b| b.is_some())).unwrap_or(false);
+                    if k == 0 {
+                        for f in cell.children().filter(|x| x.is_element() && x.local() == "frame") {
+                            frames.push((Some((rr, c)), f));
+                        }
+                    }
+                    let num_value = match vtype {
+                        Some("date") => cell.attr("date-value").and_then(crate::numfmt::iso_to_serial),
+                        Some("time") => cell.attr("time-value").and_then(parse_duration),
+                        Some("boolean") => cell.attr("boolean-value").map(|b| if b == "true" { 1.0 } else { 0.0 }),
+                        Some(_) => cell.attr("value").and_then(|v| v.parse::<f64>().ok()),
+                        None => None,
+                    };
                     let span_c: u32 = cell.attr("number-columns-spanned").and_then(|v| v.parse().ok()).unwrap_or(1);
                     let span_r: u32 = cell.attr("number-rows-spanned").and_then(|v| v.parse().ok()).unwrap_or(1);
                     let reps = if empty && !styled { 1 } else { crep.min(256) };
@@ -198,7 +215,12 @@ pub fn load(pkg: &Package) -> Result<Workbook, String> {
                                 }
                             }
                         };
-                        // couleur des nombres négatifs (style de nombre avec carte « rouge »)
+                        if !empty {
+                            values.insert((rr, col), match num_value {
+                                Some(n) => V::Num(n),
+                                None => V::Str(text.clone()),
+                            });
+                        }
                         cells.push((rr, Cell { col, text: text.clone(), kind, style: sidx, color: None, rich: None }));
                     }
                     c = c.saturating_add(crep);
@@ -214,39 +236,46 @@ pub fn load(pkg: &Package) -> Result<Workbook, String> {
         b.cells = cells;
         b.merges = merges;
         b.hidden = hidden;
-        // images et graphiques ancrés
+        // objets de la feuille (non ancrés à une cellule)
+        if let Some(shapes) = tnode.child("shapes") {
+            for f in shapes.children().filter(|x| x.is_element() && x.local() == "frame") {
+                frames.push((None, f));
+            }
+        }
+        let mut sheet_b = b;
+        sheet_b.styles = Arc::new(style_list.clone());
+        let sheet = sheet_b.build();
+        vals.insert(name.to_lowercase(), values);
+        pending.push((sheets.len(), frames));
+        sheets.push(sheet);
+    }
+    // images et graphiques, positionnés sur la géométrie finale
+    for (idx, frames) in pending {
+        let sname = sheets[idx].name.clone();
+        let res = |f: &str| crate::formula::resolve_range(&vals, f, &sname);
         let mut drawings = Vec::new();
-        for f in tnode.descendants().filter(|d| d.is_element() && d.local() == "frame") {
-            let x = f.attr("x").and_then(parse_length);
-            let y = f.attr("y").and_then(parse_length);
+        for (anchor, f) in frames {
+            let x = f.attr("x").and_then(parse_length).unwrap_or(0.0);
+            let y = f.attr("y").and_then(parse_length).unwrap_or(0.0);
             let w = f.attr("width").and_then(parse_length).unwrap_or(100.0);
             let h = f.attr("height").and_then(parse_length).unwrap_or(100.0);
-            let (Some(x), Some(y)) = (x, y) else { continue };
-            // les coordonnées sont relatives à la cellule d'ancrage
-            let (ax, ay) = match f.parent().filter(|p| p.local() == "table-cell") {
-                Some(_) => (f64::NAN, f64::NAN),
+            // svg:x/svg:y sont relatifs à la cellule d'ancrage
+            let (ox, oy) = match anchor {
+                Some((r, c)) => (sheets[idx].col_x(c as usize), sheets[idx].row_y(r as usize)),
                 None => (0.0, 0.0),
             };
             let mut items = Vec::new();
             if let Some(obj) = f.child("object") {
                 let href = obj.attr("href").unwrap_or("").trim_start_matches("./").to_string();
-                items = render_odf_chart(pkg, &href, Rect::new(0.0, 0.0, w, h));
+                items = render_odf_chart_with(pkg, &href, Rect::new(0.0, 0.0, w, h), Some(&res));
             } else if let Some(img) = f.child("image").and_then(|i| i.attr("href")).and_then(|h| pkg.image(h)) {
                 items.push(Item::Image { rect: Rect::new(0.0, 0.0, w, h), image: img, crop: [0.0; 4], alpha: 1.0 });
             }
-            if items.is_empty() {
-                continue;
+            if !items.is_empty() {
+                drawings.push(Drawing { rect: Rect::new(ox + x, oy + y, w, h), items });
             }
-            drawings.push((x, y, w, h, items, ax.is_nan()));
         }
-        let mut sheet_b = b;
-        sheet_b.styles = Arc::new(style_list.clone());
-        let mut sheet = sheet_b.build();
-        for (x, y, w, h, items, _in_cell) in drawings {
-            // ODF utilise des coordonnées absolues dans la feuille (svg:x/svg:y depuis l'origine)
-            sheet.drawings.push(Drawing { rect: Rect::new(x, y, w, h), items });
-        }
-        sheets.push(sheet);
+        sheets[idx].add_drawings(drawings);
     }
     // toutes les feuilles partagent la liste finale des styles
     let all = Arc::new(style_list);
@@ -279,6 +308,35 @@ fn col_index(addr: &str) -> Option<usize> {
 }
 
 pub fn render_odf_chart(pkg: &Package, dir: &str, rect: Rect) -> Vec<Item> {
+    render_odf_chart_with(pkg, dir, rect, None)
+}
+
+/// Durée ISO « PT12H30M00S » -> fraction de jour.
+fn parse_duration(s: &str) -> Option<f64> {
+    let t = s.trim_start_matches('-').strip_prefix("PT")?;
+    let mut total = 0.0;
+    let mut num = String::new();
+    for ch in t.chars() {
+        match ch {
+            'H' => {
+                total += num.parse::<f64>().ok()? * 3600.0;
+                num.clear();
+            }
+            'M' => {
+                total += num.parse::<f64>().ok()? * 60.0;
+                num.clear();
+            }
+            'S' => {
+                total += num.parse::<f64>().ok()?;
+                num.clear();
+            }
+            c => num.push(c),
+        }
+    }
+    Some(total / 86400.0)
+}
+
+pub fn render_odf_chart_with(pkg: &Package, dir: &str, rect: Rect, res: Option<&crate::ooxml::chart::Resolver>) -> Vec<Item> {
     let path = format!("{}/content.xml", dir.trim_end_matches('/'));
     let Some(xml) = pkg.read_string(&path) else { return Vec::new() };
     let Some(doc) = parse_xml(&xml) else { return Vec::new() };
@@ -298,10 +356,38 @@ pub fn render_odf_chart(pkg: &Package, dir: &str, rect: Rect) -> Vec<Item> {
             grid.push(v);
         }
     }
-    if grid.len() < 2 {
+    let plot = chart.child("plot-area");
+    // pas de table locale : on lit les plages du classeur
+    let mut resolved: Option<(Vec<String>, Vec<(String, Vec<Option<f64>>)>)> = None;
+    if let (Some(r), Some(p)) = (res, plot) {
+        let cats = p.descendants().find(|d| d.local() == "categories").and_then(|c| c.attr("cell-range-address")).and_then(|a| r(a)).map(|v| v.into_iter().map(|x| x.1).collect()).unwrap_or_default();
+        let mut ser = Vec::new();
+        for s in p.children_named("series") {
+            let vals = s.attr("values-cell-range-address").and_then(|a| r(a)).map(|v| v.into_iter().map(|x| x.0).collect::<Vec<_>>());
+            let name = s.attr("label-cell-address").and_then(|a| r(a)).and_then(|v| v.into_iter().next().map(|x| x.1)).unwrap_or_default();
+            if let Some(v) = vals {
+                ser.push((name, v));
+            }
+        }
+        if !ser.is_empty() && ser.iter().any(|s| s.1.iter().any(|x| x.is_some())) {
+            resolved = Some((cats, ser));
+        }
+    }
+    if grid.len() < 2 && resolved.is_none() {
         return Vec::new();
     }
-    let plot = chart.child("plot-area");
+    if let Some((cats, ser)) = &resolved {
+        // reconstruit une grille équivalente à la table locale
+        let n = ser.iter().map(|s| s.1.len()).max().unwrap_or(0).max(cats.len());
+        grid = vec![std::iter::once((None, String::new())).chain(ser.iter().map(|s| (None, s.0.clone()))).collect()];
+        for i in 0..n {
+            let mut row = vec![(None, cats.get(i).cloned().unwrap_or_default())];
+            for s in ser {
+                row.push((s.1.get(i).copied().flatten(), String::new()));
+            }
+            grid.push(row);
+        }
+    }
     let ps = styles.get("chart", plot.and_then(|p| p.attr("style-name")));
     let vertical = ps.attrs.get("vertical").map(|v| v == "true").unwrap_or(false) || plot.and_then(|p| p.attr("style-name")).map(|n| styles.map.get(&("chart".to_string(), n.to_string())).is_some()).unwrap_or(false) && false;
     let chart_props = |name: Option<&str>| -> Props {
@@ -353,8 +439,8 @@ pub fn render_odf_chart(pkg: &Package, dir: &str, rect: Rect) -> Vec<Item> {
     let theme = Theme::default();
     if let Some(plot) = plot {
         for (si, s) in plot.children_named("series").enumerate() {
-            let col = s.attr("values-cell-range-address").and_then(col_index).unwrap_or(si + 1);
-            let name = s.attr("label-cell-address").and_then(col_index).and_then(|c| grid[0].get(c)).map(|c| c.1.clone()).unwrap_or_else(|| grid[0].get(col).map(|c| c.1.clone()).unwrap_or_default());
+            let col = if resolved.is_some() { si + 1 } else { s.attr("values-cell-range-address").and_then(col_index).unwrap_or(si + 1) };
+            let name = if resolved.is_some() { grid[0].get(col).map(|c| c.1.clone()).unwrap_or_default() } else { s.attr("label-cell-address").and_then(col_index).and_then(|c| grid[0].get(c)).map(|c| c.1.clone()).unwrap_or_else(|| grid[0].get(col).map(|c| c.1.clone()).unwrap_or_default()) };
             let values: Vec<Option<f64>> = grid.iter().skip(1).map(|r| r.get(col).and_then(|c| c.0)).collect();
             let sp = chart_props(s.attr("style-name"));
             let color = sp.get("g:fill-color").and_then(|c| Color::from_hex(c));

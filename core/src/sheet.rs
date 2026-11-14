@@ -299,6 +299,27 @@ impl Sheet {
         }
     }
 
+    /// Ajoute des objets et agrandit la feuille si nécessaire pour les contenir.
+    pub fn add_drawings(&mut self, drawings: Vec<Drawing>) {
+        let maxx = drawings.iter().map(|d| d.rect.right()).fold(0.0, f32::max);
+        let maxy = drawings.iter().map(|d| d.rect.bottom()).fold(0.0, f32::max);
+        self.drawings.extend(drawings);
+        let dw = self.col_widths.last().copied().unwrap_or(48.0).max(20.0);
+        let dh = self.row_heights.last().copied().unwrap_or(15.0).max(10.0);
+        let mut w = self.width();
+        let mut h = self.height();
+        while w < maxx + 20.0 && self.col_widths.len() < 16_384 {
+            self.col_widths.push(dw);
+            w += dw;
+        }
+        while h < maxy + 20.0 {
+            self.row_heights.push(dh);
+            self.rows.push(Vec::new());
+            h += dh;
+        }
+        self.recompute();
+    }
+
     pub fn ncols(&self) -> usize {
         self.col_widths.len()
     }

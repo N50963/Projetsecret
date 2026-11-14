@@ -67,12 +67,25 @@ pub struct Chart {
     pub title_size: Option<f32>,
 }
 
-fn cache_strings(n: Option<Node>) -> Vec<String> {
+/// Résolution d'une référence de plage (« Feuille!$A$1:$A$5 ») en valeurs.
+pub type Resolver<'a> = dyn Fn(&str) -> Option<Vec<(Option<f64>, String)>> + 'a;
+
+fn formula_of(n: Node) -> Option<String> {
+    n.descendants().find(|d| d.local() == "f").and_then(|f| f.text()).map(|s| s.to_string())
+}
+
+fn cache_strings(n: Option<Node>, res: Option<&Resolver>) -> Vec<String> {
     let Some(n) = n else { return Vec::new() };
-    let Some(cache) = n.descendants().find(|d| matches!(d.local(), "strCache" | "numCache")) else {
+    let Some(cache) = n.descendants().find(|d| matches!(d.local(), "strCache" | "numCache")).filter(|c| c.children_named("pt").next().is_some()) else {
         // littéraux
         if let Some(lit) = n.descendants().find(|d| matches!(d.local(), "strLit" | "numLit")) {
             return pts(lit).into_iter().map(|(_, v)| v).collect();
+        }
+        // pas de cache : on lit les cellules du classeur
+        if let (Some(r), Some(f)) = (res, formula_of(n)) {
+            if let Some(v) = r(&f) {
+                return v.into_iter().map(|x| x.1).collect();
+            }
         }
         return Vec::new();
     };
@@ -99,9 +112,16 @@ fn pts(n: Node) -> Vec<(usize, String)> {
     n.children_named("pt").map(|p| (p.attr("idx").and_then(|v| v.parse().ok()).unwrap_or(0), p.child("v").and_then(|v| v.text()).unwrap_or("").to_string())).collect()
 }
 
-fn cache_numbers(n: Option<Node>) -> Vec<Option<f64>> {
+fn cache_numbers(n: Option<Node>, res: Option<&Resolver>) -> Vec<Option<f64>> {
     let Some(n) = n else { return Vec::new() };
-    let Some(cache) = n.descendants().find(|d| matches!(d.local(), "numCache" | "numLit")) else { return Vec::new() };
+    let Some(cache) = n.descendants().find(|d| matches!(d.local(), "numCache" | "numLit")).filter(|c| c.children_named("pt").next().is_some()) else {
+        if let (Some(r), Some(f)) = (res, formula_of(n)) {
+            if let Some(v) = r(&f) {
+                return v.into_iter().map(|x| x.0).collect();
+            }
+        }
+        return Vec::new();
+    };
     let count = cache.child("ptCount").and_then(|c| c.attr("val")).and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
     let p = pts(cache);
     let len = count.max(p.iter().map(|x| x.0 + 1).max().unwrap_or(0));
@@ -128,6 +148,10 @@ fn rich_text(n: Node) -> String {
 }
 
 pub fn parse_chart(xml: &str, theme: &Theme) -> Option<Chart> {
+    parse_chart_with(xml, theme, None)
+}
+
+pub fn parse_chart_with(xml: &str, theme: &Theme, res: Option<&Resolver>) -> Option<Chart> {
     let doc = parse_xml(xml)?;
     let root = doc.root_element();
     let chart = root.child("chart")?;
@@ -234,19 +258,19 @@ pub fn parse_chart(xml: &str, theme: &Theme) -> Option<Chart> {
         let markers_default = name == "lineChart" && group.child("marker").and_then(|m| m.attr("val")).map(|v| v == "1").unwrap_or(true);
         for ser in group.children_named("ser") {
             let sname = ser.child("tx").map(|t| {
-                let s = cache_strings(Some(t));
+                let s = cache_strings(Some(t), res);
                 if s.is_empty() {
                     t.child("v").and_then(|v| v.text()).unwrap_or("").to_string()
                 } else {
                     s.join(" ")
                 }
             });
-            let cats = cache_strings(ser.child("cat").or_else(|| ser.child("xVal")));
+            let cats = cache_strings(ser.child("cat").or_else(|| ser.child("xVal")), res);
             if c.categories.len() < cats.len() {
                 c.categories = cats;
             }
-            let values = cache_numbers(ser.child("val").or_else(|| ser.child("yVal")));
-            let xvalues = cache_numbers(ser.child("xVal"));
+            let values = cache_numbers(ser.child("val").or_else(|| ser.child("yVal")), res);
+            let xvalues = cache_numbers(ser.child("xVal"), res);
             let mut color = None;
             let mut line = None;
             if let Some(sp) = ser.child("spPr") {
@@ -719,11 +743,15 @@ fn draw_pie(c: &Chart, area: Rect, theme: &Theme, fs: f32, items: &mut Vec<Item>
 }
 
 pub fn render_chart(pkg: &Package, path: &str, rect: Rect, theme: &Theme) -> Vec<Item> {
+    render_chart_with(pkg, path, rect, theme, None)
+}
+
+pub fn render_chart_with(pkg: &Package, path: &str, rect: Rect, theme: &Theme, res: Option<&Resolver>) -> Vec<Item> {
     // le graphique peut avoir son propre thème (couleurs)
     let theme_override = pkg.rels(path).values().find(|r| r.kind == "themeOverride").map(|r| Theme::load(pkg, &r.target));
     let theme = theme_override.as_ref().unwrap_or(theme);
     let Some(xml) = pkg.read_string(path) else { return vec![Item::Placeholder { rect, label: "graphique".into() }] };
-    match parse_chart(&xml, theme) {
+    match parse_chart_with(&xml, theme, res) {
         Some(c) => {
             let items = draw_chart(&c, rect, theme);
             vec![Item::group(Transform::from_translate(rect.x, rect.y), Some(Rect::new(0.0, 0.0, rect.w, rect.h)), items)]
