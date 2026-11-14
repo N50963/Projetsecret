@@ -172,6 +172,19 @@ pub fn open(data: Vec<u8>, name: &str) -> Result<Document, String> {
             let pkg = Package::open(data)?;
             doc.pages = crate::odf::odp::load(&pkg)?;
         }
+        Format::Doc => {
+            let flow = crate::legacy::doc::load(&data)?;
+            doc.pages = crate::flow::paginate(&flow);
+        }
+        Format::Xls => {
+            doc.workbook = Some(crate::legacy::xls::load(&data)?);
+        }
+        Format::Csv => {
+            doc.workbook = Some(crate::legacy::csv::load(&data, name)?);
+        }
+        Format::Xlsb => {
+            doc.workbook = Some(crate::legacy::xlsb_via_calamine(&data)?);
+        }
         _ => return Err(format!("Le format {} n'est pas encore pris en charge.", format.label())),
     }
     if doc.pages.is_empty() && doc.workbook.is_none() {

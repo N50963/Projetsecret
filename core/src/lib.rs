@@ -4,6 +4,7 @@ pub mod color;
 pub mod display;
 pub mod flow;
 pub mod fonts;
+pub mod legacy;
 pub mod formula;
 pub mod ooxml;
 pub mod numfmt;
