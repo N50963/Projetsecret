@@ -10,6 +10,7 @@ import type {
   MainProtein, MealType, Rating, Recipe, RecipeCandidate, RecipeIngredient, RecipeInput, RecipeRating, Season, Spiciness, Stars,
 } from "./types";
 import { validateRecipe } from "./validate";
+import { matchesSearch } from "./search";
 
 export class RecipeValidationError extends Error {
   constructor(readonly issues: Array<{ field: string; message: string }>) {
@@ -25,6 +26,7 @@ export interface RecipeFilters {
   maxTotalMin?: number;
   maxSpiciness?: Spiciness;
   excludedAllergens?: string[];
+  /** Texte cherché dans le nom, sans tenir compte de la casse ni des accents. */
   search?: string;
   /** Nombre maximal de recettes ; sans limite, tout le catalogue est lu (par pages). */
   limit?: number;
@@ -103,11 +105,13 @@ export async function listRecipes(supabase: SupabaseClient, filters: RecipeFilte
     if (filters.maxTotalMin !== undefined) q = q.lte("total_min", filters.maxTotalMin);
     if (filters.maxSpiciness !== undefined) q = q.lte("spiciness", filters.maxSpiciness);
     if (filters.excludedAllergens?.length) q = q.not("allergens", "ov", `{${filters.excludedAllergens.join(",")}}`);
-    if (filters.search) q = q.ilike("name", `%${filters.search}%`);
     // Le nom seul ne suffit pas à ordonner les pages : deux recettes peuvent porter le même nom.
     return q.order("name").order("id").range(from, to);
   };
-  const max = filters.limit ?? Infinity;
+  // Recherche par nom faite ici, sans tenir compte de la casse ni des accents (la base, avec ilike, distinguait
+  // « boeuf » de « bœuf ») : tout le catalogue est lu, puis filtré.
+  const search = filters.search?.trim();
+  const max = search ? Infinity : filters.limit ?? Infinity;
   const hidden = hiddenRecipeIds(supabase);
   const rows: Row[] = [];
   while (rows.length < max) {
@@ -118,7 +122,8 @@ export async function listRecipes(supabase: SupabaseClient, filters: RecipeFilte
     if (!data || data.length < size) break;
   }
   const skip = await hidden;
-  return rows.filter((r) => !skip.has(r.id)).map(toSummary);
+  const found = rows.filter((r) => !skip.has(r.id) && (!search || matchesSearch(r.name, search))).map(toSummary);
+  return search && filters.limit !== undefined ? found.slice(0, filters.limit) : found;
 }
 
 /**

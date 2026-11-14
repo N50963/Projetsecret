@@ -4,6 +4,7 @@
  */
 
 import { supabase } from "./supabase";
+import { foldText } from "../modules/recipes/search";
 
 export type ProductRole = "ingredient" | "prepared_meal" | "dessert" | "snack" | "breakfast" | "beverage" | "bread" | "non_food";
 
@@ -84,7 +85,8 @@ export function ingredientOptions(): Promise<IngredientOption[]> {
 }
 
 /** Comparaison sans accents ni majuscules. */
-export const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+/** Texte sans accents ni majuscules (œ → oe), le même que pour la recherche de recettes. */
+export const fold = foldText;
 
 export async function correctProduct(id: string, name: string, role: ProductRole, ingredients: string[]): Promise<void> {
   const { error } = await supabase.rpc("correct_product", {

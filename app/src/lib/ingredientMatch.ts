@@ -5,6 +5,7 @@
  */
 
 import type { RecipeUnit } from "../modules/recipes";
+import { foldText } from "../modules/recipes/search";
 
 /** Ingrédient du référentiel. */
 export interface ReferenceIngredient {
@@ -14,8 +15,8 @@ export interface ReferenceIngredient {
   default_unit?: "g" | "ml" | "piece" | string | null;
 }
 
-export const fold = (s: string) =>
-  s.replace(/[œŒ]/g, "oe").replace(/[æÆ]/g, "ae").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+/** Texte sans accents ni majuscules (œ → oe, æ → ae), le même que pour la recherche de recettes. */
+export const fold = foldText;
 
 /** Mots sans intérêt pour reconnaître un ingrédient (quantités, unités, articles, contenants). */
 const NOISE = new Set([

@@ -130,8 +130,10 @@ Fonction serveur Mistral : `supabase/functions/mistral/index.ts` (la clé Mistra
    l'éditeur (nom, temps, ingrédients, étapes) et c'est l'utilisateur qui décide : il la corrige puis la garde, ou garde
    la recette actuelle (le résumé des changements, coupé à 300 caractères par la fonction, est ramené à des phrases
    entières). Pas de demande de modification à Mistral sans remarque. « Bon appétit ! » propose aussi de mettre sa propre photo du plat.
-10. **Recettes** (onglet de la barre du bas) : recherche (lancée quand la saisie marque une pause ; une réponse plus
-   ancienne n'écrase jamais les résultats), filtre Favoris, filtre par note (5 étoiles, 4 et +, 3 et +,
+10. **Recettes** (onglet de la barre du bas) : recherche sans tenir compte de la casse ni des accents (version 0.29.9 :
+   « boeuf » trouve « Bœuf bourguignon », « creme » trouve « Crème… », « poireaux pommes » trouve « poireaux-pommes » ;
+   fonction `matchesSearch`, aussi utilisée par l'écran Recettes selon la météo), faite sur le téléphone parmi les
+   recettes déjà lues (instantanée, sans requête à chaque lettre), filtre Favoris, filtre par note (5 étoiles, 4 et +, 3 et +,
    non notées), note affichée sur chaque ligne. Un appui long sur une recette propose de la supprimer (panneau de
    confirmation au style de l'application). Sur la fiche, la corbeille de la bande verte supprime la recette ; toutes
    les recettes ont en bas de fiche « Modifier la recette » (et « Supprimer » pour celles ajoutées par le foyer). Une

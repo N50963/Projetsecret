@@ -12,7 +12,7 @@ import { columnsFor, useLayout } from "../lib/layout";
 import { useHousehold } from "../lib/session";
 import { supabase } from "../lib/supabase";
 import { CARD_SHADOW, useColors } from "../lib/theme";
-import { latestStars, listFavorites, listRecipes, removeRecipe, type RecipeSummary, type Stars } from "../modules/recipes";
+import { latestStars, listFavorites, listRecipes, matchesSearch, removeRecipe, type RecipeSummary, type Stars } from "../modules/recipes";
 import { errorText } from "../lib/errors";
 
 /** Filtre par note : toutes, au moins N étoiles, ou pas encore notées. */
@@ -53,12 +53,13 @@ export default function Recettes() {
 
   /** Numéro de la dernière recherche : une réponse plus ancienne, arrivée après, n'écrase pas les résultats. */
   const latest = useRef(0);
-  const typing = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const load = useCallback(async (text: string) => {
+  // Tout le catalogue est lu une fois ; la recherche filtre ensuite sur le téléphone, sans tenir compte de la casse ni
+  // des accents (« boeuf » trouve « Bœuf bourguignon »), et sans attendre le réseau à chaque lettre.
+  const load = useCallback(async () => {
     const n = ++latest.current;
     try {
       const [list, favs, notes] = await Promise.all([
-        listRecipes(supabase, { search: text.trim() || undefined }), listFavorites(supabase, household.id), latestStars(supabase, household.id),
+        listRecipes(supabase), listFavorites(supabase, household.id), latestStars(supabase, household.id),
       ]);
       if (n !== latest.current) return;
       setError("");
@@ -73,8 +74,7 @@ export default function Recettes() {
   }, [household.id]);
 
   useFocusEffect(useCallback(() => {
-    load(search);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    load();
   }, [load]));
 
   /** Appui long : demande de suppression ; la recette quitte la liste dès la confirmation (remise si la base refuse). */
@@ -90,13 +90,14 @@ export default function Recettes() {
         setRecipes((list) => list.filter((x) => x.id !== r.id));
         removeRecipe(supabase, r.id, household.id).catch((e) => {
           setError(errorText(e));
-          load(search);
+          load();
         });
       },
     });
   };
 
   const shown = recipes.filter((r) => {
+    if (!matchesSearch(r.name, search)) return false;
     if (onlyFavorites && !favorites.has(r.id)) return false;
     const note = stars.get(r.id);
     if (rating === "non_notees") return note === undefined;
@@ -113,12 +114,8 @@ export default function Recettes() {
     <View style={styles.header}>
       <Button icon="plus" title="Ajouter une recette" onPress={() => router.push("/ajout-recette")} />
       <View>
-        <Field value={search} placeholder="Rechercher une recette" style={{ paddingLeft: 44 }} onChangeText={(t) => {
-          setSearch(t);
-          // Recherche lancée quand la saisie marque une pause (pas une requête par lettre tapée).
-          if (typing.current) clearTimeout(typing.current);
-          typing.current = setTimeout(() => load(t), 250);
-        }} />
+        <Field value={search} placeholder="Rechercher une recette" style={{ paddingLeft: 44 }} onChangeText={setSearch}
+          autoCorrect={false} accessibilityLabel="Rechercher une recette" />
         <View style={styles.searchIcon} pointerEvents="none"><Icon name="search" size={20} color={c.muted} /></View>
       </View>
       <View style={{ flexDirection: "row", gap: 8 }}>

@@ -1,6 +1,7 @@
 export * from "./types";
 export { roundForKitchen, scaleFactor, scaleIngredient, scaleIngredients, SUBLINEAR_EXPONENT } from "./scale";
 export { validateRecipe, type ValidationIssue } from "./validate";
+export { foldText, matchesSearch } from "./search";
 export {
   DEFAULT_PREFERENCES, getHouseholdPreferences, maxSpicinessFor, saveHouseholdPreferences, toPreferencesRow,
   type FoodGroup, type HouseholdPreferences, type SpiceLevel,

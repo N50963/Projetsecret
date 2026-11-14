@@ -19,7 +19,7 @@ import { supabase } from "../lib/supabase";
 import { CARD_SHADOW, useColors, type Colors } from "../lib/theme";
 import { useWeatherPlace } from "../lib/weather";
 import { autoLevel, WEATHER_LEVELS, type WeatherLevel } from "../modules/planning";
-import { listRecipes, type RecipeSummary } from "../modules/recipes";
+import { listRecipes, matchesSearch, type RecipeSummary } from "../modules/recipes";
 
 /** Libellé court (deux lignes) et icône de chaque bouton. */
 const BUTTONS: Record<WeatherLevel, { short: string; icon: IconName }> = {
@@ -113,12 +113,12 @@ export default function MeteoRecettes() {
   }, [recipes, levelOf]);
 
   const shown = useMemo(() => {
-    const q = search.trim().toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
     return (recipes ?? []).filter((r) => {
       const { level, mine } = levelOf(r);
       if (filter === "a_verifier" && mine) return false;
       if (typeof filter === "number" && level !== filter) return false;
-      return !q || r.name.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").includes(q);
+      // Sans tenir compte de la casse ni des accents (« boeuf » trouve « Bœuf bourguignon »).
+      return matchesSearch(r.name, search);
     });
   }, [recipes, levelOf, filter, search]);
 
