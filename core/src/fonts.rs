@@ -35,7 +35,9 @@ enum Source {
 
 struct FaceEntry {
     family: String,
+    #[allow(dead_code)]
     bold: bool,
+    #[allow(dead_code)]
     italic: bool,
     source: Source,
     face: OnceLock<Option<ttf_parser::Face<'static>>>,

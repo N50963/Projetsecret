@@ -601,6 +601,7 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "egui_glow",
+ "glow",
  "glutin",
  "glutin-winit",
  "image",
@@ -1339,9 +1340,13 @@ name = "lecteur"
 version = "1.0.0"
 dependencies = [
  "android_logger",
+ "bureau_core",
  "eframe",
  "jni 0.21.1",
  "log",
+ "ndk",
+ "tiny-skia 0.12.0",
+ "ttf-parser",
  "winit",
 ]
 

@@ -253,6 +253,7 @@ struct Cl {
     y_shift: f32,
     synth_bold: bool,
     synth_italic: bool,
+    #[allow(dead_code)]
     ch: char,
 }
 

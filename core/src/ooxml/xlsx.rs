@@ -281,11 +281,6 @@ pub fn bool_text(b: bool) -> String {
     }
 }
 
-struct SharedString {
-    text: String,
-    runs: Option<Vec<(String, Option<Node<'static, 'static>>)>>,
-}
-
 fn si_text(si: Node) -> String {
     let mut s = String::new();
     for c in si.children().filter(|c| c.is_element()) {
@@ -335,7 +330,6 @@ pub fn load(pkg: &Package) -> Result<Workbook, String> {
             shared.push((text, runs));
         }
     }
-    let _ = std::marker::PhantomData::<SharedString>;
     let wb_xml = pkg.read_string(&main).ok_or("workbook.xml introuvable")?;
     let wb_doc = parse_xml(&wb_xml).ok_or("workbook.xml invalide")?;
     let wroot = wb_doc.root_element();

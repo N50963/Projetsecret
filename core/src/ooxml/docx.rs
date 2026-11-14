@@ -182,6 +182,7 @@ impl TblStyle {
 
 #[derive(Clone, Default)]
 struct Style {
+    #[allow(dead_code)]
     kind: String,
     based_on: Option<String>,
     ppr: PPr,
@@ -260,6 +261,7 @@ struct Lvl {
     rpr: RPr,
     suff: String,
     is_lgl: bool,
+    #[allow(dead_code)]
     jc: Option<Align>,
 }
 
