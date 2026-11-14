@@ -172,6 +172,8 @@ pub struct Viewer {
     offset: Vec2,
     fitted: Option<FitMode>,
     pub two_up: bool,
+    /// L'utilisateur a choisi lui-même le mode une/deux pages.
+    pub two_up_manual: bool,
     layout: Vec<Rect>,
     layout_for: (f32, bool, usize),
     view: Rect,
@@ -204,6 +206,7 @@ impl Viewer {
             offset: Vec2::ZERO,
             fitted: None,
             two_up: false,
+            two_up_manual: false,
             layout: Vec::new(),
             layout_for: (0.0, false, usize::MAX),
             view: Rect::NOTHING,
@@ -411,6 +414,17 @@ impl Viewer {
         self.view = rect;
         let size_changed = (self.last_view_size - rect.size()).length() > 1.0;
         self.last_view_size = rect.size();
+        // écran large (Z Fold déplié, paysage) : deux pages côte à côte pour le texte
+        if !self.two_up_manual && self.kind() == DocKind::Text && self.page_count() > 1 {
+            let wide = rect.width() >= 600.0 && rect.width() >= rect.height() * 0.95;
+            if wide != self.two_up {
+                self.two_up = wide;
+                self.layout_for.0 = -1.0;
+                if self.fitted.is_none() && self.frame > 2 {
+                    self.fitted = Some(FitMode::Width);
+                }
+            }
+        }
         self.relayout(rect.width());
         if self.fitted.is_none() && self.zoom == 1.0 && self.frame <= 2 {
             let mode = match self.kind() {

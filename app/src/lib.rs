@@ -99,7 +99,9 @@ pub fn run_desktop(files: Vec<String>) -> eframe::Result<()> {
     }
     let ui_font = install_fonts(fonts);
     let platform: Arc<dyn platform::Platform> = Arc::new(platform::DesktopPlatform { pending: std::sync::Mutex::new(files) });
-    let options = eframe::NativeOptions { viewport: eframe::egui::ViewportBuilder::default().with_inner_size([900.0, 1000.0]).with_title("Lecteur Office"), ..Default::default() };
+    // LECTEUR_TAILLE=« 840x757 » permet de simuler un écran (tests)
+    let size = std::env::var("LECTEUR_TAILLE").ok().and_then(|s| s.split_once('x').and_then(|(a, b)| Some([a.parse::<f32>().ok()?, b.parse::<f32>().ok()?]))).unwrap_or([900.0, 1000.0]);
+    let options = eframe::NativeOptions { viewport: eframe::egui::ViewportBuilder::default().with_inner_size(size).with_title("Lecteur Office"), ..Default::default() };
     eframe::run_native(
         "Lecteur Office",
         options,

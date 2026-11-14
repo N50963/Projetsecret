@@ -2,6 +2,7 @@
 pub mod csv;
 pub mod doc;
 pub mod ppt;
+pub mod rtf;
 pub mod xls;
 
 /// Lit un flux d'un fichier composé OLE.

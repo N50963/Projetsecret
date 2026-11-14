@@ -176,6 +176,10 @@ pub fn open(data: Vec<u8>, name: &str) -> Result<Document, String> {
             let flow = crate::legacy::doc::load(&data)?;
             doc.pages = crate::flow::paginate(&flow);
         }
+        Format::Rtf => {
+            let flow = crate::legacy::rtf::load(&data)?;
+            doc.pages = crate::flow::paginate(&flow);
+        }
         Format::Ppt => {
             doc.pages = crate::legacy::ppt::load(&data)?;
         }
@@ -188,7 +192,6 @@ pub fn open(data: Vec<u8>, name: &str) -> Result<Document, String> {
         Format::Xlsb => {
             doc.workbook = Some(crate::legacy::xlsb_via_calamine(&data)?);
         }
-        _ => return Err(format!("Le format {} n'est pas encore pris en charge.", format.label())),
     }
     if doc.pages.is_empty() && doc.workbook.is_none() {
         return Err("Le document est vide.".into());

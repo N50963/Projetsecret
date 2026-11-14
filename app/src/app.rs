@@ -272,6 +272,7 @@ impl LecteurApp {
                         let label = if viewer.two_up { "▯▯" } else { "▯" };
                         if ui.add(egui::Button::new(RichText::new(label).size(16.0)).min_size(Vec2::splat(42.0))).on_hover_text("Une ou deux pages").clicked() {
                             viewer.two_up = !viewer.two_up;
+                            viewer.two_up_manual = true;
                             viewer.fit(FitMode::Width);
                         }
                     }
@@ -429,6 +430,6 @@ impl eframe::App for LecteurApp {
             }
         }
         // repeindre périodiquement pour interroger le système (intents)
-        ctx.request_repaint_after(std::time::Duration::from_millis(400));
+        ctx.request_repaint_after(std::time::Duration::from_millis(700));
     }
 }
