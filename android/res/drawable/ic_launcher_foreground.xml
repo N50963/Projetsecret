@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icône : une feuille de document avec lignes de texte, une grille et une barre de diapositive -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- feuille -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M36,28 L64,28 L74,38 L74,80 L36,80 Z" />
+    <path android:fillColor="#C9D8EE"
+        android:pathData="M64,28 L64,38 L74,38 Z" />
+    <!-- lignes de texte (traitement de texte) -->
+    <path android:fillColor="#1E5AA8" android:pathData="M41,42 L60,42 L60,45 L41,45 Z" />
+    <path android:fillColor="#1E5AA8" android:pathData="M41,48 L69,48 L69,51 L41,51 Z" />
+    <!-- grille (tableur) -->
+    <path android:fillColor="#1E7B45" android:pathData="M41,55 L54,55 L54,64 L41,64 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M47,55 L48,55 L48,64 L47,64 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M41,59 L54,59 L54,60 L41,60 Z" />
+    <!-- diapositive (présentation) -->
+    <path android:fillColor="#C4471E" android:pathData="M57,55 L69,55 L69,64 L57,64 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M59,58 L67,58 L67,60 L59,60 Z" />
+    <!-- dernière ligne -->
+    <path android:fillColor="#1E5AA8" android:pathData="M41,68 L64,68 L64,71 L41,71 Z" />
+    <path android:fillColor="#1E5AA8" android:pathData="M41,74 L56,74 L56,77 L41,77 Z" />
+</vector>

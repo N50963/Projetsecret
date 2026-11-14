@@ -1,0 +1,5 @@
+/target
+*.apk
+!/release/*.apk
+*.keystore
+!/android/lecteur.keystore
