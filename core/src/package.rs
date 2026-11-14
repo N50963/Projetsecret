@@ -13,7 +13,7 @@ pub struct Package {
 
 impl Package {
     pub fn open(data: Vec<u8>) -> Result<Package, String> {
-        let zip = zip::ZipArchive::new(Cursor::new(data)).map_err(|e| format!("Archive invalide : {e}"))?;
+        let zip = zip::ZipArchive::new(Cursor::new(data)).map_err(|e| format!("Le fichier est endommagé ou incomplet (archive illisible : {e})."))?;
         let names = zip.file_names().filter_map(|s| s.ok().map(|s| s.to_string())).collect();
         Ok(Package { zip: Mutex::new(zip), names, images: Mutex::new(HashMap::new()) })
     }

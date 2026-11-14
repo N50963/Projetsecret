@@ -388,9 +388,10 @@ pub fn load(pkg: &Package) -> Result<Workbook, String> {
         let sname = ls.builder.name.to_lowercase();
         if !ls.formulas.is_empty() {
             let m = &vals[&sname];
+            let index: HashMap<(u32, u32), usize> = ls.builder.cells.iter().enumerate().map(|(i, (r, c))| ((*r, c.col), i)).collect();
             for (r, c, _) in &ls.formulas {
                 let Some(v) = m.get(&(*r, *c)) else { continue };
-                if let Some((_, cell)) = ls.builder.cells.iter_mut().find(|(rr, cc)| *rr == *r && cc.col == *c) {
+                if let Some((_, cell)) = index.get(&(*r, *c)).and_then(|i| ls.builder.cells.get_mut(*i)) {
                     let fmt = styles.num_fmts.get(cell.style as usize).map(|s| s.as_str()).unwrap_or("General");
                     match v {
                         V::Num(n) => {

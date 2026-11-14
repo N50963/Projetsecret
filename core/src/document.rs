@@ -115,7 +115,7 @@ pub fn detect(data: &[u8], name: &str) -> Result<Format, String> {
         return Err("Archive ZIP non reconnue comme document bureautique.".into());
     }
     if data.starts_with(&[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]) {
-        let comp = cfb::CompoundFile::open(std::io::Cursor::new(data)).map_err(|e| format!("Fichier OLE invalide : {e}"))?;
+        let comp = cfb::CompoundFile::open(std::io::Cursor::new(data)).map_err(|e| format!("Le fichier est endommagé ou incomplet (conteneur Office illisible : {e})."))?;
         let has = |n: &str| comp.exists(n);
         if has("/EncryptedPackage") || has("/EncryptionInfo") {
             return Err("Ce document est protégé par un mot de passe.".into());

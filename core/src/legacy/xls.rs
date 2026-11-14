@@ -183,7 +183,7 @@ fn pal(icv: u16, palette: &[Color]) -> Option<Color> {
 }
 
 pub fn load(data: &[u8]) -> Result<Workbook, String> {
-    let mut comp = cfb::CompoundFile::open(std::io::Cursor::new(data)).map_err(|e| format!("Fichier Excel invalide : {e}"))?;
+    let mut comp = cfb::CompoundFile::open(std::io::Cursor::new(data)).map_err(|e| format!("Le fichier est endommagé ou incomplet (classeur illisible : {e})."))?;
     let name = if comp.exists("/Workbook") { "/Workbook" } else { "/Book" };
     let mut stream = Vec::new();
     {
