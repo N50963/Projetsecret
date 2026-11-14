@@ -78,7 +78,13 @@ impl<'a> Canvas<'a> {
     }
 
     pub fn draw_item(&mut self, item: &Item, ts: Transform, mask: Option<&Mask>) {
-        if !self.visible(&item.bounds(), &ts) {
+        let b = item.bounds();
+        let d = b.transformed(&ts);
+        // garde-fou : géométries dégénérées (fichiers corrompus ou inhabituels)
+        if !(d.x.is_finite() && d.y.is_finite() && d.w.is_finite() && d.h.is_finite()) || d.w.abs() > 1.0e7 || d.h.abs() > 1.0e7 || !ts.is_finite() {
+            return;
+        }
+        if !self.visible(&b, &ts) {
             return;
         }
         match item {

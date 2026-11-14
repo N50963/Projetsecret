@@ -176,6 +176,9 @@ pub fn open(data: Vec<u8>, name: &str) -> Result<Document, String> {
             let flow = crate::legacy::doc::load(&data)?;
             doc.pages = crate::flow::paginate(&flow);
         }
+        Format::Ppt => {
+            doc.pages = crate::legacy::ppt::load(&data)?;
+        }
         Format::Xls => {
             doc.workbook = Some(crate::legacy::xls::load(&data)?);
         }

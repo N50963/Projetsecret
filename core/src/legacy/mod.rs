@@ -1,6 +1,7 @@
 //! Formats binaires Office 97-2003 et formats texte (CSV, RTF).
 pub mod csv;
 pub mod doc;
+pub mod ppt;
 pub mod xls;
 
 /// Lit un flux d'un fichier composé OLE.
